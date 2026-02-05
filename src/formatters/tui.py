@@ -195,7 +195,7 @@ class UsageTUI(App):
     }
 
     #metrics-container {
-        height: 100%;
+        height: 1fr;
         layout: vertical;
         background: #1e1e2e;  /* Mocha Base */
     }
@@ -207,7 +207,6 @@ class UsageTUI(App):
     }
 
     StatusBar {
-        dock: bottom;
         height: 1;
         background: #1e1e2e;  /* Mocha Base */
         color: #cdd6f4;       /* Mocha Text */
@@ -215,6 +214,7 @@ class UsageTUI(App):
     }
 
     Footer {
+        dock: bottom;
         background: #1e1e2e;  /* Mocha Base */
     }
     """
@@ -231,9 +231,11 @@ class UsageTUI(App):
     auto_refresh_enabled = reactive(True)
     refresh_interval = reactive(10)
 
-    def __init__(self, refresh_interval: int = 10, **kwargs):
+    def __init__(self, refresh_interval: int = 10, services: Optional[list] = None, debug: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.refresh_interval = max(5, refresh_interval)
+        self.services = services if services else ['claude', 'codex']
+        self.debug_mode = debug
         self.claude_collector = None
         self.codex_collector = None
         self.refresh_timer = None
@@ -241,11 +243,15 @@ class UsageTUI(App):
     def compose(self) -> ComposeResult:
         """Build the UI layout."""
         yield Header(show_clock=True)
-        yield Container(
-            MetricsWidget("Claude Usage", id="claude"),
-            MetricsWidget("Codex Usage", id="codex"),
-            id="metrics-container"
-        )
+
+        # Only create widgets for requested services
+        widgets = []
+        if 'claude' in self.services:
+            widgets.append(MetricsWidget("Claude Usage", id="claude"))
+        if 'codex' in self.services:
+            widgets.append(MetricsWidget("Codex Usage", id="codex"))
+
+        yield Container(*widgets, id="metrics-container")
         yield StatusBar(id="status")
         yield Footer()
 
@@ -257,6 +263,9 @@ class UsageTUI(App):
         # Start collectors in background
         self.start_collectors()
 
+        # Start auto-refresh timer after a short delay to ensure app is fully initialized
+        self.set_timer(0.5, self._start_refresh_timer)
+
     def _update_subtitle(self) -> None:
         """Update subtitle with current refresh rate."""
         self.sub_title = f"Refresh: {self.refresh_interval}s | Press ? for help"
@@ -264,24 +273,49 @@ class UsageTUI(App):
     def watch_refresh_interval(self, new_interval: int) -> None:
         """Watch for refresh interval changes and update subtitle."""
         self._update_subtitle()
+        # Restart timer with new interval if mounted and auto-refresh enabled
+        if hasattr(self, 'refresh_timer') and self.is_mounted and self.auto_refresh_enabled:
+            self._start_refresh_timer()
+
+    def _start_refresh_timer(self) -> None:
+        """Start or restart the auto-refresh timer."""
+        # Cancel existing timer if any
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+
+        # Set up new timer if auto-refresh is enabled
+        if self.auto_refresh_enabled:
+            self.refresh_timer = self.set_timer(
+                self.refresh_interval,
+                self._handle_timer_callback
+            )
+
+    def _handle_timer_callback(self) -> None:
+        """Handle timer callback and refresh metrics."""
+        if self.auto_refresh_enabled:
+            self.refresh_metrics()
+            # Reschedule next refresh
+            self._start_refresh_timer()
 
     @work(exclusive=True, thread=True)
     def start_collectors(self) -> None:
         """Initialize persistent collectors and collect initial metrics."""
         try:
-            # Create Claude collector
-            self.claude_collector = ClaudePersistentCollector()
-            claude_metrics = self.claude_collector.start()
+            claude_metrics = None
+            codex_metrics = None
 
-            # Create Codex collector
-            self.codex_collector = CodexPersistentCollector()
-            codex_metrics = self.codex_collector.start()
+            # Create Claude collector if requested
+            if 'claude' in self.services:
+                self.claude_collector = ClaudePersistentCollector()
+                claude_metrics = self.claude_collector.start()
+
+            # Create Codex collector if requested
+            if 'codex' in self.services:
+                self.codex_collector = CodexPersistentCollector()
+                codex_metrics = self.codex_collector.start()
 
             # Update UI from main thread
             self.call_from_thread(self._update_ui, claude_metrics, codex_metrics)
-
-            # Start auto-refresh loop
-            self.call_from_thread(self._schedule_refresh)
 
         except Exception as e:
             self.call_from_thread(
@@ -290,32 +324,21 @@ class UsageTUI(App):
                 severity="error"
             )
 
-    def _schedule_refresh(self) -> None:
-        """Schedule next refresh."""
-        if self.refresh_timer:
-            self.refresh_timer.cancel()
-
-        if self.auto_refresh_enabled:
-            self.refresh_timer = self.set_timer(
-                self.refresh_interval,
-                self._auto_refresh
-            )
-
-    def _auto_refresh(self) -> None:
-        """Auto-refresh callback."""
-        if self.auto_refresh_enabled:
-            self.refresh_metrics()
-            self._schedule_refresh()
-
     @work(exclusive=True, thread=True)
     def refresh_metrics(self) -> None:
         """Refresh metrics from collectors."""
-        if not self.claude_collector or not self.codex_collector:
+        if not self.claude_collector and not self.codex_collector:
             return
 
         try:
-            claude_metrics = self.claude_collector.refresh()
-            codex_metrics = self.codex_collector.refresh()
+            claude_metrics = None
+            codex_metrics = None
+
+            if self.claude_collector:
+                claude_metrics = self.claude_collector.refresh()
+
+            if self.codex_collector:
+                codex_metrics = self.codex_collector.refresh()
 
             self.call_from_thread(self._update_ui, claude_metrics, codex_metrics)
 
@@ -326,14 +349,25 @@ class UsageTUI(App):
                 severity="warning"
             )
 
-    def _update_ui(self, claude_metrics: Dict, codex_metrics: Dict) -> None:
+    def _update_ui(self, claude_metrics: Optional[Dict], codex_metrics: Optional[Dict]) -> None:
         """Update UI widgets with new metrics."""
-        claude_widget = self.query_one("#claude", MetricsWidget)
-        codex_widget = self.query_one("#codex", MetricsWidget)
         status_bar = self.query_one("#status", StatusBar)
 
-        claude_widget.update_metrics(claude_metrics)
-        codex_widget.update_metrics(codex_metrics)
+        # Update Claude widget if it exists
+        if claude_metrics and 'claude' in self.services:
+            try:
+                claude_widget = self.query_one("#claude", MetricsWidget)
+                claude_widget.update_metrics(claude_metrics)
+            except Exception:
+                pass
+
+        # Update Codex widget if it exists
+        if codex_metrics and 'codex' in self.services:
+            try:
+                codex_widget = self.query_one("#codex", MetricsWidget)
+                codex_widget.update_metrics(codex_metrics)
+            except Exception:
+                pass
 
         status_bar.last_updated = datetime.now().strftime("%H:%M:%S")
         status_bar.auto_refresh_enabled = self.auto_refresh_enabled
@@ -353,11 +387,11 @@ class UsageTUI(App):
 
         if self.auto_refresh_enabled:
             self.notify("Auto-refresh enabled", severity="information")
-            self._schedule_refresh()
+            self._start_refresh_timer()
         else:
             self.notify("Auto-refresh paused", severity="warning")
             if self.refresh_timer:
-                self.refresh_timer.cancel()
+                self.refresh_timer.stop()
 
     def action_speed_up(self) -> None:
         """Increase refresh rate (decrease interval) (+ key)."""
@@ -368,10 +402,7 @@ class UsageTUI(App):
             status_bar = self.query_one("#status", StatusBar)
             status_bar.refresh_interval = self.refresh_interval
             self.notify(f"Refresh interval: {self.refresh_interval}s")
-
-            # Restart timer with new interval
-            if self.auto_refresh_enabled:
-                self._schedule_refresh()
+            # Timer will be restarted by watch_refresh_interval
         else:
             self.notify("Minimum refresh interval is 5s", severity="warning")
 
@@ -384,10 +415,7 @@ class UsageTUI(App):
             status_bar = self.query_one("#status", StatusBar)
             status_bar.refresh_interval = self.refresh_interval
             self.notify(f"Refresh interval: {self.refresh_interval}s")
-
-            # Restart timer with new interval
-            if self.auto_refresh_enabled:
-                self._schedule_refresh()
+            # Timer will be restarted by watch_refresh_interval
         else:
             self.notify("Maximum refresh interval is 60s", severity="warning")
 
@@ -426,7 +454,7 @@ class UsageTUI(App):
         # Cancel refresh timer
         if self.refresh_timer:
             try:
-                self.refresh_timer.cancel()
+                self.refresh_timer.stop()
             except Exception:
                 pass
 
@@ -453,7 +481,7 @@ class UsageTUI(App):
         # Cancel refresh timer
         if self.refresh_timer:
             try:
-                self.refresh_timer.cancel()
+                self.refresh_timer.stop()
             except Exception:
                 pass
 

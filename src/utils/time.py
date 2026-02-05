@@ -80,21 +80,35 @@ def parse_time_to_datetime(time_str: str) -> datetime:
 
     # Check if it's a full date format (contains "at")
     if " at " in time_str:
-        # Parse "Feb 9 at 8:19pm"
-        try:
-            # Parse date + time
-            parsed = datetime.strptime(time_str, "%b %d at %I:%M%p")
-            # Use current year and infer if date should be next year
-            parsed = parsed.replace(year=now.year)
+        # Parse "Feb 9 at 8:19pm" or "Feb 11 at 11am"
+        # Try multiple formats to handle with/without minutes
+        formats = [
+            "%b %d at %I:%M%p",  # "Feb 9 at 8:19pm"
+            "%b %d at %I:%M%P",  # "Feb 9 at 8:19PM" (lowercase)
+            "%b %d at %I%p",     # "Feb 11 at 11am" (no minutes)
+            "%b %d at %I%P",     # "Feb 11 at 11AM" (no minutes, lowercase)
+        ]
 
-            # If the parsed date is more than 6 months in the past, assume it's next year
-            # This handles cases where reset dates span year boundaries
-            if (now - parsed).days > 180:
-                parsed = parsed.replace(year=now.year + 1)
+        parsed = None
+        for fmt in formats:
+            try:
+                parsed = datetime.strptime(time_str, fmt)
+                break
+            except ValueError:
+                continue
 
-            return parsed
-        except ValueError:
+        if parsed is None:
             return now
+
+        # Use current year and infer if date should be next year
+        parsed = parsed.replace(year=now.year)
+
+        # If the parsed date is more than 6 months in the past, assume it's next year
+        # This handles cases where reset dates span year boundaries
+        if (now - parsed).days > 180:
+            parsed = parsed.replace(year=now.year + 1)
+
+        return parsed
     else:
         # Parse time only "2:31pm" or "6pm"
         try:
