@@ -96,11 +96,50 @@ def parse_time_to_datetime(time_str: str) -> datetime:
         except ValueError:
             return now
     else:
-        # Parse time only "2:31pm"
+        # Parse time only "2:31pm" or "6pm"
         try:
+            # Try with minutes first
             parsed = datetime.strptime(time_str.upper(), "%I:%M%p")
-            # Set to today
-            parsed = parsed.replace(year=now.year, month=now.month, day=now.day)
-            return parsed
         except ValueError:
-            return now
+            try:
+                # Try without minutes (e.g., "6pm")
+                parsed = datetime.strptime(time_str.upper(), "%I%p")
+            except ValueError:
+                return now
+
+        # Set to today
+        parsed = parsed.replace(year=now.year, month=now.month, day=now.day)
+
+        # If the parsed time is in the past (earlier today), it means the window
+        # already reset and the next reset is tomorrow
+        if parsed < now:
+            parsed = parsed + timedelta(days=1)
+
+        return parsed
+
+
+def calculate_time_progress(reset_time_str: str, window_hours: int) -> float:
+    """Calculate percentage of time elapsed in a window.
+
+    Args:
+        reset_time_str: Reset time string (e.g., "2:31pm" or "Feb 9 at 8:19pm")
+        window_hours: Duration of time window in hours
+
+    Returns:
+        Percentage of time elapsed (0-100), clamped to valid range
+    """
+    now = datetime.now()
+    reset_time = parse_time_to_datetime(reset_time_str)
+
+    # Calculate window start time
+    window_start = reset_time - timedelta(hours=window_hours)
+
+    # Calculate elapsed time
+    elapsed = now - window_start
+    total_window = timedelta(hours=window_hours)
+
+    # Calculate percentage
+    percentage = (elapsed.total_seconds() / total_window.total_seconds()) * 100
+
+    # Clamp to 0-100 range
+    return max(0.0, min(100.0, percentage))

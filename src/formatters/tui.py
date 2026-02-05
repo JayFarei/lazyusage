@@ -13,6 +13,57 @@ from rich.panel import Panel
 from rich.text import Text
 from ..collectors.claude import ClaudePersistentCollector
 from ..collectors.codex import CodexPersistentCollector
+from ..utils.time import calculate_time_progress
+
+
+def _create_time_markers(divisions: int, bar_width: int = 30) -> str:
+    """Create evenly-spaced division markers.
+
+    Args:
+        divisions: Number of divisions (5 for 5h, 7 for weekly)
+        bar_width: Width of bar (default 30)
+
+    Returns:
+        Bar string with evenly distributed markers
+    """
+    if divisions <= 1:
+        return " " * bar_width
+
+    # Calculate positions using rounding for more even distribution
+    markers = []
+    for i in range(1, divisions):
+        # Use round() instead of int() for better distribution
+        pos = round(i * bar_width / divisions)
+        markers.append(pos)
+
+    # Build bar character by character
+    bar = ""
+    for i in range(bar_width):
+        if i in markers:
+            bar += "┃"
+        else:
+            bar += " "
+
+    return bar
+
+
+def _create_period_bar(time_pct: float, bar_width: int = 30) -> str:
+    """Create a filled progress bar showing time elapsed.
+
+    Args:
+        time_pct: Percentage of time elapsed (0-100)
+        bar_width: Width of bar (default 30)
+
+    Returns:
+        Bar string with time progression
+    """
+    # Calculate filled width
+    filled = int((time_pct / 100) * bar_width)
+
+    # Build bar
+    bar = '▓' * filled + '░' * (bar_width - filled)
+
+    return bar
 
 
 class MetricsWidget(Static):
@@ -69,12 +120,32 @@ class MetricsWidget(Static):
 
         for name, data in self.metrics.items():
             label = label_map.get(name, name)
-            used = data['used_pct']
-            bar_width = 30
-            filled = int((used / 100) * bar_width)
-            bar = '▓' * filled + '░' * (bar_width - filled)
 
-            table.add_row(f"{label}:", f"{bar}  {used}%")
+            # Determine window hours and divisions
+            if 'session' in name or '5h' in name:
+                window_hours = 5
+                divisions = 5
+            else:  # weekly metrics
+                window_hours = 168  # 7 days
+                divisions = 7
+
+            # Capacity bar (token usage)
+            used = data['used_pct']
+            bar_width = 35  # Changed to 35 for perfect division by 5 and 7
+            filled = int((used / 100) * bar_width)
+            capacity_bar = '▓' * filled + '░' * (bar_width - filled)
+
+            # Time markers bar
+            markers_bar = _create_time_markers(divisions, bar_width)
+
+            # Period bar (time progression)
+            time_pct = calculate_time_progress(data['resets'], window_hours)
+            period_bar = _create_period_bar(time_pct, bar_width)
+
+            # Render three bars with icons and updated colors
+            table.add_row(f"{label}:", f"{capacity_bar} ◆ {used}%")
+            table.add_row("", f"[dim]{markers_bar}[/dim]")
+            table.add_row("", f"[cyan][dim]{period_bar}[/dim][/cyan] ⏱ {int(time_pct)}%")
             table.add_row("", f"  Resets: {data['resets']}")
             table.add_row()
 
