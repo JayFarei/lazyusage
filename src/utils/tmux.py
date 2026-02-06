@@ -52,14 +52,35 @@ class EphemeralSession:
         time.sleep(0.5)
 
     def capture_output(self) -> str:
-        """Capture tmux pane output."""
+        """Capture tmux pane output (full scrollback)."""
         result = subprocess.run(
-            ["tmux", "capture-pane", "-t", self.session_name, "-p"],
+            ["tmux", "capture-pane", "-t", self.session_name, "-p", "-S", "-"],
             capture_output=True,
             text=True,
             check=True
         )
         return result.stdout
+
+    def wait_for_content(self, marker: str, timeout: float = 8.0, interval: float = 0.5) -> str:
+        """Poll capture until marker appears or timeout.
+
+        Args:
+            marker: String to look for in the captured output.
+            timeout: Maximum seconds to wait.
+            interval: Seconds between polls.
+
+        Returns:
+            Captured output (may or may not contain marker if timeout hit).
+        """
+        elapsed = 0.0
+        output = ""
+        while elapsed < timeout:
+            time.sleep(interval)
+            elapsed += interval
+            output = self.capture_output()
+            if marker in output:
+                return output
+        return output
 
     def cleanup(self):
         """Kill tmux session."""
@@ -96,8 +117,20 @@ class PersistentSession:
         time.sleep(2)
         self.session_started = True
 
+    def is_alive(self) -> bool:
+        """Check if the tmux session still exists."""
+        if not self.session_started:
+            return False
+        result = subprocess.run(
+            ["tmux", "has-session", "-t", self.session_name],
+            capture_output=True,
+        )
+        return result.returncode == 0
+
     def send_keys(self, keys: str, delay: float = 0.2, literal: bool = False):
         """Send keys to tmux session (same as EphemeralSession)."""
+        if not self.is_alive():
+            raise RuntimeError(f"Session '{self.session_name}' is no longer running")
         if literal:
             subprocess.run(
                 ["tmux", "send-keys", "-t", self.session_name, keys],
@@ -114,14 +147,35 @@ class PersistentSession:
         time.sleep(0.5)
 
     def capture_output(self) -> str:
-        """Capture tmux pane output."""
+        """Capture tmux pane output (full scrollback)."""
         result = subprocess.run(
-            ["tmux", "capture-pane", "-t", self.session_name, "-p"],
+            ["tmux", "capture-pane", "-t", self.session_name, "-p", "-S", "-"],
             capture_output=True,
             text=True,
             check=True
         )
         return result.stdout
+
+    def wait_for_content(self, marker: str, timeout: float = 8.0, interval: float = 0.5) -> str:
+        """Poll capture until marker appears or timeout.
+
+        Args:
+            marker: String to look for in the captured output.
+            timeout: Maximum seconds to wait.
+            interval: Seconds between polls.
+
+        Returns:
+            Captured output (may or may not contain marker if timeout hit).
+        """
+        elapsed = 0.0
+        output = ""
+        while elapsed < timeout:
+            time.sleep(interval)
+            elapsed += interval
+            output = self.capture_output()
+            if marker in output:
+                return output
+        return output
 
     def winddown(self):
         """Kill tmux session."""

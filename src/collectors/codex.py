@@ -1,7 +1,6 @@
 """Codex CLI collectors."""
 
 import os
-import time
 from typing import Dict
 from .base import EphemeralCollector, PersistentCollector
 from ..utils.tmux import EphemeralSession, PersistentSession
@@ -26,11 +25,8 @@ class CodexEphemeralCollector(EphemeralCollector):
             # Send Enter
             session.send_keys("Enter", literal=True)
 
-            # Wait for command to execute and display results
-            time.sleep(2)
-
-            # Capture output
-            output = session.capture_output()
+            # Poll until status output appears
+            output = session.wait_for_content("limit:", timeout=8.0)
 
         # Parse and return metrics
         return parse_codex_output(output)
@@ -42,11 +38,12 @@ class CodexPersistentCollector(PersistentCollector):
     def __init__(self):
         self.session_name = f"codex-live-{os.getpid()}"
         self.session = PersistentSession(self.session_name, "codex")
+        self._last_good = None  # Cache last successful metrics
 
     def start(self) -> Dict[str, Dict]:
         """Create persistent session and collect initial metrics.
 
-        Windup phase: Create session → execute /status → capture latest response
+        Windup phase: Create session → execute /status → poll for response
 
         Returns:
             Dict with keys: '5h', 'weekly'
@@ -58,20 +55,28 @@ class CodexPersistentCollector(PersistentCollector):
         self.session.send_keys("/status", delay=0.2)
         self.session.send_keys("Enter", literal=True)
 
-        # Wait for response to appear
-        time.sleep(1)
+        # Poll until status output appears
+        output = self.session.wait_for_content("limit:", timeout=8.0)
 
-        # Capture output (latest response in chat history)
-        output = self.session.capture_output()
+        metrics = parse_codex_output(output)
+        if self._has_real_data(metrics):
+            self._last_good = metrics
+        return metrics
 
-        return parse_codex_output(output)
+    def _has_real_data(self, metrics: Dict[str, Dict]) -> bool:
+        """Check if metrics contain real parsed data (not all None/fallback)."""
+        for key in ("5h", "weekly"):
+            entry = metrics.get(key, {})
+            if entry.get("percent_used") is not None:
+                return True
+        return False
 
     def refresh(self) -> Dict[str, Dict]:
         """Refresh metrics from existing session.
 
         Recurrent polling phase:
         1. Re-enter /status command
-        2. Capture latest response from chat history
+        2. Poll for response
 
         Returns:
             Dict with keys: '5h', 'weekly'
@@ -80,13 +85,19 @@ class CodexPersistentCollector(PersistentCollector):
         self.session.send_keys("/status", delay=0.2)
         self.session.send_keys("Enter", literal=True)
 
-        # Wait for response to appear
-        time.sleep(1)
+        # Poll until status output appears
+        output = self.session.wait_for_content("limit:", timeout=8.0)
 
-        # Capture output (latest response in chat history)
-        output = self.session.capture_output()
+        metrics = parse_codex_output(output)
+        if self._has_real_data(metrics):
+            self._last_good = metrics
+            return metrics
 
-        return parse_codex_output(output)
+        # If capture failed, return last known good metrics
+        if self._last_good is not None:
+            return self._last_good
+
+        return metrics
 
     def stop(self):
         """Stop persistent session and cleanup."""
