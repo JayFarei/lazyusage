@@ -77,6 +77,45 @@ def parse_week_sonnet(output: str) -> Dict[str, any]:
     }
 
 
+def parse_subscription(output: str) -> Optional[str]:
+    """Parse subscription type from Claude landing page.
+
+    Extracts subscription from pattern: "Sonnet 4.5 · Claude Max"
+
+    Args:
+        output: Raw output from Claude CLI
+
+    Returns:
+        Subscription type ('Max', 'Pro', etc.) or None
+    """
+    # Priority 1: Look for subscription tiers after "Claude" (Max, Pro, Plus)
+    # Match pattern like "· Claude Max" or "· Claude Pro"
+    match = re.search(r'·\s+Claude\s+(Max|Pro|Plus)', output)
+    if match:
+        return match.group(1)
+
+    # Priority 2: Look for standalone subscription keywords near "Claude"
+    # Check within reasonable proximity (same line or next line)
+    for line in output.split('\n'):
+        if 'Claude' in line or 'Sonnet' in line:
+            if re.search(r'\bMax\b', line):
+                return 'Max'
+            if re.search(r'\bPro\b', line):
+                return 'Pro'
+            if re.search(r'\bPlus\b', line):
+                return 'Plus'
+
+    # Priority 3: Generic "Claude [Type]" but exclude product names
+    match = re.search(r'Claude\s+([A-Z][a-z]+)', output)
+    if match:
+        subscription = match.group(1)
+        # Exclude product names like "Code"
+        if subscription not in ['Code']:
+            return subscription
+
+    return None
+
+
 def apply_fallbacks(metrics: Dict[str, Dict]) -> Dict[str, Dict]:
     """Apply fallback values to missing metrics.
 
@@ -110,14 +149,14 @@ def apply_fallbacks(metrics: Dict[str, Dict]) -> Dict[str, Dict]:
     return metrics
 
 
-def parse_claude_output(output: str) -> Dict[str, Dict]:
+def parse_claude_output(output: str) -> Dict[str, any]:
     """Parse complete Claude usage output.
 
     Args:
         output: Raw output from Claude CLI
 
     Returns:
-        Dict with keys 'session', 'week_all', 'week_sonnet'
+        Dict with 'subscription_type', 'session', 'week_all', 'week_sonnet'
     """
     metrics = {
         'session': parse_session(output),
@@ -125,4 +164,12 @@ def parse_claude_output(output: str) -> Dict[str, Dict]:
         'week_sonnet': parse_week_sonnet(output)
     }
 
-    return apply_fallbacks(metrics)
+    metrics = apply_fallbacks(metrics)
+
+    # Add subscription as top-level key
+    subscription = parse_subscription(output)
+
+    return {
+        'subscription_type': subscription,
+        **metrics
+    }

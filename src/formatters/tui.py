@@ -89,7 +89,7 @@ class MetricsWidget(Static):
         self.refresh()
 
     def render(self) -> Panel:
-        """Render metrics as a Rich Panel."""
+        """Render metrics with subscription in title."""
         if self.error_message:
             return Panel(
                 f"[red]Error: {self.error_message}[/red]",
@@ -103,6 +103,10 @@ class MetricsWidget(Static):
                 title=self.title,
                 border_style="cyan"
             )
+
+        # Extract subscription and create dynamic title
+        subscription = self.metrics.get('subscription_type')
+        panel_title = f"{self.title} - {subscription}" if subscription else self.title
 
         table = Table.grid(padding=(0, 1))
         # Fixed-width column for labels to ensure alignment
@@ -119,6 +123,9 @@ class MetricsWidget(Static):
         }
 
         for name, data in self.metrics.items():
+            # Skip subscription_type key
+            if name == 'subscription_type':
+                continue
             label = label_map.get(name, name)
 
             # Determine window hours and divisions
@@ -149,7 +156,7 @@ class MetricsWidget(Static):
             table.add_row("", f"  Resets: {data['resets']}")
             table.add_row()
 
-        return Panel(table, title=self.title, border_style="cyan")
+        return Panel(table, title=panel_title, border_style="cyan")
 
 
 class StatusBar(Static):
@@ -268,7 +275,7 @@ class UsageTUI(App):
 
     def _update_subtitle(self) -> None:
         """Update subtitle with current refresh rate."""
-        self.sub_title = f"Refresh: {self.refresh_interval}s | Press ? for help"
+        self.sub_title = ""
 
     def watch_refresh_interval(self, new_interval: int) -> None:
         """Watch for refresh interval changes and update subtitle."""

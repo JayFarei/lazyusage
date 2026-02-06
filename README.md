@@ -1,246 +1,354 @@
 # Usage CLI
 
-A unified Python CLI tool for monitoring Claude CLI and Codex CLI usage statistics.
+A unified Python CLI tool for monitoring Claude CLI and Codex CLI usage statistics, designed for both human monitoring and agent integration.
 
 ## Features
 
-- **Individual reports**: Check Claude or Codex usage separately
-- **Combined report**: View both CLIs at once
-- **Live dashboard**: Real-time monitoring with progress bars
-- **Multiple formats**: Text output (default) or JSON (for automation)
-- **Output compatibility**: Matches bash script format exactly
+- **Two primary commands**: Fast snapshots (`usage-check`) and interactive monitoring (`usage`)
+- **Auto-detection**: Automatically detects which CLIs are available
+- **Service filtering**: Monitor Claude, Codex, or both
+- **Multiple formats**: Text output (default), JSON (for automation), or interactive TUI
+- **Agent-friendly**: JSON output with availability metadata for programmatic consumption
+- **Live monitoring**: Real-time TUI with keyboard controls and loading animations
+- **Visual feedback**: Loading spinners and refresh indicators in TUI mode
 
 ## Installation
 
+### Via pip (recommended)
+
 ```bash
+pip install usage-cli
+```
+
+### From source
+
+```bash
+# Clone repository
+git clone https://github.com/jayfarei/usage-cli
+cd usage-cli
+
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install package
+# Install in editable mode
 pip install -e .
 ```
 
-## Usage
+## Quick Start
 
-### Individual Reports
+### For Agents (Point-in-Time Checks)
 
 ```bash
-# Claude usage
-usage claude
+# Auto-detect available CLIs and return JSON
+usage-check --json
 
-# Codex usage
+# Check specific service
+usage-check claude --json
+usage-check codex --json
+
+# Force check both (errors if either unavailable)
+usage-check all --json
+```
+
+### For Humans (Interactive Monitoring)
+
+```bash
+# Launch TUI (auto-detects available CLIs)
+usage
+
+# Monitor specific service
+usage claude
 usage codex
 
-# Both CLIs
-usage all
+# Quick text snapshot
+usage-check
 ```
 
-### JSON Output
+## Command Reference
+
+### `usage-check` - Fast Snapshot
+
+Point-in-time query for current usage (~8-15s).
 
 ```bash
-# For automation/scripting
-usage claude --json
-usage codex --json
-usage all --json
+usage-check [SERVICE] [OPTIONS]
 ```
 
-### Live Dashboard
+**Arguments:**
+- `SERVICE`: `claude`, `codex`, or `all` (optional, defaults to auto-detect)
+
+**Options:**
+- `--json` - JSON output for agents
+- `--text` - Text output (default)
+- `--debug` - Show execution timing
+
+**Examples:**
+```bash
+usage-check              # Auto-detect, text output
+usage-check --json       # Auto-detect, JSON output
+usage-check claude       # Claude only
+usage-check all --json   # Force both, JSON output
+```
+
+---
+
+### `usage` - Interactive Monitor
+
+Long-running interactive TUI or continuous monitoring.
 
 ```bash
-# Default: 10-second refresh
-usage --live
-
-# Custom refresh interval (minimum 5s)
-usage --live --refresh 5
-
-# Alternative command
-usage dashboard --refresh 30
+usage [SERVICE] [OPTIONS]
 ```
 
-### Debug Mode
+**Arguments:**
+- `SERVICE`: `claude`, `codex`, or `all` (optional, defaults to auto-detect)
 
+**Options:**
+- `--text` - Single text snapshot
+- `--refresh N` - Refresh interval in seconds (default: 10, min: 5)
+- `--debug` - Show debug information
+
+**TUI Keyboard Shortcuts:**
+- `R` - Refresh now
+- `P` - Pause/Resume auto-refresh
+- `+` / `-` - Adjust refresh rate
+- `?` - Show help
+- `Q` - Quit
+
+**Examples:**
 ```bash
-# Show execution timing
-usage claude --debug
-usage codex --debug
-usage all --debug
-
-# Dashboard with debug info
-usage --live --debug
+usage                    # Launch TUI
+usage claude --refresh 5 # Claude only, 5s refresh
+usage --text             # Quick text output
 ```
 
-## Output Format
+## Output Formats
 
 ### Text Output
 
-Claude:
 ```
-Session: 25% used (75% remaining) (resets 2:31pm) | Weekly: 15% used (85% remaining) (resets Feb 9 at 8:19pm) | Sonnet: 10% used (90% remaining) (resets Feb 9 at 8:19pm)
-```
-
-Codex:
-```
-5h: 20% used (80% remaining) (resets 3:15pm) | Weekly: 12% used (88% remaining) (resets Feb 10 at 9:00pm)
+Claude: Session: 13% used (87% remaining) (resets 5:59pm) | Weekly: 5% used...
+Codex: 5h: 1% used (99% remaining) (resets 7:58pm) | Weekly: 80% used...
 ```
 
 ### JSON Output
 
 ```json
 {
-  "service": "claude",
   "timestamp": "2026-02-05T14:30:00.000000",
-  "metrics": [
+  "available_services": ["claude", "codex"],
+  "services": [
     {
-      "name": "session",
-      "used_pct": 25,
-      "remaining_pct": 75,
-      "resets": "2:31pm"
-    },
-    ...
+      "name": "claude",
+      "available": true,
+      "metrics": [
+        {
+          "name": "session",
+          "used_pct": 13,
+          "remaining_pct": 87,
+          "resets": "5:59pm"
+        }
+      ]
+    }
   ]
 }
 ```
 
-### Live Dashboard
+### Interactive TUI
 
 ```
-┌─ Usage Dashboard ─┐
-│ Claude Usage       │
-│ ▓▓▓▓░░░░░░ 25% Session (resets 2:31pm)      │
-│ ▓▓▓░░░░░░░ 15% Weekly (resets Feb 9 at 8pm) │
-│ ▓▓░░░░░░░░ 10% Sonnet (resets Feb 9 at 8pm) │
-│ Codex Usage        │
-│ ▓▓▓▓░░░░░░ 20% 5h (resets 3:15pm)           │
-│ ▓▓░░░░░░░░ 12% Weekly (resets Feb 10 at 9pm)│
-│ Last updated: 14:30 │ Refresh: 10s           │
-└────────────────────┘
+┌─ Usage Monitor ──────────────────────┐
+│ Claude Usage                          │
+│ ⠋ Refreshing...                      │ ← Loading animation
+│ Session  ▓▓▓▓▓░░░░░░░░ 25% (2:31pm)  │
+│ Weekly   ▓▓▓░░░░░░░░░░ 15% (Feb 9)   │
+├───────────────────────────────────────┤
+│ ● Updated: 14:30:15 | Auto-refresh: ON│ ← Status bar with indicator
+└───────────────────────────────────────┘
 ```
 
-## Architecture
+## Agent Integration
 
-### Project Structure
+### Python Example
+
+```python
+import subprocess
+import json
+
+def check_capacity(service='claude', threshold=20):
+    """Check if we have enough capacity to spawn sub-agent."""
+    result = subprocess.run(
+        ['usage-check', service, '--json'],
+        capture_output=True,
+        text=True,
+        timeout=10
+    )
+
+    data = json.loads(result.stdout)
+
+    for svc in data['services']:
+        if not svc['available']:
+            continue
+        for metric in svc['metrics']:
+            if metric['remaining_pct'] < threshold:
+                return False, f"Low capacity: {metric['remaining_pct']}%"
+
+    return True, "Capacity available"
+
+# Use before spawning sub-agent
+has_capacity, msg = check_capacity('claude', threshold=20)
+if has_capacity:
+    spawn_subagent()
+else:
+    print(f"Deferring: {msg}")
+```
+
+### Bash Example
+
+```bash
+#!/bin/bash
+# Check capacity before expensive operation
+
+json=$(usage-check claude --json)
+remaining=$(echo "$json" | jq -r '.services[0].metrics[0].remaining_pct')
+
+if [ "$remaining" -lt 20 ]; then
+    echo "Low capacity: ${remaining}%"
+    exit 1
+else
+    echo "Capacity OK: ${remaining}%"
+    # Run operation
+fi
+```
+
+## System Requirements
+
+- **Python**: 3.8 or higher
+- **tmux**: Must be installed separately
+  - macOS: `brew install tmux`
+  - Ubuntu/Debian: `apt-get install tmux`
+  - Arch: `pacman -S tmux`
+- **CLI Tools**: Claude CLI and/or Codex CLI must be in PATH
+
+## Project Structure
 
 ```
-src/
-├── cli.py              # Main Click CLI entry point
-├── collectors/
-│   ├── base.py         # Abstract collector base classes
-│   ├── claude.py       # Claude CLI collector
-│   └── codex.py        # Codex CLI collector
-├── parsers/
-│   ├── claude.py       # Claude output parser
-│   └── codex.py        # Codex output parser
-├── formatters/
-│   ├── text.py         # Text formatter
-│   ├── json.py         # JSON formatter
-│   └── dashboard.py    # Live dashboard
-└── utils/
-    ├── tmux.py         # Tmux session manager
-    └── time.py         # Time formatting utilities
+usage-cli/
+├── src/                    # Source code
+│   ├── cli.py             # Main CLI entry points
+│   ├── collectors/        # Data collectors (ephemeral & persistent)
+│   ├── formatters/        # Output formatters (text, JSON, TUI)
+│   ├── parsers/           # CLI output parsers
+│   └── utils/             # Utilities (tmux, time)
+├── examples/              # Integration examples
+│   ├── agent_integration.py
+│   └── agent_integration.sh
+├── archive/               # Historical docs and tests
+│   ├── docs/             # Implementation docs
+│   ├── tests/            # Test scripts
+│   └── scripts/          # Original bash scripts
+├── README.md             # This file
+├── LICENSE               # MIT License
+├── setup.py              # Package setup
+├── pyproject.toml        # Modern packaging
+└── requirements.txt      # Dependencies
 ```
 
-### Key Design Decisions
+## Troubleshooting
 
-#### Two Collection Modes
+### "No CLI tools found"
 
-1. **Ephemeral mode** (individual reports):
-   - Create tmux session → execute command → capture output → cleanup
-   - Used by: `usage claude`, `usage codex`, `usage all`
-   - Performance: ~8.5s (Claude), ~6.8s (Codex)
+Install Claude CLI and/or Codex CLI and ensure they're in your PATH.
 
-2. **Persistent mode** (live dashboard):
-   - Create session once → reuse for multiple refreshes → cleanup on exit
-   - Used by: `usage --live`, `usage dashboard`
-   - Performance: ~2-3s per refresh (Claude), ~1-2s per refresh (Codex)
-   - **3x-4x faster** than ephemeral mode
+```bash
+which claude  # Should return path
+which codex   # Should return path
+```
 
-#### Three-Phase Dashboard Workflow
+### TUI not updating
 
-1. **Windup**: Create persistent sessions, collect initial metrics
-2. **Poll loop**: Refresh → render → sleep → repeat
-3. **Winddown**: Cleanup sessions on Ctrl+C or exit
+- Verify tmux is installed: `which tmux`
+- Check CLIs are accessible: `claude --version`, `codex --version`
+- Run with `--debug` flag to see timing information
 
-#### Output Format Compatibility
+### Orphaned tmux sessions
 
-The Python CLI maintains exact output format compatibility with the original bash scripts for backward compatibility.
+```bash
+# List sessions
+tmux ls
 
-## Performance
+# Kill specific session
+tmux kill-session -t usage-cli-12345
 
-### Ephemeral Mode
-- Claude: ~8.5 seconds
-- Codex: ~6.8 seconds
-- Total (both): ~15 seconds
-
-### Persistent Mode (Dashboard)
-- Windup: ~4-5 seconds (one-time)
-- Per refresh: ~4-5 seconds (both CLIs)
-- Recommended refresh: 10 seconds
-- Minimum refresh: 5 seconds
-
-## Dependencies
-
-- `click>=8.0` - CLI framework
-- `rich>=13.0` - Terminal UI (dashboard)
-- `python-dateutil>=2.8.0` - Date parsing
-- `tmux` - Terminal multiplexer (must be installed separately)
-
-## Backward Compatibility
-
-The original bash scripts (`check-claude-usage.sh` and `check-codex-usage.sh`) are kept for:
-- Users without Python installed
-- Existing integrations/aliases
-- Fallback if Python CLI has issues
-
-Both implementations produce identical output in text mode.
+# Kill all usage sessions
+tmux ls | grep usage | cut -d: -f1 | xargs -I {} tmux kill-session -t {}
+```
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Compare output with bash scripts
-./check-claude-usage.sh > bash_claude.txt
-usage claude > python_claude.txt
-diff bash_claude.txt python_claude.txt  # Should be empty
+# Run all tests
+./archive/tests/test_all_features.sh
 
-# Verify JSON parsing
-usage claude --json | jq .
+# Test specific command
+usage-check --help
+usage --help
 ```
 
-### Adding New Features
+### Building Package
 
-1. **New collector**: Extend `EphemeralCollector` or `PersistentCollector` in `src/collectors/`
-2. **New parser**: Add parsing logic in `src/parsers/`
-3. **New formatter**: Implement in `src/formatters/`
-4. **New CLI command**: Add to `src/cli.py` using Click decorators
-
-## Troubleshooting
-
-### tmux sessions not cleaning up
-
-Check for orphaned sessions:
 ```bash
-tmux ls
+# Build distribution
+python -m build
+
+# Install from wheel
+pip install dist/usage_cli-1.0.0-py3-none-any.whl
+
+# Test installation
+usage-check --version
 ```
 
-Kill specific session:
-```bash
-tmux kill-session -t claude-usage-12345
-```
+### Contributing
 
-### Dashboard not updating
+See `archive/docs/` for implementation details and development documentation.
 
-- Check that Claude/Codex CLIs are installed and in PATH
-- Verify tmux is installed: `which tmux`
-- Run with `--debug` flag to see detailed timing
+## Performance
 
-### Output format differs from bash scripts
+### usage-check (Ephemeral Collectors)
+- Claude only: ~8.5s
+- Codex only: ~6.8s
+- Both: ~15s
 
-- Ensure you're using text mode (not JSON): `usage claude` (not `usage claude --json`)
-- Check time formatting in `src/utils/time.py`
-- Verify parser regex patterns in `src/parsers/`
+### usage TUI (Persistent Collectors)
+- Initial load: ~8-15s
+- Subsequent refreshes: ~2-3s (3x faster)
+- Animation: 10 FPS
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Links
+
+- **Repository**: https://github.com/jayfarei/usage-cli
+- **PyPI**: https://pypi.org/project/usage-cli/ (coming soon)
+- **Issues**: https://github.com/jayfarei/usage-cli/issues
+
+## Changelog
+
+### v1.0.0 (2026-02-05)
+
+- Initial release
+- Two-command architecture (`usage-check`, `usage`)
+- Auto-detection of available CLIs
+- JSON API with availability metadata
+- Interactive TUI with loading animations
+- Agent integration examples (Python & Bash)
+- Comprehensive documentation
+
+---
+
+**Status**: Ready for production use | Actively maintained

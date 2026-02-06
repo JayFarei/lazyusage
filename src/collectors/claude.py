@@ -15,11 +15,17 @@ class ClaudeEphemeralCollector(EphemeralCollector):
         """Collect Claude usage metrics using ephemeral tmux session.
 
         Returns:
-            Dict with keys: 'session', 'week_all', 'week_sonnet'
+            Dict with keys: 'subscription_type', 'session', 'week_all', 'week_sonnet'
         """
         session_name = f"claude-usage-{os.getpid()}"
 
         with EphemeralSession(session_name, "claude") as session:
+            # Wait for landing page (contains subscription info)
+            time.sleep(1)
+
+            # Capture landing page for subscription
+            landing_output = session.capture_output()
+
             # Send /usage command character-by-character
             session.send_keys("/usage", delay=0.2)
 
@@ -29,11 +35,14 @@ class ClaudeEphemeralCollector(EphemeralCollector):
             # Wait for command to execute and display results
             time.sleep(2)
 
-            # Capture output
-            output = session.capture_output()
+            # Capture usage output
+            usage_output = session.capture_output()
+
+            # Combine landing + usage for full parsing
+            combined_output = landing_output + "\n" + usage_output
 
         # Parse and return metrics
-        return parse_claude_output(output)
+        return parse_claude_output(combined_output)
 
 
 class ClaudePersistentCollector(PersistentCollector):
@@ -42,17 +51,22 @@ class ClaudePersistentCollector(PersistentCollector):
     def __init__(self):
         self.session_name = f"claude-live-{os.getpid()}"
         self.session = PersistentSession(self.session_name, "claude")
+        self.landing_output = None  # Store landing page for subscription
 
     def start(self) -> Dict[str, Dict]:
         """Create persistent session and collect initial metrics.
 
-        Windup phase: Create session → execute /usage
+        Windup phase: Create session → capture landing → execute /usage
 
         Returns:
-            Dict with keys: 'session', 'week_all', 'week_sonnet'
+            Dict with keys: 'subscription_type', 'session', 'week_all', 'week_sonnet'
         """
         # Create session and wait for prompt
         self.session.windup()
+
+        # Capture landing page (has subscription info)
+        time.sleep(1)
+        self.landing_output = self.session.capture_output()
 
         # Execute /usage command
         self.session.send_keys("/usage", delay=0.2)
@@ -61,10 +75,13 @@ class ClaudePersistentCollector(PersistentCollector):
         # Wait for usage output to display
         time.sleep(2)
 
-        # Capture output
-        output = self.session.capture_output()
+        # Capture usage output
+        usage_output = self.session.capture_output()
 
-        return parse_claude_output(output)
+        # Combine landing + usage for full parsing
+        combined_output = self.landing_output + "\n" + usage_output
+
+        return parse_claude_output(combined_output)
 
     def refresh(self) -> Dict[str, Dict]:
         """Refresh metrics from existing session.
@@ -75,7 +92,7 @@ class ClaudePersistentCollector(PersistentCollector):
         3. Capture output
 
         Returns:
-            Dict with keys: 'session', 'week_all', 'week_sonnet'
+            Dict with keys: 'subscription_type', 'session', 'week_all', 'week_sonnet'
         """
         # Press ESC to return to prompt
         self.session.send_keys("Escape", literal=True)
@@ -88,10 +105,13 @@ class ClaudePersistentCollector(PersistentCollector):
         # Wait for usage output to display
         time.sleep(2)
 
-        # Capture output
-        output = self.session.capture_output()
+        # Capture usage output
+        usage_output = self.session.capture_output()
 
-        return parse_claude_output(output)
+        # Combine stored landing + new usage for full parsing
+        combined_output = (self.landing_output or "") + "\n" + usage_output
+
+        return parse_claude_output(combined_output)
 
     def stop(self):
         """Stop persistent session and cleanup."""

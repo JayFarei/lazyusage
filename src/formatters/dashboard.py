@@ -123,9 +123,13 @@ class Dashboard:
 
         # Claude metrics
         if claude_metrics:
-            table.add_row("[bold]Claude Usage[/bold]")
+            subscription = claude_metrics.get('subscription_type')
+            title = f"[bold]Claude Usage - {subscription}[/bold]" if subscription else "[bold]Claude Usage[/bold]"
+            table.add_row(title)
 
             for name, data in claude_metrics.items():
+                if name == 'subscription_type':
+                    continue
                 label_map = {
                     'session': 'Session',
                     'week_all': 'Weekly',
@@ -176,9 +180,13 @@ class Dashboard:
 
         # Codex metrics
         if codex_metrics:
-            table.add_row("[bold]Codex Usage[/bold]")
+            subscription = codex_metrics.get('subscription_type')
+            title = f"[bold]Codex Usage - {subscription}[/bold]" if subscription else "[bold]Codex Usage[/bold]"
+            table.add_row(title)
 
             for name, data in codex_metrics.items():
+                if name == 'subscription_type':
+                    continue
                 label_map = {
                     '5h': '5h',
                     'weekly': 'Weekly'

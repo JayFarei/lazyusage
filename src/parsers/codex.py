@@ -111,6 +111,25 @@ def parse_weekly_limit(output: str) -> Dict[str, any]:
     }
 
 
+def parse_subscription(output: str) -> Optional[str]:
+    """Parse subscription type from Codex /status output.
+
+    Extracts from pattern: "Account: email@example.com (Plus)"
+
+    Args:
+        output: Raw output from Codex CLI
+
+    Returns:
+        Subscription type ('Plus', 'Free', etc.) or None
+    """
+    # Match pattern: "Account: ... (Type)"
+    match = re.search(r'Account:.*?\(([A-Za-z]+)\)', output)
+    if match:
+        return match.group(1).capitalize()
+
+    return None
+
+
 def apply_fallbacks(metrics: Dict[str, Dict]) -> Dict[str, Dict]:
     """Apply fallback values to missing metrics.
 
@@ -137,18 +156,25 @@ def apply_fallbacks(metrics: Dict[str, Dict]) -> Dict[str, Dict]:
     return metrics
 
 
-def parse_codex_output(output: str) -> Dict[str, Dict]:
+def parse_codex_output(output: str) -> Dict[str, any]:
     """Parse complete Codex status output.
 
     Args:
         output: Raw output from Codex CLI
 
     Returns:
-        Dict with keys '5h', 'weekly'
+        Dict with 'subscription_type', '5h', 'weekly'
     """
     metrics = {
         '5h': parse_5h_limit(output),
         'weekly': parse_weekly_limit(output)
     }
 
-    return apply_fallbacks(metrics)
+    metrics = apply_fallbacks(metrics)
+
+    subscription = parse_subscription(output)
+
+    return {
+        'subscription_type': subscription,
+        **metrics
+    }

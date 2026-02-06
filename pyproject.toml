@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "usage-cli"
+version = "1.0.0"
+description = "Usage monitoring CLI for Claude and Codex"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Jay Farei", email = "fareiunastrage@gmail.com"}
+]
+keywords = ["claude", "codex", "usage", "monitoring", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "textual>=0.47.0",
+    "python-dateutil>=2.8.0",
+]
+
+[project.scripts]
+usage-check = "src.cli:usage_check_main"
+usage = "src.cli:usage_main"
+
+[project.urls]
+Homepage = "https://github.com/jayfarei/usage-cli"
+Repository = "https://github.com/jayfarei/usage-cli"
