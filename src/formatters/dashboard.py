@@ -11,54 +11,17 @@ from rich.layout import Layout
 from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.table import Table
-from ..collectors.claude import ClaudePersistentCollector
-from ..collectors.codex import CodexPersistentCollector
+from ..providers import create_claude_chain, create_codex_chain
 from ..utils.time import calculate_time_progress
+from ..utils.bars import (
+    calculate_bar_width, create_time_markers, create_capacity_bar, create_period_bar,
+    MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT,
+)
 
-
-def _create_time_markers(divisions: int, bar_width: int = 30) -> str:
-    """Create a bar showing only division markers.
-
-    Args:
-        divisions: Number of divisions (5 for 5h, 7 for weekly)
-        bar_width: Width of bar (default 30)
-
-    Returns:
-        Formatted bar string with markers
-    """
-    # Calculate marker positions
-    markers = [int(i * bar_width / divisions) for i in range(1, divisions)]
-
-    # Build bar character by character
-    bar = ""
-    for i in range(bar_width):
-        if i in markers:
-            bar += "┃"
-        else:
-            bar += " "
-
-    # Return with dim styling for subtle appearance
-    return f"[dim]{bar}[/dim]"
-
-
-def _create_period_bar(time_pct: float, bar_width: int = 30) -> str:
-    """Create a filled progress bar showing time elapsed.
-
-    Args:
-        time_pct: Percentage of time elapsed (0-100)
-        bar_width: Width of bar (default 30)
-
-    Returns:
-        Formatted bar string with time progression
-    """
-    # Calculate filled width
-    filled = int((time_pct / 100) * bar_width)
-
-    # Build bar
-    bar = '▓' * filled + '░' * (bar_width - filled)
-
-    # Return with yellow color to distinguish from capacity bars
-    return f"[yellow]{bar}[/yellow]"
+# Layout overhead for Dashboard:
+#   Prefix spaces: 2, Max column 2 content ("Time segments (7 divisions)"): 28,
+#   Table cell padding: 4, Safety margin: 2
+DASHBOARD_OVERHEAD = 36
 
 
 class Dashboard:
@@ -74,9 +37,23 @@ class Dashboard:
         self.refresh_interval = max(5, refresh_interval)  # Minimum 5 seconds
         self.debug = debug
         self.console = Console()
-        self.claude_collector = None
-        self.codex_collector = None
+        self.claude_chain = None
+        self.codex_chain = None
+        self.data_source = {}
         self.running = False
+        self._init_storage()
+
+    def _init_storage(self):
+        """Initialize storage components."""
+        try:
+            from ..storage import UsageStore, DedupTracker
+            self.usage_store = UsageStore()
+            self.dedup_tracker = DedupTracker()
+            # Run cleanup on startup
+            self.usage_store.cleanup_old_snapshots(days=30)
+        except Exception:
+            self.usage_store = None
+            self.dedup_tracker = None
 
     def _signal_handler(self, signum, frame):
         """Handle Ctrl+C gracefully."""
@@ -84,21 +61,60 @@ class Dashboard:
         self._winddown()
         sys.exit(0)
 
-    def _winddown(self):
-        """Cleanup: stop persistent collectors."""
-        if self.claude_collector:
-            try:
-                self.claude_collector.stop()
-            except Exception as e:
-                if self.debug:
-                    self.console.print(f"[yellow]Error stopping Claude collector: {e}[/yellow]")
+    def _store_snapshots(
+        self,
+        claude_metrics: Optional[Dict],
+        codex_metrics: Optional[Dict]
+    ) -> None:
+        """Store metrics snapshots to database with deduplication."""
+        if not self.usage_store or not self.dedup_tracker:
+            return
 
-        if self.codex_collector:
+        try:
+            import uuid
+            collection_id = str(uuid.uuid4())
+
+            # Store Claude metrics if changed
+            if claude_metrics:
+                if self.dedup_tracker.should_store_metrics('claude', claude_metrics):
+                    source = self.data_source.get('claude', 'unknown')
+                    self.usage_store.store_snapshot(
+                        'claude',
+                        claude_metrics,
+                        source,
+                        collection_id
+                    )
+
+            # Store Codex metrics if changed
+            if codex_metrics:
+                if self.dedup_tracker.should_store_metrics('codex', codex_metrics):
+                    source = self.data_source.get('codex', 'unknown')
+                    self.usage_store.store_snapshot(
+                        'codex',
+                        codex_metrics,
+                        source,
+                        collection_id
+                    )
+
+        except Exception:
+            # Silently fail, storage is best-effort
+            pass
+
+    def _winddown(self):
+        """Cleanup: stop persistent chains."""
+        if self.claude_chain:
             try:
-                self.codex_collector.stop()
+                self.claude_chain.stop()
             except Exception as e:
                 if self.debug:
-                    self.console.print(f"[yellow]Error stopping Codex collector: {e}[/yellow]")
+                    self.console.print(f"[yellow]Error stopping Claude chain: {e}[/yellow]")
+
+        if self.codex_chain:
+            try:
+                self.codex_chain.stop()
+            except Exception as e:
+                if self.debug:
+                    self.console.print(f"[yellow]Error stopping Codex chain: {e}[/yellow]")
 
     def _create_table(self, claude_metrics: Optional[Dict], codex_metrics: Optional[Dict], last_updated: str, cycle_time: Optional[float] = None) -> Table:
         """Create rich table with progress bars.
@@ -116,10 +132,22 @@ class Dashboard:
         table.add_column(justify="right")
         table.add_column(justify="left", no_wrap=True)
 
+        # Check if terminal is too small
+        term = self.console.size
+        if term.width < MIN_TERMINAL_WIDTH or term.height < MIN_TERMINAL_HEIGHT:
+            table.add_row(
+                f"[yellow]Terminal too small ({term.width}x{term.height}). "
+                f"Please resize to at least {MIN_TERMINAL_WIDTH}x{MIN_TERMINAL_HEIGHT}.[/yellow]"
+            )
+            return table
+
         # Title
         table.add_row()
         table.add_row("[bold cyan]Usage Dashboard[/bold cyan]")
         table.add_row()
+
+        # Dynamic bar width based on terminal size
+        bar_width = calculate_bar_width(self.console.size.width, DASHBOARD_OVERHEAD)
 
         # Claude metrics
         if claude_metrics:
@@ -145,18 +173,16 @@ class Dashboard:
                     window_hours = 168  # 7 days
                     divisions = 7
 
-                # Capacity bar (existing usage bar)
+                # Capacity bar (token usage)
                 used = data['used_pct']
-                bar_width = 30
-                filled = int((used / 100) * bar_width)
-                capacity_bar = '▓' * filled + '░' * (bar_width - filled)
+                capacity_bar = create_capacity_bar(used, bar_width)
 
                 # Time markers bar
-                markers_bar = _create_time_markers(divisions, bar_width)
+                markers_bar = create_time_markers(divisions, bar_width)
 
                 # Period bar (time progression)
                 time_pct = calculate_time_progress(data['resets'], window_hours)
-                period_bar = _create_period_bar(time_pct, bar_width)
+                period_bar = create_period_bar(time_pct, bar_width)
 
                 # Render: capacity + markers + period + reset text
                 table.add_row(
@@ -164,11 +190,11 @@ class Dashboard:
                     f"{used}% Capacity"
                 )
                 table.add_row(
-                    f"  {markers_bar}",
+                    f"  [dim]{markers_bar}[/dim]",
                     f"Time segments ({divisions} divisions)"
                 )
                 table.add_row(
-                    f"  {period_bar}",
+                    f"  [yellow]{period_bar}[/yellow]",
                     f"{int(time_pct)}% Period"
                 )
                 table.add_row(
@@ -201,18 +227,16 @@ class Dashboard:
                     window_hours = 168
                     divisions = 7
 
-                # Capacity bar (existing usage bar)
+                # Capacity bar (token usage)
                 used = data['used_pct']
-                bar_width = 30
-                filled = int((used / 100) * bar_width)
-                capacity_bar = '▓' * filled + '░' * (bar_width - filled)
+                capacity_bar = create_capacity_bar(used, bar_width)
 
                 # Time markers bar
-                markers_bar = _create_time_markers(divisions, bar_width)
+                markers_bar = create_time_markers(divisions, bar_width)
 
                 # Period bar (time progression)
                 time_pct = calculate_time_progress(data['resets'], window_hours)
-                period_bar = _create_period_bar(time_pct, bar_width)
+                period_bar = create_period_bar(time_pct, bar_width)
 
                 # Render: capacity + markers + period + reset text
                 table.add_row(
@@ -220,11 +244,11 @@ class Dashboard:
                     f"{used}% Capacity"
                 )
                 table.add_row(
-                    f"  {markers_bar}",
+                    f"  [dim]{markers_bar}[/dim]",
                     f"Time segments ({divisions} divisions)"
                 )
                 table.add_row(
-                    f"  {period_bar}",
+                    f"  [yellow]{period_bar}[/yellow]",
                     f"{int(time_pct)}% Period"
                 )
                 table.add_row(
@@ -257,26 +281,31 @@ class Dashboard:
 
         # Phase 1: Windup
         if self.debug:
-            self.console.print("[cyan]WINDUP: Creating persistent collectors...[/cyan]")
+            self.console.print("[cyan]WINDUP: Creating persistent chains...[/cyan]")
 
         windup_start = time.time()
 
         try:
-            # Create Claude collector
+            # Create Claude chain
             if self.debug:
-                self.console.print(f"[cyan]Creating Claude collector...[/cyan]")
-            self.claude_collector = ClaudePersistentCollector()
-            claude_metrics = self.claude_collector.start()
+                self.console.print(f"[cyan]Creating Claude chain...[/cyan]")
+            self.claude_chain = create_claude_chain(persistent=True)
+            result = self.claude_chain.start()
+            claude_metrics = result.metrics
+            self.data_source['claude'] = result.source.value
 
-            # Create Codex collector
+            # Create Codex chain
             if self.debug:
-                self.console.print(f"[cyan]Creating Codex collector...[/cyan]")
-            self.codex_collector = CodexPersistentCollector()
-            codex_metrics = self.codex_collector.start()
+                self.console.print(f"[cyan]Creating Codex chain...[/cyan]")
+            self.codex_chain = create_codex_chain(persistent=True)
+            result = self.codex_chain.start()
+            codex_metrics = result.metrics
+            self.data_source['codex'] = result.source.value
 
             windup_time = time.time() - windup_start
             if self.debug:
-                self.console.print(f"[green]WINDUP complete in {windup_time:.1f}s[/green]\n")
+                self.console.print(f"[green]WINDUP complete in {windup_time:.1f}s[/green]")
+                self.console.print(f"[cyan]Sources: Claude={self.data_source['claude']}, Codex={self.data_source['codex']}[/cyan]\n")
 
         except Exception as e:
             self.console.print(f"[red]Error during windup: {e}[/red]")
@@ -299,17 +328,30 @@ class Dashboard:
                 cycle_start = time.time()
 
                 try:
-                    # Refresh metrics from both collectors
+                    # Refresh metrics from both chains
                     if self.debug:
                         self.console.print(f"[cyan]REFRESH {refresh_count}: Collecting metrics...[/cyan]")
 
-                    claude_metrics = self.claude_collector.refresh()
-                    codex_metrics = self.codex_collector.refresh()
+                    result = self.claude_chain.refresh()
+                    claude_metrics = result.metrics
+                    self.data_source['claude'] = result.source.value
+                    if result.stale:
+                        self.data_source['claude'] += ' (stale)'
+
+                    result = self.codex_chain.refresh()
+                    codex_metrics = result.metrics
+                    self.data_source['codex'] = result.source.value
+                    if result.stale:
+                        self.data_source['codex'] += ' (stale)'
 
                     cycle_time = time.time() - cycle_start
 
                     if self.debug:
                         self.console.print(f"[green]REFRESH {refresh_count} complete in {cycle_time:.1f}s[/green]")
+                        self.console.print(f"[cyan]Sources: Claude={self.data_source['claude']}, Codex={self.data_source['codex']}[/cyan]")
+
+                    # Store snapshots to database
+                    self._store_snapshots(claude_metrics, codex_metrics)
 
                     # Update display
                     live.update(

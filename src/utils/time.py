@@ -132,6 +132,58 @@ def parse_time_to_datetime(time_str: str) -> datetime:
         return parsed
 
 
+def format_reset_from_iso(iso_str: str) -> str:
+    """Convert ISO 8601 timestamp to display format.
+
+    Converts API timestamps to the format used by PTY parsers:
+    - Same day: "2:31pm"
+    - Future date: "Feb 9 at 8:19pm"
+
+    Args:
+        iso_str: ISO 8601 timestamp (e.g., "2025-11-04T04:59:59.943648+00:00")
+
+    Returns:
+        Formatted time string matching PTY parser format
+    """
+    if not iso_str:
+        return calculate_fallback_time(5, same_day=True)
+
+    try:
+        # Parse ISO 8601 timestamp
+        # Handle both with and without microseconds/timezone
+        dt = None
+        for fmt in [
+            "%Y-%m-%dT%H:%M:%S.%f%z",  # With microseconds and timezone
+            "%Y-%m-%dT%H:%M:%S%z",      # Without microseconds
+            "%Y-%m-%dT%H:%M:%SZ",       # UTC with Z suffix
+        ]:
+            try:
+                dt = datetime.strptime(iso_str, fmt)
+                break
+            except ValueError:
+                continue
+
+        if dt is None:
+            # Fallback parsing
+            dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+
+        # Convert to local time if timezone-aware
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
+
+        now = datetime.now()
+
+        # Check if same day
+        if dt.date() == now.date():
+            return format_12h_time(dt.hour, dt.minute)
+        else:
+            return format_reset_date(dt)
+
+    except (ValueError, AttributeError):
+        # Fallback on parse error
+        return calculate_fallback_time(5, same_day=True)
+
+
 def calculate_time_progress(reset_time_str: str, window_hours: int) -> float:
     """Calculate percentage of time elapsed in a window.
 

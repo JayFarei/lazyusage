@@ -11,59 +11,17 @@ from textual import work
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from ..collectors.claude import ClaudePersistentCollector
-from ..collectors.codex import CodexPersistentCollector
+from ..providers import create_claude_chain, create_codex_chain
 from ..utils.time import calculate_time_progress
+from ..utils.bars import (
+    calculate_bar_width, create_time_markers, create_capacity_bar, create_period_bar,
+    MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT,
+)
 
-
-def _create_time_markers(divisions: int, bar_width: int = 30) -> str:
-    """Create evenly-spaced division markers.
-
-    Args:
-        divisions: Number of divisions (5 for 5h, 7 for weekly)
-        bar_width: Width of bar (default 30)
-
-    Returns:
-        Bar string with evenly distributed markers
-    """
-    if divisions <= 1:
-        return " " * bar_width
-
-    # Calculate positions using rounding for more even distribution
-    markers = []
-    for i in range(1, divisions):
-        # Use round() instead of int() for better distribution
-        pos = round(i * bar_width / divisions)
-        markers.append(pos)
-
-    # Build bar character by character
-    bar = ""
-    for i in range(bar_width):
-        if i in markers:
-            bar += "┃"
-        else:
-            bar += " "
-
-    return bar
-
-
-def _create_period_bar(time_pct: float, bar_width: int = 30) -> str:
-    """Create a filled progress bar showing time elapsed.
-
-    Args:
-        time_pct: Percentage of time elapsed (0-100)
-        bar_width: Width of bar (default 30)
-
-    Returns:
-        Bar string with time progression
-    """
-    # Calculate filled width
-    filled = int((time_pct / 100) * bar_width)
-
-    # Build bar
-    bar = '▓' * filled + '░' * (bar_width - filled)
-
-    return bar
+# Layout overhead for TUI MetricsWidget:
+#   Panel borders: 2, Panel padding: 2, Label column: 18,
+#   Table cell padding: 4, Suffix text (" ◆ 100%"): 8, Safety margin: 2
+TUI_OVERHEAD = 36
 
 
 class MetricsWidget(Static):
@@ -90,6 +48,16 @@ class MetricsWidget(Static):
 
     def render(self) -> Panel:
         """Render metrics with subscription in title."""
+        # Check if terminal is too small
+        term = self.app.size if self.app else self.size
+        if term.width < MIN_TERMINAL_WIDTH or term.height < MIN_TERMINAL_HEIGHT:
+            return Panel(
+                f"[yellow]Terminal too small ({term.width}x{term.height}).\n"
+                f"Please resize to at least {MIN_TERMINAL_WIDTH}x{MIN_TERMINAL_HEIGHT}.[/yellow]",
+                title=self.title,
+                border_style="yellow"
+            )
+
         if self.error_message:
             return Panel(
                 f"[red]Error: {self.error_message}[/red]",
@@ -136,18 +104,19 @@ class MetricsWidget(Static):
                 window_hours = 168  # 7 days
                 divisions = 7
 
-            # Capacity bar (token usage)
+            # Dynamic bar width based on widget size
             used = data['used_pct']
-            bar_width = 35  # Changed to 35 for perfect division by 5 and 7
-            filled = int((used / 100) * bar_width)
-            capacity_bar = '▓' * filled + '░' * (bar_width - filled)
+            bar_width = calculate_bar_width(self.size.width, TUI_OVERHEAD)
+
+            # Capacity bar (token usage)
+            capacity_bar = create_capacity_bar(used, bar_width)
 
             # Time markers bar
-            markers_bar = _create_time_markers(divisions, bar_width)
+            markers_bar = create_time_markers(divisions, bar_width)
 
             # Period bar (time progression)
             time_pct = calculate_time_progress(data['resets'], window_hours)
-            period_bar = _create_period_bar(time_pct, bar_width)
+            period_bar = create_period_bar(time_pct, bar_width)
 
             # Render three bars with icons and updated colors
             table.add_row(f"{label}:", f"{capacity_bar} ◆ {used}%")
@@ -165,6 +134,7 @@ class StatusBar(Static):
     last_updated = reactive("")
     auto_refresh_enabled = reactive(True)
     refresh_interval = reactive(10)
+    data_source = reactive("")
 
     def render(self) -> Text:
         """Render status bar."""
@@ -183,6 +153,11 @@ class StatusBar(Static):
         else:
             status.append("Auto-refresh: ", style="yellow")
             status.append("PAUSED", style="bold yellow")
+
+        if self.data_source:
+            status.append(" | ")
+            status.append("Source: ", style="cyan")
+            status.append(self.data_source, style="bold cyan")
 
         return status
 
@@ -243,9 +218,23 @@ class UsageTUI(App):
         self.refresh_interval = max(5, refresh_interval)
         self.services = services if services else ['claude', 'codex']
         self.debug_mode = debug
-        self.claude_collector = None
-        self.codex_collector = None
+        self.claude_chain = None
+        self.codex_chain = None
         self.refresh_timer = None
+        self.data_source = {}  # Track data source per service
+        self._init_storage()
+
+    def _init_storage(self):
+        """Initialize storage components."""
+        try:
+            from ..storage import UsageStore, DedupTracker
+            self.usage_store = UsageStore()
+            self.dedup_tracker = DedupTracker()
+            # Run cleanup on startup
+            self.usage_store.cleanup_old_snapshots(days=30)
+        except Exception:
+            self.usage_store = None
+            self.dedup_tracker = None
 
     def compose(self) -> ComposeResult:
         """Build the UI layout."""
@@ -306,79 +295,166 @@ class UsageTUI(App):
 
     @work(exclusive=True, thread=True)
     def start_collectors(self) -> None:
-        """Initialize persistent collectors and collect initial metrics."""
-        try:
-            claude_metrics = None
-            codex_metrics = None
+        """Initialize persistent chains and collect initial metrics."""
+        claude_metrics = None
+        codex_metrics = None
+        claude_error = None
+        codex_error = None
 
-            # Create Claude collector if requested
-            if 'claude' in self.services:
-                self.claude_collector = ClaudePersistentCollector()
-                claude_metrics = self.claude_collector.start()
+        # Create Claude chain if requested
+        if 'claude' in self.services:
+            try:
+                self.claude_chain = create_claude_chain(persistent=True)
+                result = self.claude_chain.start()
+                claude_metrics = result.metrics
+                self.data_source['claude'] = result.source.value
+                if result.error:
+                    claude_error = result.error
+            except Exception as e:
+                claude_error = str(e)
 
-            # Create Codex collector if requested
-            if 'codex' in self.services:
-                self.codex_collector = CodexPersistentCollector()
-                codex_metrics = self.codex_collector.start()
+        # Create Codex chain if requested
+        if 'codex' in self.services:
+            try:
+                self.codex_chain = create_codex_chain(persistent=True)
+                result = self.codex_chain.start()
+                codex_metrics = result.metrics
+                self.data_source['codex'] = result.source.value
+                if result.error:
+                    codex_error = result.error
+            except Exception as e:
+                codex_error = str(e)
 
-            # Update UI from main thread
-            self.call_from_thread(self._update_ui, claude_metrics, codex_metrics)
-
-        except Exception as e:
-            self.call_from_thread(
-                self.notify,
-                f"Error starting collectors: {e}",
-                severity="error"
-            )
+        # Update UI from main thread
+        self.call_from_thread(
+            self._update_ui, claude_metrics, codex_metrics,
+            claude_error, codex_error,
+        )
 
     @work(exclusive=True, thread=True)
     def refresh_metrics(self) -> None:
-        """Refresh metrics from collectors."""
-        if not self.claude_collector and not self.codex_collector:
+        """Refresh metrics from chains."""
+        if not self.claude_chain and not self.codex_chain:
+            return
+
+        claude_metrics = None
+        codex_metrics = None
+        claude_error = None
+        codex_error = None
+
+        if self.claude_chain:
+            try:
+                result = self.claude_chain.refresh()
+                claude_metrics = result.metrics
+                self.data_source['claude'] = result.source.value
+                if result.stale:
+                    self.data_source['claude'] += ' (stale)'
+                if result.error:
+                    claude_error = result.error
+            except Exception as e:
+                claude_error = str(e)
+
+        if self.codex_chain:
+            try:
+                result = self.codex_chain.refresh()
+                codex_metrics = result.metrics
+                self.data_source['codex'] = result.source.value
+                if result.stale:
+                    self.data_source['codex'] += ' (stale)'
+                if result.error:
+                    codex_error = result.error
+            except Exception as e:
+                codex_error = str(e)
+
+        self.call_from_thread(
+            self._update_ui, claude_metrics, codex_metrics,
+            claude_error, codex_error,
+        )
+
+    def _store_snapshots(
+        self,
+        claude_metrics: Optional[Dict],
+        codex_metrics: Optional[Dict]
+    ) -> None:
+        """Store metrics snapshots to database with deduplication."""
+        if not self.usage_store or not self.dedup_tracker:
             return
 
         try:
-            claude_metrics = None
-            codex_metrics = None
+            import uuid
+            collection_id = str(uuid.uuid4())
 
-            if self.claude_collector:
-                claude_metrics = self.claude_collector.refresh()
+            # Store Claude metrics if changed
+            if claude_metrics and 'claude' in self.services:
+                if self.dedup_tracker.should_store_metrics('claude', claude_metrics):
+                    source = self.data_source.get('claude', 'unknown')
+                    self.usage_store.store_snapshot(
+                        'claude',
+                        claude_metrics,
+                        source,
+                        collection_id
+                    )
 
-            if self.codex_collector:
-                codex_metrics = self.codex_collector.refresh()
+            # Store Codex metrics if changed
+            if codex_metrics and 'codex' in self.services:
+                if self.dedup_tracker.should_store_metrics('codex', codex_metrics):
+                    source = self.data_source.get('codex', 'unknown')
+                    self.usage_store.store_snapshot(
+                        'codex',
+                        codex_metrics,
+                        source,
+                        collection_id
+                    )
 
-            self.call_from_thread(self._update_ui, claude_metrics, codex_metrics)
+        except Exception:
+            # Silently fail, storage is best-effort
+            pass
 
-        except Exception as e:
-            self.call_from_thread(
-                self.notify,
-                f"Error refreshing metrics: {e}",
-                severity="warning"
-            )
-
-    def _update_ui(self, claude_metrics: Optional[Dict], codex_metrics: Optional[Dict]) -> None:
+    def _update_ui(
+        self,
+        claude_metrics: Optional[Dict],
+        codex_metrics: Optional[Dict],
+        claude_error: Optional[str] = None,
+        codex_error: Optional[str] = None,
+    ) -> None:
         """Update UI widgets with new metrics."""
         status_bar = self.query_one("#status", StatusBar)
 
         # Update Claude widget if it exists
-        if claude_metrics and 'claude' in self.services:
+        if 'claude' in self.services:
             try:
                 claude_widget = self.query_one("#claude", MetricsWidget)
-                claude_widget.update_metrics(claude_metrics)
+                if claude_error:
+                    claude_widget.update_metrics(None, error=claude_error)
+                elif claude_metrics:
+                    claude_widget.update_metrics(claude_metrics)
             except Exception:
                 pass
 
         # Update Codex widget if it exists
-        if codex_metrics and 'codex' in self.services:
+        if 'codex' in self.services:
             try:
                 codex_widget = self.query_one("#codex", MetricsWidget)
-                codex_widget.update_metrics(codex_metrics)
+                if codex_error:
+                    codex_widget.update_metrics(None, error=codex_error)
+                elif codex_metrics:
+                    codex_widget.update_metrics(codex_metrics)
             except Exception:
                 pass
 
         status_bar.last_updated = datetime.now().strftime("%H:%M:%S")
         status_bar.auto_refresh_enabled = self.auto_refresh_enabled
         status_bar.refresh_interval = self.refresh_interval
+
+        # Update data source display
+        sources = []
+        for service in self.services:
+            source = self.data_source.get(service, 'unknown')
+            sources.append(f"{service}: {source}")
+        status_bar.data_source = " | ".join(sources)
+
+        # Store snapshots to database
+        self._store_snapshots(claude_metrics, codex_metrics)
 
     async def action_refresh(self) -> None:
         """Manual refresh action (R key)."""
@@ -465,16 +541,16 @@ class UsageTUI(App):
             except Exception:
                 pass
 
-        # Stop collectors
-        if self.claude_collector:
+        # Stop chains
+        if self.claude_chain:
             try:
-                self.claude_collector.stop()
+                self.claude_chain.stop()
             except Exception:
                 pass
 
-        if self.codex_collector:
+        if self.codex_chain:
             try:
-                self.codex_collector.stop()
+                self.codex_chain.stop()
             except Exception:
                 pass
 
@@ -492,16 +568,16 @@ class UsageTUI(App):
             except Exception:
                 pass
 
-        # Stop collectors in parallel
-        if self.claude_collector:
+        # Stop chains in parallel
+        if self.claude_chain:
             try:
-                self.claude_collector.stop()
+                self.claude_chain.stop()
             except Exception:
                 pass
 
-        if self.codex_collector:
+        if self.codex_chain:
             try:
-                self.codex_collector.stop()
+                self.codex_chain.stop()
             except Exception:
                 pass
 

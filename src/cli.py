@@ -4,9 +4,7 @@ import click
 import subprocess
 import sys
 import time
-from typing import List, Optional
-from .collectors.claude import ClaudeEphemeralCollector
-from .collectors.codex import CodexEphemeralCollector
+from typing import Dict, List, Optional
 from .formatters.text import format_claude, format_codex, format_all
 from .formatters.json import format_json, format_all_json
 
@@ -87,33 +85,103 @@ def validate_service(service: Optional[str], available: List[str]) -> List[str]:
     return [service]
 
 
-def collect_metrics(services: List[str], debug: bool = False):
-    """Collect metrics from specified services.
+def collect_metrics(services: List[str], debug: bool = False, store: bool = True):
+    """Collect metrics from specified services using fallback chains.
 
     Args:
         services: List of service names to collect from
-        debug: Whether to show timing information
+        debug: Whether to show timing and source information
+        store: Whether to store snapshots to database
 
     Returns:
         Tuple of (claude_metrics, codex_metrics, available_services)
         Either metric dict can be None if service not in services list
     """
+    from .providers import create_claude_chain, create_codex_chain
+
     claude_metrics = None
     codex_metrics = None
+    claude_source = None
+    codex_source = None
 
     if 'claude' in services:
         if debug:
             click.echo("Collecting Claude metrics...", err=True)
-        collector = ClaudeEphemeralCollector()
-        claude_metrics = collector.collect()
+        chain = create_claude_chain(persistent=False)
+        result = chain.fetch()
+        claude_metrics = result.metrics
+        claude_source = result.source.value
+        if debug:
+            click.echo(f"  Source: {result.source.value}", err=True)
+            if result.stale:
+                click.echo(f"  Warning: Data is stale", err=True)
+            if result.error:
+                click.echo(f"  Error: {result.error}", err=True)
 
     if 'codex' in services:
         if debug:
             click.echo("Collecting Codex metrics...", err=True)
-        collector = CodexEphemeralCollector()
-        codex_metrics = collector.collect()
+        chain = create_codex_chain(persistent=False)
+        result = chain.fetch()
+        codex_metrics = result.metrics
+        codex_source = result.source.value
+        if debug:
+            click.echo(f"  Source: {result.source.value}", err=True)
+            if result.stale:
+                click.echo(f"  Warning: Data is stale", err=True)
+            if result.error:
+                click.echo(f"  Error: {result.error}", err=True)
+
+    # Store to database if requested
+    if store:
+        _store_snapshots(
+            claude_metrics, codex_metrics,
+            claude_source, codex_source
+        )
 
     return claude_metrics, codex_metrics
+
+
+def _store_snapshots(
+    claude_metrics: Optional[Dict],
+    codex_metrics: Optional[Dict],
+    claude_source: Optional[str],
+    codex_source: Optional[str]
+):
+    """Store metrics snapshots to database.
+
+    Args:
+        claude_metrics: Claude metrics dict
+        codex_metrics: Codex metrics dict
+        claude_source: Claude data source
+        codex_source: Codex data source
+    """
+    try:
+        from .storage import UsageStore
+        import uuid
+
+        store = UsageStore()
+        collection_id = str(uuid.uuid4())
+
+        if claude_metrics and claude_source:
+            store.store_snapshot(
+                'claude',
+                claude_metrics,
+                claude_source,
+                collection_id
+            )
+
+        if codex_metrics and codex_source:
+            store.store_snapshot(
+                'codex',
+                codex_metrics,
+                codex_source,
+                collection_id
+            )
+
+    except Exception:
+        # Silently fail, storage is best-effort
+        pass
 
 
 @click.command(name='usage-check')
