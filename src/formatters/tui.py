@@ -279,13 +279,14 @@ class MetricChartWidget(Static):
 
                 # Calculate position on timeline (0 = NOW, num_points = RESET)
                 if ts <= now:
-                    # Recent past: show in negative X space (left of NOW)
+                    # Recent past: show near left edge (NOW)
                     seconds_ago = (now - ts).total_seconds()
-                    # Map to position: negative values = past, 0 = NOW
-                    # Scale relative to time_remaining so dots spread appropriately
-                    x_pos = -seconds_ago / time_remaining * num_points
-                    actual_x.append(x_pos)
-                    actual_y.append(snapshot['used_pct'])
+                    # Map to position near 0 (show last few minutes)
+                    if seconds_ago <= 600:  # Last 10 minutes
+                        x_pos = -seconds_ago / time_remaining * num_points
+                        if x_pos >= -5:  # Only show very recent
+                            actual_x.append(max(0, x_pos))
+                            actual_y.append(snapshot['used_pct'])
 
             # Add current usage point at NOW
             actual_x.append(0)
@@ -809,10 +810,6 @@ class UsageTUI(App):
             except Exception:
                 pass
 
-        # Store snapshots to database BEFORE updating charts
-        # This ensures charts fetch the latest data including current snapshot
-        self._store_snapshots(claude_metrics, codex_metrics)
-
         # Update metric chart widgets (store metrics always, render only if mounted)
         if 'claude' in self.services:
             for chart_id in ["claude-weekly-chart", "claude-session-chart", "claude-sonnet-chart"]:
@@ -841,6 +838,9 @@ class UsageTUI(App):
         if 'codex' in self.services:
             sources.append(f"Codex: {self.data_source.get('codex', 'unknown')}")
         status_bar.data_source = " | ".join(sources) if sources else "No data"
+
+        # Store snapshots to database
+        self._store_snapshots(claude_metrics, codex_metrics)
 
     def action_show_snapshot(self) -> None:
         """Toggle to snapshot view (s key)."""
