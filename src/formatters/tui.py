@@ -279,14 +279,13 @@ class MetricChartWidget(Static):
 
                 # Calculate position on timeline (0 = NOW, num_points = RESET)
                 if ts <= now:
-                    # Recent past: show near left edge (NOW)
+                    # Recent past: show in negative X space (left of NOW)
                     seconds_ago = (now - ts).total_seconds()
-                    # Map to position near 0 (show last few minutes)
-                    if seconds_ago <= 600:  # Last 10 minutes
-                        x_pos = -seconds_ago / time_remaining * num_points
-                        if x_pos >= -5:  # Only show very recent
-                            actual_x.append(max(0, x_pos))
-                            actual_y.append(snapshot['used_pct'])
+                    # Map to position: negative values = past, 0 = NOW
+                    # Scale relative to time_remaining so dots spread appropriately
+                    x_pos = -seconds_ago / time_remaining * num_points
+                    actual_x.append(x_pos)
+                    actual_y.append(snapshot['used_pct'])
 
             # Add current usage point at NOW
             actual_x.append(0)
