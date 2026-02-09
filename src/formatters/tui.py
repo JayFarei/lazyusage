@@ -809,6 +809,10 @@ class UsageTUI(App):
             except Exception:
                 pass
 
+        # Store snapshots to database BEFORE updating charts
+        # This ensures charts fetch the latest data including current snapshot
+        self._store_snapshots(claude_metrics, codex_metrics)
+
         # Update metric chart widgets (store metrics always, render only if mounted)
         if 'claude' in self.services:
             for chart_id in ["claude-weekly-chart", "claude-session-chart", "claude-sonnet-chart"]:
@@ -837,9 +841,6 @@ class UsageTUI(App):
         if 'codex' in self.services:
             sources.append(f"Codex: {self.data_source.get('codex', 'unknown')}")
         status_bar.data_source = " | ".join(sources) if sources else "No data"
-
-        # Store snapshots to database
-        self._store_snapshots(claude_metrics, codex_metrics)
 
     def action_show_snapshot(self) -> None:
         """Toggle to snapshot view (s key)."""
