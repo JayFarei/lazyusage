@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["bun-types"],
+    "paths": {
+      "@usage-tui/core": ["./packages/core/src/index.ts"],
+      "@usage-tui/core/*": ["./packages/core/src/*"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
