@@ -1,6 +1,6 @@
 /**
  * Root TUI application component.
- * 2x2 grid layout: each service row has bars (left) + ccusage stats (right).
+ * 2x2 grid layout: each service row has bars (left) + ledger stats (right).
  */
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
@@ -12,7 +12,7 @@ import { HelpOverlay } from "./components/HelpOverlay.js";
 import { useMetrics } from "./hooks/useMetrics.js";
 import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
 import { usePanelState } from "./hooks/useViewMode.js";
-import { useCcusageData } from "./hooks/useCcusageData.js";
+import { useLedgerData } from "./hooks/useLedgerData.js";
 import { createKeybindingHandler } from "./hooks/useKeybindings.js";
 import {
   createClaudeChain,
@@ -39,7 +39,7 @@ export function App() {
     new Date().toLocaleTimeString()
   );
 
-  const ccusage = useCcusageData();
+  const ledger = useLedgerData();
 
   // Provider chains
   let claudeChain: PersistentFallbackChain | null = null;
@@ -73,8 +73,8 @@ export function App() {
       }
     }
 
-    // Throttled ccusage refresh (30s internal throttle)
-    ccusage.refresh();
+    // Throttled ledger refresh (30s internal throttle)
+    ledger.refresh();
   }
 
   const autoRefresh = useAutoRefresh(refreshAll, 10);
@@ -86,9 +86,9 @@ export function App() {
     cycleTab,
     togglePause: autoRefresh.togglePause,
     triggerRefresh: () => {
-      if (ccusage.loading()) return;
+      if (ledger.loading()) return;
       refreshAll();
-      ccusage.refresh(true);
+      ledger.refresh(true);
     },
     speedUp: autoRefresh.speedUp,
     slowDown: autoRefresh.slowDown,
@@ -134,12 +134,12 @@ export function App() {
     setLastUpdated(new Date().toLocaleTimeString());
     autoRefresh.startTimer();
 
-    // Initial ccusage load
-    ccusage.refresh(true);
+    // Initial ledger load
+    ledger.refresh(true);
   }
 
   function cleanup() {
-    ccusage.killAll();
+    ledger.killAll();
     claudeChain?.stop().catch(() => {});
     codexChain?.stop().catch(() => {});
     store?.close();
@@ -186,12 +186,11 @@ export function App() {
           <StatsPanel
             contentTab={contentTab()}
             service="claude"
-            daily={ccusage.claudeDaily()}
-            blocks={ccusage.claudeBlocks()}
-            sessions={ccusage.claudeSessions()}
-            monthly={ccusage.claudeMonthly()}
-            loading={ccusage.loading()}
-            error={ccusage.error()}
+            daily={ledger.claudeDaily()}
+            weekly={ledger.claudeWeekly()}
+            monthly={ledger.claudeMonthly()}
+            loading={ledger.loading()}
+            error={ledger.error()}
           />
         </box>
       </box>
@@ -213,12 +212,11 @@ export function App() {
           <StatsPanel
             contentTab={contentTab()}
             service="codex"
-            daily={ccusage.codexDaily()}
-            blocks={null}
-            sessions={ccusage.codexSessions()}
-            monthly={ccusage.codexMonthly()}
-            loading={ccusage.loading()}
-            error={ccusage.error()}
+            daily={ledger.codexDaily()}
+            weekly={ledger.codexWeekly()}
+            monthly={ledger.codexMonthly()}
+            loading={ledger.loading()}
+            error={ledger.error()}
           />
         </box>
       </box>

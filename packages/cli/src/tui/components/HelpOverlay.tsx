@@ -16,7 +16,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
     "",
     "  1/2        Focus Claude/Codex panel",
     "  j/k        Navigate metrics (up/down)",
-    "  [/]        Switch tab (Daily/Blocks/Sessions/Monthly)",
+    "  [/]        Switch tab (Daily/Weekly/Monthly)",
     "  r          Refresh data now",
     "  p          Pause/Resume auto-refresh",
     "  +/=        Speed up refresh (min 5s)",

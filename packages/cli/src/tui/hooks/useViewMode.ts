@@ -5,7 +5,7 @@
 import { createSignal } from "solid-js";
 
 export type ActivePanel = "claude" | "codex";
-export type ContentTab = "daily" | "blocks" | "sessions" | "monthly";
+export type ContentTab = "daily" | "weekly" | "monthly";
 
 const METRIC_KEYS_MAP: Record<ActivePanel, string[]> = {
   claude: ["session", "week_all", "week_sonnet"],
@@ -39,7 +39,7 @@ export function usePanelState() {
   }
 
   function cycleTab(direction: "left" | "right") {
-    const tabs: ContentTab[] = ["daily", "blocks", "sessions", "monthly"];
+    const tabs: ContentTab[] = ["daily", "weekly", "monthly"];
     setContentTab((current) => {
       const idx = tabs.indexOf(current);
       if (direction === "right") return tabs[(idx + 1) % tabs.length];
