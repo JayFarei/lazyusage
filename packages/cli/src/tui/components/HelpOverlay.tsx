@@ -2,7 +2,7 @@
  * Help overlay showing keyboard shortcuts.
  */
 import { Show } from "solid-js";
-import { theme } from "../theme.js";
+import { useTheme } from "../theme.js";
 
 interface HelpOverlayProps {
   visible: boolean;
@@ -10,6 +10,7 @@ interface HelpOverlayProps {
 }
 
 export function HelpOverlay(props: HelpOverlayProps) {
+  const theme = useTheme();
   const helpText = [
     "Keyboard Shortcuts",
     "==================",
@@ -39,7 +40,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
         height={19}
         backgroundColor={theme.surface0}
         borderColor={theme.cyan}
-        borderStyle="single"
+        borderStyle={"rounded" as any}
         padding={1}
       >
         <text content={helpText} fg={theme.text} />

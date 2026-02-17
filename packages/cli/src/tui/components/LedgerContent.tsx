@@ -3,7 +3,7 @@
  * Reused across Daily, Weekly, and Monthly tabs.
  */
 import { For, Show } from "solid-js";
-import { theme } from "../theme.js";
+import { useTheme } from "../theme.js";
 import type { ProjectUsage } from "@usage-tui/core/parsers/types";
 
 interface LedgerContentProps {
@@ -28,6 +28,7 @@ const COL_PCT = 10;
 const TABLE_WIDTH = COL_PROJECT + COL_TOKENS + COL_PCT;
 
 export function LedgerContent(props: LedgerContentProps) {
+  const theme = useTheme();
   const rows = () => {
     if (!props.data || props.data.length === 0) return [];
     return props.data.map((p) => ({

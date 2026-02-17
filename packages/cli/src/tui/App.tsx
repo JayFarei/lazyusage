@@ -4,7 +4,7 @@
  */
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
-import { theme } from "./theme.js";
+import { useTheme } from "./theme.js";
 import { ServicePanel } from "./components/ServicePanel.js";
 import { StatsPanel } from "./components/ContentPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -25,6 +25,7 @@ import {
 } from "@usage-tui/core";
 
 export function App() {
+  const theme = useTheme();
   const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, updateMetrics } =
     useMetrics();
   const {

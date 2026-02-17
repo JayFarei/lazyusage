@@ -1,7 +1,7 @@
 /**
  * Status bar component showing last update time and refresh status.
  */
-import { theme } from "../theme.js";
+import { useTheme } from "../theme.js";
 
 interface StatusBarProps {
   lastUpdated: string | null;
@@ -12,6 +12,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar(props: StatusBarProps) {
+  const theme = useTheme();
   const statusText = () => {
     const updated = props.lastUpdated ?? "Never";
     const refreshState = props.autoRefreshEnabled

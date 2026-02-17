@@ -3,7 +3,7 @@
  * Displays one bordered box with tab header, switches content based on shared contentTab.
  */
 import { Show } from "solid-js";
-import { theme } from "../theme.js";
+import { useTheme } from "../theme.js";
 import { LedgerContent } from "./LedgerContent.js";
 import type { ContentTab } from "../hooks/useViewMode.js";
 import type { ProjectUsage } from "@usage-tui/core/parsers/types";
@@ -27,6 +27,7 @@ const TAB_LABELS: Record<ContentTab, string> = {
 };
 
 export function StatsPanel(props: StatsPanelProps) {
+  const theme = useTheme();
   const tabHeader = () =>
     TABS.map((tab) => {
       const isActive = tab === props.contentTab;
@@ -45,7 +46,7 @@ export function StatsPanel(props: StatsPanelProps) {
       flexDirection="column"
       width="100%"
       height="100%"
-      borderStyle="round"
+      borderStyle={"rounded" as any}
       borderColor={theme.borderActive}
       title={` ${tabHeader()} `}
       titleAlignment="left"

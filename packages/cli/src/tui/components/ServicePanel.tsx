@@ -3,7 +3,8 @@
  * Each metric renders: label, capacity bar, time markers, period bar, reset time.
  */
 import { For, Show, createSignal, onCleanup } from "solid-js";
-import { theme } from "../theme.js";
+import { useTerminalDimensions } from "@opentui/solid";
+import { useTheme } from "../theme.js";
 import {
   createCapacityBar,
   createTimeMarkers,
@@ -49,6 +50,7 @@ const BAR_OVERHEAD = 12;
 const MIN_LOCAL_BAR = 20;
 
 export function ServicePanel(props: ServicePanelProps) {
+  const theme = useTheme();
   const [tick, setTick] = createSignal(0);
   const tickInterval = setInterval(() => setTick((t) => t + 1), 30_000);
   onCleanup(() => clearInterval(tickInterval));
@@ -76,8 +78,9 @@ export function ServicePanel(props: ServicePanelProps) {
     return entries;
   };
 
+  const dims = useTerminalDimensions();
   const barWidth = () => {
-    const cols = process.stdout.columns ?? 120;
+    const cols = dims().width;
     const panelCols = Math.floor(cols * 0.4) - 4;
     return Math.max(MIN_LOCAL_BAR, calculateBarWidth(panelCols, BAR_OVERHEAD));
   };
@@ -87,8 +90,8 @@ export function ServicePanel(props: ServicePanelProps) {
       flexDirection="column"
       width="100%"
       flexGrow={1}
-      borderStyle="round"
-      borderColor={props.isActive ? theme.borderActive : theme.borderInactive}
+      borderStyle={"rounded" as any}
+      borderColor={theme.borderActive}
       title={panelTitle()}
       titleAlignment="left"
     >
