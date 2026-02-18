@@ -167,18 +167,17 @@ export class UsageStore {
     metricName: string,
     hours: number = 1,
   ): HistoryEntry[] {
-    const hoursParam =
-      hours === Math.floor(hours) ? Math.floor(hours) : hours;
+    const cutoffIso = new Date(Date.now() - hours * 3600_000).toISOString();
     const rows = this.db
       .query(
         `SELECT timestamp, used_pct
          FROM usage_snapshots
          WHERE service = ?
            AND metric_name = ?
-           AND timestamp >= datetime('now', '-' || ? || ' hours')
+           AND timestamp >= ?
          ORDER BY timestamp ASC`,
       )
-      .all(service, metricName, hoursParam) as Array<{
+      .all(service, metricName, cutoffIso) as Array<{
       timestamp: string;
       used_pct: number;
     }>;
@@ -190,9 +189,10 @@ export class UsageStore {
   }
 
   cleanupOldSnapshots(days: number = 30): number {
+    const cutoffIso = new Date(Date.now() - days * 86400_000).toISOString();
     const result = this.db.run(
-      `DELETE FROM usage_snapshots WHERE timestamp < datetime('now', '-' || ? || ' days')`,
-      [days],
+      `DELETE FROM usage_snapshots WHERE timestamp < ?`,
+      [cutoffIso],
     );
     return result.changes;
   }

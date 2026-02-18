@@ -10,7 +10,7 @@
     "dev": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts",
     "usage": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage",
     "usage-check": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage-check",
-    "test": "bun test",
+    "test": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts test",
     "test:core": "bun test tests/core/",
     "test:cli": "bun test tests/cli/",
     "test:tui": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts test tests/tui/",

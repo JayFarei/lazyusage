@@ -96,10 +96,23 @@ export function App(props: AppProps = {}) {
 
   const autoRefresh = useAutoRefresh(refreshAll, 10);
 
+  const isServiceVisible = (panel: "claude" | "codex") =>
+    panel === "claude" ? showClaude() : showCodex();
+
+  const setActivePanelIfVisible = (panel: "claude" | "codex") => {
+    if (!isServiceVisible(panel)) return;
+    setActivePanel(panel);
+  };
+
+  const focusStatsIfVisible = (panel: "claude" | "codex") => {
+    if (!isServiceVisible(panel)) return;
+    focusStatsPanel(panel);
+  };
+
   // Keybindings
   const handleKey = createKeybindingHandler({
-    setActivePanel,
-    focusStatsPanel,
+    setActivePanel: setActivePanelIfVisible,
+    focusStatsPanel: focusStatsIfVisible,
     navigateMetric,
     cycleTab,
     togglePause: autoRefresh.togglePause,
@@ -133,8 +146,16 @@ export function App(props: AppProps = {}) {
       // Database not critical
     }
 
-    claudeChain = createClaudeChain(true) as PersistentFallbackChain;
-    codexChain = createCodexChain(true) as PersistentFallbackChain;
+    if (showClaude()) {
+      claudeChain = createClaudeChain(true) as PersistentFallbackChain;
+    }
+    if (showCodex()) {
+      codexChain = createCodexChain(true) as PersistentFallbackChain;
+    }
+
+    if (!showClaude() && showCodex()) {
+      setActivePanel("codex");
+    }
 
     for (const [chain, service] of [
       [claudeChain, "claude"],

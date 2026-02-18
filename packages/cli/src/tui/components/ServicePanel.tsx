@@ -44,7 +44,7 @@ interface ServicePanelProps {
   isActive: boolean;
   selectedIndex: number;
   panelNumber: number;
-  panelCount: number;
+  panelCount?: number;
 }
 
 const BAR_OVERHEAD = 12;
@@ -88,9 +88,10 @@ export function ServicePanel(props: ServicePanelProps) {
 
   const panelHeight = () => {
     const h = dims().height;
+    const panelCount = props.panelCount ?? 2;
     // 2 fixed rows: status bar + footer hints
     // each panel row has 2 border rows (top+bottom)
-    return Math.floor((h - 2) / props.panelCount) - 2;
+    return Math.floor((h - 2) / panelCount) - 2;
   };
 
   const renderMode = () => {

@@ -8,8 +8,12 @@ exports[`HelpOverlay - visibility snapshot when visible 1`] = `
      │ Keyboard Shortcuts                                  │                    
      │ ==================                                  │                    
      │                                                     │                    
-     │   1/2        Focus Claude/Codex panel               │                    
+     │   1/2        Focus service bars panel               │                    
+     │   3/4        Focus stats panel                      │                    
      │   j/k        Navigate metrics (up/down)             │                    
+     │   Tab        Switch focus (bars ↔ stats)            │                    
+     │   g          Fullscreen focused panel               │                    
+     │   Escape     Close fullscreen                       │                    
      │   [/]        Switch tab (Daily/Weekly/Monthly)      │                    
      │   r          Refresh data now                       │                    
      │   p          Pause/Resume auto-refresh              │                    
@@ -22,9 +26,5 @@ exports[`HelpOverlay - visibility snapshot when visible 1`] = `
      │                                                     │                    
      │                                                     │                    
      ╰─────────────────────────────────────────────────────╯                    
-                                                                                
-                                                                                
-                                                                                
-                                                                                
 "
 `;

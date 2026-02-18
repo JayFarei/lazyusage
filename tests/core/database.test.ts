@@ -1,11 +1,17 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { UsageStore } from "../../packages/core/src/storage/database.js";
 
 describe("UsageStore", () => {
   let store: UsageStore;
+  const realDateNow = Date.now;
 
   beforeEach(() => {
     store = new UsageStore(":memory:");
+  });
+
+  afterEach(() => {
+    Date.now = realDateNow;
+    store.close();
   });
 
   describe("storeSnapshot and getLatestSnapshot", () => {
@@ -137,6 +143,28 @@ describe("UsageStore", () => {
       expect(codexHistory.length).toBe(1);
       expect(codexHistory[0].used_pct).toBe(50);
     });
+
+    test("filters ISO timestamps correctly against a fixed cutoff", () => {
+      Date.now = () => new Date("2026-02-19T00:00:00.000Z").getTime();
+      const db = (store as any).db;
+
+      db.run(
+        `INSERT INTO usage_snapshots
+          (timestamp, service, metric_name, used_pct, remaining_pct, resets, source, collection_id)
+         VALUES (?, 'claude', 'session', 10, 90, '3:00pm', 'pty', 'iso-old')`,
+        ["2026-02-18T01:00:00.000Z"],
+      );
+      db.run(
+        `INSERT INTO usage_snapshots
+          (timestamp, service, metric_name, used_pct, remaining_pct, resets, source, collection_id)
+         VALUES (?, 'claude', 'session', 20, 80, '3:00pm', 'pty', 'iso-new')`,
+        ["2026-02-18T23:30:00.000Z"],
+      );
+
+      const history = store.getHistory("claude", "session", 2);
+      expect(history.map((h) => h.timestamp)).toEqual(["2026-02-18T23:30:00.000Z"]);
+      expect(history[0].used_pct).toBe(20);
+    });
   });
 
   describe("cleanupOldSnapshots", () => {
@@ -157,6 +185,30 @@ describe("UsageStore", () => {
 
       const history = store.getHistory("claude", "session", 24);
       expect(history.length).toBe(1);
+    });
+
+    test("deletes snapshots older than cutoff with ISO timestamps", () => {
+      Date.now = () => new Date("2026-02-19T00:00:00.000Z").getTime();
+      const db = (store as any).db;
+
+      db.run(
+        `INSERT INTO usage_snapshots
+          (timestamp, service, metric_name, used_pct, remaining_pct, resets, source, collection_id)
+         VALUES (?, 'claude', 'session', 10, 90, '3:00pm', 'pty', 'old')`,
+        ["2026-02-15T00:00:00.000Z"],
+      );
+      db.run(
+        `INSERT INTO usage_snapshots
+          (timestamp, service, metric_name, used_pct, remaining_pct, resets, source, collection_id)
+         VALUES (?, 'claude', 'session', 20, 80, '3:00pm', 'pty', 'new')`,
+        ["2026-02-18T23:30:00.000Z"],
+      );
+
+      const deleted = store.cleanupOldSnapshots(1);
+      expect(deleted).toBe(1);
+
+      const history = store.getHistory("claude", "session", 48);
+      expect(history.map((h) => h.timestamp)).toEqual(["2026-02-18T23:30:00.000Z"]);
     });
   });
 });

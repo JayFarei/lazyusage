@@ -14,6 +14,7 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
   let helpVisible = false;
   const mocks = {
     setActivePanel: mock(() => {}),
+    focusStatsPanel: mock(() => {}),
     navigateMetric: mock(() => {}),
     cycleTab: mock(() => {}),
     togglePause: mock(() => {}),
@@ -29,6 +30,7 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
 
   const handlers: KeybindingHandlers = {
     setActivePanel: mocks.setActivePanel as any,
+    focusStatsPanel: mocks.focusStatsPanel as any,
     navigateMetric: mocks.navigateMetric as any,
     cycleTab: mocks.cycleTab as any,
     togglePause: mocks.togglePause as any,
@@ -176,6 +178,7 @@ describe("createKeybindingHandler - help overlay", () => {
     const mocks = { setHelpVisible: mock((_v: boolean) => {}) };
     const handlers: KeybindingHandlers = {
       setActivePanel: mock(() => {}) as any,
+      focusStatsPanel: mock(() => {}) as any,
       navigateMetric: mock(() => {}) as any,
       cycleTab: mock(() => {}) as any,
       togglePause: mock(() => {}) as any,
@@ -200,6 +203,7 @@ describe("createKeybindingHandler - help overlay", () => {
     const mocks = { setHelpVisible: mock((_v: boolean) => {}) };
     const handlers: KeybindingHandlers = {
       setActivePanel: mock(() => {}) as any,
+      focusStatsPanel: mock(() => {}) as any,
       navigateMetric: mock(() => {}) as any,
       cycleTab: mock(() => {}) as any,
       togglePause: mock(() => {}) as any,
