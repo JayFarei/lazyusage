@@ -9,6 +9,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import type { SessionTokens } from "./types.js";
+import { resolveProjectName } from "../utils/project.js";
 
 interface SessionMeta {
   type?: string;
@@ -46,14 +47,8 @@ function dateFromTimestamp(ts: string): string {
   return `${y}-${m}-${day}`;
 }
 
-function projectFromCwd(cwd: string): string {
-  if (!cwd) return "unknown";
-  const parts = cwd.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? "unknown";
-}
-
-export async function parseCodexSessions(sinceDate?: string): Promise<SessionTokens[]> {
-  const codexDir = join(homedir(), ".codex", "sessions");
+export async function parseCodexSessions(sinceDate?: string, baseDir?: string): Promise<SessionTokens[]> {
+  const codexDir = baseDir ?? join(homedir(), ".codex", "sessions");
   const results: SessionTokens[] = [];
 
   const glob = new Bun.Glob("**/*.jsonl");
@@ -116,7 +111,7 @@ export async function parseCodexSessions(sinceDate?: string): Promise<SessionTok
         + (lastUsage.reasoning_output_tokens ?? 0);
 
       results.push({
-        project: projectFromCwd(cwd),
+        project: resolveProjectName(cwd),
         cwd,
         service: "codex",
         date,

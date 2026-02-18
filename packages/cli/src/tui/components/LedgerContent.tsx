@@ -16,12 +16,6 @@ function fmt(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function shortProject(path: string): string {
-  if (!path) return "unknown";
-  const parts = path.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? path.slice(0, 24);
-}
-
 const COL_PROJECT = 26;
 const COL_TOKENS = 14;
 const COL_PCT = 10;
@@ -32,7 +26,7 @@ export function LedgerContent(props: LedgerContentProps) {
   const rows = () => {
     if (!props.data || props.data.length === 0) return [];
     return props.data.map((p) => ({
-      project: shortProject(p.project),
+      project: p.project,
       tokens: fmt(p.totalTokens),
       pct: p.pctOfTotal.toFixed(1),
     }));

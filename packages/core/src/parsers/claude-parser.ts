@@ -8,6 +8,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import type { SessionTokens } from "./types.js";
+import { resolveProjectName } from "../utils/project.js";
 
 interface ClaudeEvent {
   type?: string;
@@ -34,14 +35,8 @@ function dateFromTimestamp(ts: string): string {
   return `${y}-${m}-${day}`;
 }
 
-function projectFromCwd(cwd: string): string {
-  if (!cwd) return "unknown";
-  const parts = cwd.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? "unknown";
-}
-
-export async function parseClaudeSessions(sinceDate?: string): Promise<SessionTokens[]> {
-  const claudeDir = join(homedir(), ".claude", "projects");
+export async function parseClaudeSessions(sinceDate?: string, baseDir?: string): Promise<SessionTokens[]> {
+  const claudeDir = baseDir ?? join(homedir(), ".claude", "projects");
   const results: SessionTokens[] = [];
 
   const glob = new Bun.Glob("**/*.jsonl");
@@ -87,7 +82,7 @@ export async function parseClaudeSessions(sinceDate?: string): Promise<SessionTo
         const outputTokens = usage.output_tokens ?? 0;
 
         results.push({
-          project: projectFromCwd(cwd),
+          project: resolveProjectName(cwd),
           cwd,
           service: "claude",
           date,
