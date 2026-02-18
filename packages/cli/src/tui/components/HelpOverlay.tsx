@@ -15,8 +15,12 @@ export function HelpOverlay(props: HelpOverlayProps) {
     "Keyboard Shortcuts",
     "==================",
     "",
-    "  1/2        Focus Claude/Codex panel",
+    "  1/2        Focus service bars panel",
+    "  3/4        Focus stats panel",
     "  j/k        Navigate metrics (up/down)",
+    "  Tab        Switch focus (bars \u2194 stats)",
+    "  g          Fullscreen focused panel",
+    "  Escape     Close fullscreen",
     "  [/]        Switch tab (Daily/Weekly/Monthly)",
     "  r          Refresh data now",
     "  p          Pause/Resume auto-refresh",
@@ -37,7 +41,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
         top={2}
         left={5}
         width={55}
-        height={19}
+        height={23}
         backgroundColor={theme.surface0}
         borderColor={theme.cyan}
         borderStyle={"rounded" as any}

@@ -5,6 +5,7 @@ import type { ActivePanel } from "./useViewMode.js";
 
 export interface KeybindingHandlers {
   setActivePanel: (panel: ActivePanel) => void;
+  focusStatsPanel: (panel: ActivePanel) => void;
   navigateMetric: (direction: "up" | "down") => void;
   cycleTab: (direction: "left" | "right") => void;
   togglePause: () => void;
@@ -14,6 +15,10 @@ export interface KeybindingHandlers {
   setHelpVisible: (visible: boolean) => void;
   helpVisible: () => boolean;
   quit: () => void;
+  switchFocusSide: () => void;
+  toggleFullscreen: () => void;
+  exitFullscreen: () => void;
+  fullscreenActive: () => boolean;
 }
 
 export function createKeybindingHandler(handlers: KeybindingHandlers) {
@@ -39,6 +44,12 @@ export function createKeybindingHandler(handlers: KeybindingHandlers) {
         break;
       case "2":
         handlers.setActivePanel("codex");
+        break;
+      case "3":
+        handlers.focusStatsPanel("claude");
+        break;
+      case "4":
+        handlers.focusStatsPanel("codex");
         break;
 
       // Metric navigation
@@ -73,6 +84,23 @@ export function createKeybindingHandler(handlers: KeybindingHandlers) {
       case "-":
       case "_":
         handlers.slowDown();
+        break;
+
+      // Focus side toggle
+      case "tab":
+        handlers.switchFocusSide();
+        break;
+
+      // Fullscreen toggle
+      case "g":
+        handlers.toggleFullscreen();
+        break;
+
+      // Close fullscreen
+      case "escape":
+        if (handlers.fullscreenActive()) {
+          handlers.exitFullscreen();
+        }
         break;
 
       // Quit

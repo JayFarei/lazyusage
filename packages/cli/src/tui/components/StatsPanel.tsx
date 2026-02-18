@@ -16,6 +16,8 @@ export interface StatsPanelProps {
   monthly: ProjectUsage[] | null;
   loading: boolean;
   error?: string | null;
+  isActive?: boolean;
+  panelNumber?: number;
 }
 
 const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
@@ -35,6 +37,11 @@ export function StatsPanel(props: StatsPanelProps) {
       return isActive ? `\u2501 ${label} \u2501` : `  ${label}  `;
     }).join(" ");
 
+  const titleStr = () => {
+    const num = props.panelNumber != null ? `[${props.panelNumber}] ` : "";
+    return ` ${num}${tabHeader()} `;
+  };
+
   const hasAnyData = () =>
     !!(props.daily || props.weekly || props.monthly);
 
@@ -47,8 +54,8 @@ export function StatsPanel(props: StatsPanelProps) {
       width="100%"
       height="100%"
       borderStyle={"rounded" as any}
-      borderColor={theme.borderActive}
-      title={` ${tabHeader()} `}
+      borderColor={props.isActive ? theme.cyan : theme.text}
+      title={titleStr()}
       titleAlignment="left"
     >
       <Show when={props.error && !hasAnyData()}>

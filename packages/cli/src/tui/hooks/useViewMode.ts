@@ -8,14 +8,16 @@ export type ActivePanel = "claude" | "codex";
 export type ContentTab = "daily" | "weekly" | "monthly";
 
 const METRIC_KEYS_MAP: Record<ActivePanel, string[]> = {
-  claude: ["session", "week_all", "week_sonnet"],
-  codex: ["5h", "weekly"],
+  claude: ["week_all", "week_sonnet", "session"],
+  codex: ["weekly", "5h"],
 };
 
 export function usePanelState() {
   const [activePanel, setActivePanelRaw] = createSignal<ActivePanel>("claude");
   const [contentTab, setContentTab] = createSignal<ContentTab>("daily");
   const [selectedMetricIndex, setSelectedMetricIndex] = createSignal(0);
+  const [focusedSide, setFocusedSide] = createSignal<"service" | "stats">("service");
+  const [fullscreenTarget, setFullscreenTarget] = createSignal<"service" | "stats" | null>(null);
 
   const metricKeysForPanel = (panel: ActivePanel): string[] =>
     METRIC_KEYS_MAP[panel];
@@ -36,6 +38,12 @@ export function usePanelState() {
   function switchPanel(panel: ActivePanel) {
     setActivePanelRaw(panel);
     setSelectedMetricIndex(0);
+    setFocusedSide("service");
+  }
+
+  function focusStatsPanel(panel: ActivePanel) {
+    setActivePanelRaw(panel);
+    setFocusedSide("stats");
   }
 
   function cycleTab(direction: "left" | "right") {
@@ -47,9 +55,25 @@ export function usePanelState() {
     });
   }
 
+  function switchFocusSide() {
+    setFocusedSide((s) => (s === "service" ? "stats" : "service"));
+  }
+
+  function toggleFullscreen() {
+    setFullscreenTarget((curr) => {
+      const side = focusedSide();
+      return curr === side ? null : side;
+    });
+  }
+
+  function exitFullscreen() {
+    setFullscreenTarget(null);
+  }
+
   return {
     activePanel,
     setActivePanel: switchPanel,
+    focusStatsPanel,
     contentTab,
     setContentTab,
     selectedMetricIndex,
@@ -57,5 +81,10 @@ export function usePanelState() {
     navigateMetric,
     cycleTab,
     metricKeysForPanel,
+    focusedSide,
+    fullscreenTarget,
+    switchFocusSide,
+    toggleFullscreen,
+    exitFullscreen,
   };
 }

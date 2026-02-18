@@ -22,6 +22,9 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
     slowDown: mock(() => {}),
     setHelpVisible: mock((v: boolean) => { helpVisible = v; }),
     quit: mock(() => {}),
+    switchFocusSide: mock(() => {}),
+    toggleFullscreen: mock(() => {}),
+    exitFullscreen: mock(() => {}),
   };
 
   const handlers: KeybindingHandlers = {
@@ -35,6 +38,10 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
     setHelpVisible: mocks.setHelpVisible as any,
     helpVisible: () => helpVisible,
     quit: mocks.quit as any,
+    switchFocusSide: mocks.switchFocusSide as any,
+    toggleFullscreen: mocks.toggleFullscreen as any,
+    exitFullscreen: mocks.exitFullscreen as any,
+    fullscreenActive: () => false,
     ...overrides,
   };
 
@@ -178,6 +185,10 @@ describe("createKeybindingHandler - help overlay", () => {
       setHelpVisible: mocks.setHelpVisible as any,
       helpVisible: () => helpVisible,
       quit: mock(() => {}) as any,
+      switchFocusSide: mock(() => {}) as any,
+      toggleFullscreen: mock(() => {}) as any,
+      exitFullscreen: mock(() => {}) as any,
+      fullscreenActive: () => false,
     };
     const handleKey = createKeybindingHandler(handlers);
     handleKey({ name: "j" }); // any key while help visible
@@ -198,6 +209,10 @@ describe("createKeybindingHandler - help overlay", () => {
       setHelpVisible: mocks.setHelpVisible as any,
       helpVisible: () => helpVisible,
       quit: mock(() => {}) as any,
+      switchFocusSide: mock(() => {}) as any,
+      toggleFullscreen: mock(() => {}) as any,
+      exitFullscreen: mock(() => {}) as any,
+      fullscreenActive: () => false,
     };
     const handleKey = createKeybindingHandler(handlers);
     handleKey({ name: "?" });

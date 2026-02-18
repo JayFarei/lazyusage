@@ -9,6 +9,8 @@ import { ServicePanel } from "./components/ServicePanel.js";
 import { StatsPanel } from "./components/StatsPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { HelpOverlay } from "./components/HelpOverlay.js";
+import { FullscreenMetricView } from "./components/FullscreenMetricView.js";
+import { FullscreenStatsView } from "./components/FullscreenStatsView.js";
 import { useMetrics } from "./hooks/useMetrics.js";
 import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
 import { usePanelState } from "./hooks/useViewMode.js";
@@ -37,9 +39,14 @@ export function App(props: AppProps = {}) {
     useMetrics();
   const {
     activePanel, setActivePanel,
+    focusStatsPanel,
     contentTab,
     selectedMetricIndex,
+    selectedMetricKey,
     navigateMetric, cycleTab,
+    focusedSide,
+    fullscreenTarget, toggleFullscreen, exitFullscreen,
+    switchFocusSide,
   } = usePanelState();
   const [lastUpdated, setLastUpdated] = createSignal<string | null>(null);
   const [helpVisible, setHelpVisible] = createSignal(false);
@@ -48,6 +55,8 @@ export function App(props: AppProps = {}) {
   );
 
   const ledger = useLedgerData();
+
+  const visiblePanelCount = () => (showClaude() ? 1 : 0) + (showCodex() ? 1 : 0);
 
   // Provider chains
   let claudeChain: PersistentFallbackChain | null = null;
@@ -90,6 +99,7 @@ export function App(props: AppProps = {}) {
   // Keybindings
   const handleKey = createKeybindingHandler({
     setActivePanel,
+    focusStatsPanel,
     navigateMetric,
     cycleTab,
     togglePause: autoRefresh.togglePause,
@@ -106,6 +116,10 @@ export function App(props: AppProps = {}) {
       cleanup();
       process.exit(0);
     },
+    switchFocusSide,
+    toggleFullscreen,
+    exitFullscreen,
+    fullscreenActive: () => fullscreenTarget() !== null,
   });
 
   useKeyboard((event) => {
@@ -168,7 +182,7 @@ export function App(props: AppProps = {}) {
   });
 
   const footerHints = () =>
-    " [1]Claude  [2]Codex  j/k=Navigate  [/]=Stats Tab  r=Refresh  p=Pause  ?=Help  q=Quit";
+    " [1]Claude  [2]Codex  [3]ClaudeStats  [4]CodexStats  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  r=Refresh  p=Pause  ?=Help  q=Quit";
 
   return (
     <box
@@ -186,9 +200,10 @@ export function App(props: AppProps = {}) {
               title="Claude CLI"
               metrics={claudeMetrics()}
               error={claudeError()}
-              isActive={activePanel() === "claude"}
+              isActive={activePanel() === "claude" && focusedSide() === "service"}
               selectedIndex={activePanel() === "claude" ? selectedMetricIndex() : -1}
               panelNumber={1}
+              panelCount={visiblePanelCount()}
             />
           </box>
           <box width="60%">
@@ -200,6 +215,8 @@ export function App(props: AppProps = {}) {
               monthly={ledger.claudeMonthly()}
               loading={ledger.loading()}
               error={ledger.error()}
+              isActive={activePanel() === "claude" && focusedSide() === "stats"}
+              panelNumber={3}
             />
           </box>
         </box>
@@ -214,9 +231,10 @@ export function App(props: AppProps = {}) {
               title="Codex CLI"
               metrics={codexMetrics()}
               error={codexError()}
-              isActive={activePanel() === "codex"}
+              isActive={activePanel() === "codex" && focusedSide() === "service"}
               selectedIndex={activePanel() === "codex" ? selectedMetricIndex() : -1}
               panelNumber={2}
+              panelCount={visiblePanelCount()}
             />
           </box>
           <box width="60%">
@@ -228,6 +246,8 @@ export function App(props: AppProps = {}) {
               monthly={ledger.codexMonthly()}
               loading={ledger.loading()}
               error={ledger.error()}
+              isActive={activePanel() === "codex" && focusedSide() === "stats"}
+              panelNumber={4}
             />
           </box>
         </box>
@@ -243,6 +263,28 @@ export function App(props: AppProps = {}) {
       />
       {/* Footer keybinding hints */}
       <text content={footerHints()} fg={theme.blue} height={1} paddingLeft={1} />
+
+      {/* Fullscreen metric overlay */}
+      <Show when={fullscreenTarget() === "service"}>
+        <FullscreenMetricView
+          service={activePanel()}
+          metricKey={selectedMetricKey()}
+          metrics={activePanel() === "claude" ? claudeMetrics() : codexMetrics()}
+        />
+      </Show>
+
+      {/* Fullscreen stats overlay */}
+      <Show when={fullscreenTarget() === "stats"}>
+        <FullscreenStatsView
+          service={activePanel()}
+          contentTab={contentTab()}
+          daily={activePanel() === "claude" ? ledger.claudeDaily() : ledger.codexDaily()}
+          weekly={activePanel() === "claude" ? ledger.claudeWeekly() : ledger.codexWeekly()}
+          monthly={activePanel() === "claude" ? ledger.claudeMonthly() : ledger.codexMonthly()}
+          loading={ledger.loading()}
+          error={ledger.error()}
+        />
+      </Show>
 
       {/* Help overlay */}
       <HelpOverlay

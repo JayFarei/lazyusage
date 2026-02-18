@@ -32,8 +32,8 @@ export const WINDOW_HOURS: Record<string, number> = {
 };
 
 export const METRIC_KEYS: Record<string, string[]> = {
-  claude: ["session", "week_all", "week_sonnet"],
-  codex: ["5h", "weekly"],
+  claude: ["week_all", "week_sonnet", "session"],
+  codex: ["weekly", "5h"],
 };
 
 interface ServicePanelProps {
@@ -44,6 +44,7 @@ interface ServicePanelProps {
   isActive: boolean;
   selectedIndex: number;
   panelNumber: number;
+  panelCount: number;
 }
 
 const BAR_OVERHEAD = 12;
@@ -85,13 +86,27 @@ export function ServicePanel(props: ServicePanelProps) {
     return Math.max(MIN_LOCAL_BAR, calculateBarWidth(panelCols, BAR_OVERHEAD));
   };
 
+  const panelHeight = () => {
+    const h = dims().height;
+    // 2 fixed rows: status bar + footer hints
+    // each panel row has 2 border rows (top+bottom)
+    return Math.floor((h - 2) / props.panelCount) - 2;
+  };
+
+  const renderMode = () => {
+    const h = panelHeight();
+    const n = metricEntries().length;
+    if (n === 0 || h >= n * 6) return "full";
+    return "focus"; // selected=full, others=1 line
+  };
+
   return (
     <box
       flexDirection="column"
       width="100%"
       flexGrow={1}
       borderStyle={"rounded" as any}
-      borderColor={theme.borderActive}
+      borderColor={props.isActive ? theme.borderActive : theme.text}
       title={panelTitle()}
       titleAlignment="left"
     >
@@ -106,7 +121,12 @@ export function ServicePanel(props: ServicePanelProps) {
       <Show when={props.metrics && !props.error}>
         <For each={metricEntries()}>
           {(entry, idx) => {
-            const isSelected = () => idx() === props.selectedIndex;
+            // Inactive panels (selectedIndex === -1) default to first metric open
+            const isSelected = () => {
+              const si = props.selectedIndex;
+              return idx() === (si === -1 ? 0 : si);
+            };
+            const mode = () => renderMode();
             const w = barWidth();
             const windowHrs = WINDOW_HOURS[entry.key] ?? 5;
             const divisions = windowHrs === 168 ? 7 : 5;
@@ -120,44 +140,70 @@ export function ServicePanel(props: ServicePanelProps) {
 
             const marker = () => (isSelected() ? "\u25b8 " : "  ");
 
+            // Visibility per element: full=always, focus=only selected gets all rows
+            const showCapBar = () => mode() === "full" || isSelected();
+            const showMarkers = () => mode() === "full" || isSelected();
+            const showPeriodBar = () => mode() === "full" || isSelected();
+            const showResetTime = () => mode() === "full" || isSelected();
+            const showSpacer = () => mode() === "full" || isSelected();
+
+            const labelText = () => {
+              const collapsed = mode() === "focus" && !isSelected();
+              if (collapsed) {
+                return `${marker()}${entry.label}  \u25c6 ${usedPct()}%  \u23f1 ${timePctR()}%`;
+              }
+              return `${marker()}${entry.label}`;
+            };
+
             return (
               <box flexDirection="column" width="100%" paddingLeft={1}>
-                {/* Label */}
+                {/* Label - always shown; appends ··· when collapsed */}
                 <text
-                  content={`${marker()}${entry.label}`}
+                  content={labelText()}
                   fg={isSelected() ? theme.green : theme.cyan}
+                  dim={mode() === "focus" && !isSelected()}
                   backgroundColor={isSelected() ? theme.selectionBg : undefined}
                   bold={true}
                   height={1}
                 />
                 {/* Capacity bar */}
-                <text
-                  content={`  ${capBar()} \u25c6 ${usedPct()}%`}
-                  fg={theme.text}
-                  height={1}
-                />
+                <Show when={showCapBar()}>
+                  <text
+                    content={`  ${capBar()} \u25c6 ${usedPct()}%`}
+                    fg={theme.text}
+                    height={1}
+                  />
+                </Show>
                 {/* Time markers */}
-                <text
-                  content={`  ${markers()}`}
-                  fg={theme.surface1}
-                  dim={true}
-                  height={1}
-                />
+                <Show when={showMarkers()}>
+                  <text
+                    content={`  ${markers()}`}
+                    fg={theme.surface1}
+                    dim={true}
+                    height={1}
+                  />
+                </Show>
                 {/* Period bar */}
-                <text
-                  content={`  ${perBar()} \u23f1 ${timePctR()}%`}
-                  fg={theme.cyan}
-                  dim={true}
-                  height={1}
-                />
+                <Show when={showPeriodBar()}>
+                  <text
+                    content={`  ${perBar()} \u23f1 ${timePctR()}%`}
+                    fg={theme.cyan}
+                    dim={true}
+                    height={1}
+                  />
+                </Show>
                 {/* Reset time */}
-                <text
-                  content={`    Resets: ${entry.data.resets}`}
-                  fg={theme.subtext}
-                  height={1}
-                />
+                <Show when={showResetTime()}>
+                  <text
+                    content={`    Resets: ${entry.data.resets}`}
+                    fg={theme.subtext}
+                    height={1}
+                  />
+                </Show>
                 {/* Spacer between metrics */}
-                <text content="" height={1} />
+                <Show when={showSpacer()}>
+                  <text content="" height={1} />
+                </Show>
               </box>
             );
           }}
