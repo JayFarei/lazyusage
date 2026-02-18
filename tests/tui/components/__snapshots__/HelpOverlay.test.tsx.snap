@@ -1,0 +1,30 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`HelpOverlay - visibility snapshot when visible 1`] = `
+"                                                                                
+                                                                                
+     ╭─────────────────────────────────────────────────────╮                    
+     │                                                     │                    
+     │ Keyboard Shortcuts                                  │                    
+     │ ==================                                  │                    
+     │                                                     │                    
+     │   1/2        Focus Claude/Codex panel               │                    
+     │   j/k        Navigate metrics (up/down)             │                    
+     │   [/]        Switch tab (Daily/Weekly/Monthly)      │                    
+     │   r          Refresh data now                       │                    
+     │   p          Pause/Resume auto-refresh              │                    
+     │   +/=        Speed up refresh (min 5s)              │                    
+     │   -/_        Slow down refresh (max 60s)            │                    
+     │   ?          Toggle this help overlay               │                    
+     │   q          Quit                                   │                    
+     │                                                     │                    
+     │   Mouse wheel scrolls content in tabs               │                    
+     │                                                     │                    
+     │                                                     │                    
+     ╰─────────────────────────────────────────────────────╯                    
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+"
+`;

@@ -1,0 +1,130 @@
+{
+  "resolution": {
+    "width": 200,
+    "height": 60
+  },
+  "capturedAt": "2026-02-17T22:53:07.081Z",
+  "hasClaude": true,
+  "hasCodex": true,
+  "hasStatusBar": true,
+  "hasTimerMarkers": true,
+  "hasBars": true,
+  "markerLines": [
+    {
+      "lineIndex": 3,
+      "positions": [
+        11,
+        18,
+        25,
+        32
+      ],
+      "gap": 7,
+      "valid": true
+    },
+    {
+      "lineIndex": 9,
+      "positions": [
+        9,
+        14,
+        19,
+        24,
+        29,
+        34
+      ],
+      "gap": 5,
+      "valid": true
+    },
+    {
+      "lineIndex": 15,
+      "positions": [
+        9,
+        14,
+        19,
+        24,
+        29,
+        34
+      ],
+      "gap": 5,
+      "valid": true
+    },
+    {
+      "lineIndex": 32,
+      "positions": [
+        11,
+        18,
+        25,
+        32
+      ],
+      "gap": 7,
+      "valid": true
+    },
+    {
+      "lineIndex": 38,
+      "positions": [
+        9,
+        14,
+        19,
+        24,
+        29,
+        34
+      ],
+      "gap": 5,
+      "valid": true
+    }
+  ],
+  "barLines": [
+    {
+      "lineIndex": 2,
+      "total": 35
+    },
+    {
+      "lineIndex": 4,
+      "total": 35
+    },
+    {
+      "lineIndex": 8,
+      "total": 35
+    },
+    {
+      "lineIndex": 10,
+      "total": 35
+    },
+    {
+      "lineIndex": 14,
+      "total": 35
+    },
+    {
+      "lineIndex": 16,
+      "total": 35
+    },
+    {
+      "lineIndex": 31,
+      "total": 35
+    },
+    {
+      "lineIndex": 33,
+      "total": 35
+    },
+    {
+      "lineIndex": 37,
+      "total": 35
+    },
+    {
+      "lineIndex": 39,
+      "total": 35
+    }
+  ],
+  "structuralLineCount": 58,
+  "borderCharsFound": [
+    "│",
+    "─",
+    "╭",
+    "╮",
+    "╰",
+    "╯"
+  ],
+  "panelTitleLines": [
+    0,
+    29
+  ]
+}

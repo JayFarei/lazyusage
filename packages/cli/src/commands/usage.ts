@@ -154,5 +154,7 @@ export const usageCommand = new Command("usage")
     // Launch TUI (default)
     const { render } = await import("@opentui/solid");
     const { App } = await import("../tui/App.js");
-    render(App, { useMouse: true });
+    // Pass validated service filter to TUI
+    const tuiService = (services.length === 1 ? services[0] : "all") as "claude" | "codex" | "all";
+    render(() => App({ service: tuiService }), { useMouse: true });
   });

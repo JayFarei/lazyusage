@@ -16,7 +16,9 @@
     "types": ["bun-types"],
     "paths": {
       "@usage-tui/core": ["./packages/core/src/index.ts"],
-      "@usage-tui/core/*": ["./packages/core/src/*"]
+      "@usage-tui/core/*": ["./packages/core/src/*"],
+      "@usage-tui/cli": ["./packages/cli/src/index.ts"],
+      "@usage-tui/cli/*": ["./packages/cli/src/*"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tests/**/*.ts"],

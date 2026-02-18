@@ -1,6 +1,5 @@
 /**
  * Parser for Claude CLI usage output.
- * Port of src/parsers/claude.py
  */
 
 import type { MetricsDict } from "../types.js";

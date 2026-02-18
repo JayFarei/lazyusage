@@ -1,6 +1,5 @@
 /**
  * Parser for Codex CLI /status output.
- * Port of src/parsers/codex.py
  */
 
 import type { MetricsDict } from "../types.js";

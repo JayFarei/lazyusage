@@ -6,7 +6,7 @@ import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import { useTheme } from "./theme.js";
 import { ServicePanel } from "./components/ServicePanel.js";
-import { StatsPanel } from "./components/ContentPanel.js";
+import { StatsPanel } from "./components/StatsPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { HelpOverlay } from "./components/HelpOverlay.js";
 import { useMetrics } from "./hooks/useMetrics.js";
@@ -24,7 +24,14 @@ import {
   type MetricsDict,
 } from "@usage-tui/core";
 
-export function App() {
+export interface AppProps {
+  /** Optional service filter: "claude" | "codex" | "all" | undefined = show both */
+  service?: "claude" | "codex" | "all";
+}
+
+export function App(props: AppProps = {}) {
+  const showClaude = () => !props.service || props.service === "all" || props.service === "claude";
+  const showCodex = () => !props.service || props.service === "all" || props.service === "codex";
   const theme = useTheme();
   const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, updateMetrics } =
     useMetrics();
@@ -170,57 +177,61 @@ export function App() {
       height="100%"
       backgroundColor={theme.base}
     >
-      {/* Row 1: Claude */}
-      <box flexDirection="row" flexGrow={1} width="100%">
-        <box width="40%">
-          <ServicePanel
-            service="claude"
-            title="Claude CLI"
-            metrics={claudeMetrics()}
-            error={claudeError()}
-            isActive={activePanel() === "claude"}
-            selectedIndex={activePanel() === "claude" ? selectedMetricIndex() : -1}
-            panelNumber={1}
-          />
+      {/* Row 1: Claude (shown when service=claude or service=all/undefined) */}
+      <Show when={showClaude()}>
+        <box flexDirection="row" flexGrow={1} width="100%">
+          <box width="40%">
+            <ServicePanel
+              service="claude"
+              title="Claude CLI"
+              metrics={claudeMetrics()}
+              error={claudeError()}
+              isActive={activePanel() === "claude"}
+              selectedIndex={activePanel() === "claude" ? selectedMetricIndex() : -1}
+              panelNumber={1}
+            />
+          </box>
+          <box width="60%">
+            <StatsPanel
+              contentTab={contentTab()}
+              service="claude"
+              daily={ledger.claudeDaily()}
+              weekly={ledger.claudeWeekly()}
+              monthly={ledger.claudeMonthly()}
+              loading={ledger.loading()}
+              error={ledger.error()}
+            />
+          </box>
         </box>
-        <box width="60%">
-          <StatsPanel
-            contentTab={contentTab()}
-            service="claude"
-            daily={ledger.claudeDaily()}
-            weekly={ledger.claudeWeekly()}
-            monthly={ledger.claudeMonthly()}
-            loading={ledger.loading()}
-            error={ledger.error()}
-          />
-        </box>
-      </box>
+      </Show>
 
-      {/* Row 2: Codex */}
-      <box flexDirection="row" flexGrow={1} width="100%">
-        <box width="40%">
-          <ServicePanel
-            service="codex"
-            title="Codex CLI"
-            metrics={codexMetrics()}
-            error={codexError()}
-            isActive={activePanel() === "codex"}
-            selectedIndex={activePanel() === "codex" ? selectedMetricIndex() : -1}
-            panelNumber={2}
-          />
+      {/* Row 2: Codex (shown when service=codex or service=all/undefined) */}
+      <Show when={showCodex()}>
+        <box flexDirection="row" flexGrow={1} width="100%">
+          <box width="40%">
+            <ServicePanel
+              service="codex"
+              title="Codex CLI"
+              metrics={codexMetrics()}
+              error={codexError()}
+              isActive={activePanel() === "codex"}
+              selectedIndex={activePanel() === "codex" ? selectedMetricIndex() : -1}
+              panelNumber={2}
+            />
+          </box>
+          <box width="60%">
+            <StatsPanel
+              contentTab={contentTab()}
+              service="codex"
+              daily={ledger.codexDaily()}
+              weekly={ledger.codexWeekly()}
+              monthly={ledger.codexMonthly()}
+              loading={ledger.loading()}
+              error={ledger.error()}
+            />
+          </box>
         </box>
-        <box width="60%">
-          <StatsPanel
-            contentTab={contentTab()}
-            service="codex"
-            daily={ledger.codexDaily()}
-            weekly={ledger.codexWeekly()}
-            monthly={ledger.codexMonthly()}
-            loading={ledger.loading()}
-            error={ledger.error()}
-          />
-        </box>
-      </box>
+      </Show>
 
       {/* Status bar */}
       <StatusBar

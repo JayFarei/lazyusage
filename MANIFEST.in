@@ -1,8 +1,0 @@
-include README.md
-include LICENSE
-include requirements.txt
-include CLAUDE.md
-recursive-include src *.py
-recursive-exclude venv *
-recursive-exclude __pycache__ *
-recursive-exclude *.pyc *
