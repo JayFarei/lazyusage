@@ -11,8 +11,8 @@ THRESHOLD=20            # Minimum remaining percentage
 
 echo "Checking ${SERVICE} capacity..."
 
-# Get JSON output
-json=$(usage-check "${SERVICE}" --json 2>&1)
+# Get JSON output (uses the monorepo root script; for global install use: usage-check "$SERVICE" --json)
+json=$(bun run --cwd "$(dirname "$0")/.." usage-check "${SERVICE}" --json 2>&1)
 
 # Check if command succeeded
 if [ $? -ne 0 ]; then
