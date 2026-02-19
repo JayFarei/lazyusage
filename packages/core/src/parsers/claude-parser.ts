@@ -4,11 +4,19 @@
  * Each file contains one JSON object per line. We filter for events with
  * type === "assistant" that contain message.usage token counts.
  * Subagent events (isSidechain === true) are skipped to avoid double-counting.
+ *
+ * Performance:
+ *   - mtime pre-filter skips files not modified since sinceDate (no I/O)
+ *   - parse-cache returns cached SessionTokens for unchanged files (SQLite)
+ *   - only new/modified files are read from disk and parsed
+ *   - changed files are parsed in parallel
  */
 import { homedir } from "os";
 import { join } from "path";
+import { statSync } from "fs";
 import type { SessionTokens } from "./types.js";
 import { resolveProjectName } from "../utils/project.js";
+import { loadCacheSince, putCacheBatch, evictOlderThan } from "./parse-cache.js";
 
 interface ClaudeEvent {
   type?: string;
@@ -35,66 +43,126 @@ function dateFromTimestamp(ts: string): string {
   return `${y}-${m}-${day}`;
 }
 
-export async function parseClaudeSessions(sinceDate?: string, baseDir?: string): Promise<SessionTokens[]> {
+/** Parse a single file. Returns ALL sessions with no date filter so results
+ *  can be cached and reused across different sinceDate windows. */
+async function parseFile(filePath: string): Promise<SessionTokens[]> {
+  const fileResults: SessionTokens[] = [];
+  try {
+    const text = await Bun.file(filePath).text();
+    const lines = text.split("\n");
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      let event: ClaudeEvent;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (event.type !== "assistant") continue;
+      if (event.isSidechain === true) continue;
+
+      const usage = event.message?.usage;
+      if (!usage) continue;
+
+      const ts = event.timestamp;
+      if (!ts) continue;
+
+      const date = dateFromTimestamp(ts);
+      if (!date) continue;
+
+      const cwd = event.cwd ?? "";
+      const inputTokens =
+        (usage.input_tokens ?? 0) +
+        (usage.cache_read_input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0);
+      const outputTokens = usage.output_tokens ?? 0;
+
+      fileResults.push({
+        project: resolveProjectName(cwd),
+        cwd,
+        service: "claude",
+        date,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
+    }
+  } catch {
+    // Skip files that can't be read
+  }
+  return fileResults;
+}
+
+export async function parseClaudeSessions(
+  sinceDate?: string,
+  baseDir?: string
+): Promise<SessionTokens[]> {
   const claudeDir = baseDir ?? join(homedir(), ".claude", "projects");
-  const results: SessionTokens[] = [];
 
   const glob = new Bun.Glob("**/*.jsonl");
-  let files: string[];
+  let allFiles: string[];
   try {
-    files = Array.from(glob.scanSync({ cwd: claudeDir, absolute: true }));
+    allFiles = Array.from(glob.scanSync({ cwd: claudeDir, absolute: true }));
   } catch {
-    return results;
+    return [];
   }
 
-  for (const filePath of files) {
+  const sinceDateMs = sinceDate ? new Date(sinceDate).getTime() : 0;
+
+  // Load all relevant cache entries in one bulk SELECT
+  const cache = loadCacheSince(sinceDateMs);
+
+  const results: SessionTokens[] = [];
+  const toReparse: string[] = [];
+  const toReparseMtimes = new Map<string, number>();
+
+  for (const filePath of allFiles) {
+    let mtime: number;
     try {
-      const text = await Bun.file(filePath).text();
-      const lines = text.split("\n");
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-
-        let event: ClaudeEvent;
-        try {
-          event = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        if (event.type !== "assistant") continue;
-        if (event.isSidechain === true) continue;
-
-        const usage = event.message?.usage;
-        if (!usage) continue;
-
-        const ts = event.timestamp;
-        if (!ts) continue;
-
-        const date = dateFromTimestamp(ts);
-        if (!date) continue;
-        if (sinceDate && date < sinceDate) continue;
-
-        const cwd = event.cwd ?? "";
-        const inputTokens = (usage.input_tokens ?? 0)
-          + (usage.cache_read_input_tokens ?? 0)
-          + (usage.cache_creation_input_tokens ?? 0);
-        const outputTokens = usage.output_tokens ?? 0;
-
-        results.push({
-          project: resolveProjectName(cwd),
-          cwd,
-          service: "claude",
-          date,
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-        });
-      }
+      mtime = statSync(filePath).mtimeMs;
     } catch {
-      // Skip files that can't be read
+      continue;
+    }
+
+    // mtime pre-filter: file cannot have any events in the window
+    if (sinceDateMs && mtime < sinceDateMs) continue;
+
+    const cached = cache.get(filePath);
+    if (cached && cached.mtimeMs === mtime) {
+      // Cache hit: filter sessions to the requested window
+      for (const s of cached.sessions) {
+        if (!sinceDate || s.date >= sinceDate) results.push(s);
+      }
+    } else {
+      // Cache miss: must re-parse
+      toReparse.push(filePath);
+      toReparseMtimes.set(filePath, mtime);
     }
   }
+
+  // Parse all cache-miss files in parallel
+  if (toReparse.length > 0) {
+    const parsed = await Promise.all(toReparse.map(parseFile));
+    const newEntries: Array<{ filePath: string; mtimeMs: number; sessions: SessionTokens[] }> = [];
+
+    for (let i = 0; i < toReparse.length; i++) {
+      const filePath = toReparse[i];
+      const sessions = parsed[i];
+      const mtimeMs = toReparseMtimes.get(filePath)!;
+      newEntries.push({ filePath, mtimeMs, sessions });
+      for (const s of sessions) {
+        if (!sinceDate || s.date >= sinceDate) results.push(s);
+      }
+    }
+
+    putCacheBatch(newEntries);
+  }
+
+  // Evict stale entries occasionally (keep cache bounded)
+  if (sinceDateMs) evictOlderThan(sinceDateMs);
 
   return results;
 }
