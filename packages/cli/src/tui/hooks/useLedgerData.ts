@@ -9,7 +9,7 @@
  */
 import { createSignal, type Accessor } from "solid-js";
 import { existsSync } from "fs";
-import type { ProjectUsage } from "@usage-tui/core/parsers/types";
+import type { ProjectUsage } from "@lazyusage/core/parsers/types";
 
 export interface LedgerHook {
   claudeDaily: Accessor<ProjectUsage[] | null>;

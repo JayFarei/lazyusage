@@ -1,4 +1,4 @@
-# usage-tui
+# lazyusage
 
 A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage. Provides an interactive terminal dashboard (TUI), quick text snapshots, JSON output for agents, and an HTTP server mode.
 
@@ -12,6 +12,7 @@ A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage. Provide
 - **Per-project ledger** - Reads JSONL session files to show usage by project (daily/weekly/monthly)
 - **Service filtering** - Monitor Claude, Codex, or both
 - **Multiple output modes** - TUI, text snapshot, JSON, NDJSON stream, HTTP server
+- **Web dashboard** - React + Vite example UI that consumes the HTTP/SSE server endpoint
 - **Agent-friendly** - JSON output + SKILL.md with strategies for capacity management
 - **Buildable** - Pre-bundle with `bun run build` for faster cold starts
 
@@ -25,7 +26,7 @@ A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage. Provide
 
 ```bash
 git clone <repo>
-cd usage-tui
+cd lazyusage
 bun install
 ```
 
@@ -35,15 +36,15 @@ bun install
 
 ```bash
 bun run build              # One-time: pre-bundle for fast startup
-bun run usage              # Both Claude + Codex panels
-bun run usage claude       # Claude panel only
-bun run usage codex        # Codex panel only
+bun run lazyusage              # Both Claude + Codex panels
+bun run lazyusage claude       # Claude panel only
+bun run lazyusage codex        # Codex panel only
 ```
 
 For development (no build step, uses Babel transform at runtime):
 
 ```bash
-bun run usage:dev
+bun run lazyusage:dev
 ```
 
 ### Keyboard controls (TUI)
@@ -62,39 +63,68 @@ bun run usage:dev
 ### Text snapshot
 
 ```bash
-bun run usage:dev --text            # Both services
-bun run usage:dev claude --text     # Claude only
+bun run lazyusage:dev --text            # Both services
+bun run lazyusage:dev claude --text     # Claude only
 ```
 
 ### JSON output (agent use)
 
 ```bash
 # Single snapshot
-bun run usage --json
+bun run lazyusage --json
 
 # Continuous NDJSON stream
-bun run usage --json --live
+bun run lazyusage --json --live
 
 # Specific service
-bun run usage claude --json
+bun run lazyusage claude --json
 ```
 
 ### HTTP server
 
 ```bash
-bun run usage:dev --serve               # Port 8080
-bun run usage:dev --serve --port 3000   # Custom port
+bun run lazyusage --serve               # Port 8080
+bun run lazyusage --serve --port 3000   # Custom port
 ```
 
-Endpoints: `GET /usage` (JSON snapshot), `GET /usage/stream` (SSE stream).
+Endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | JSON snapshot of all metrics |
+| `GET /health` | Server health + service list |
+| `GET /stream` | SSE stream, emits JSON on every refresh |
+| `GET /claude` | JSON snapshot for Claude only |
+| `GET /codex` | JSON snapshot for Codex only |
+| `GET /stream/claude` | SSE stream for Claude only |
+| `GET /stream/codex` | SSE stream for Codex only |
+
+### Web dashboard (example)
+
+A React + Vite proof-of-concept dashboard that connects to the SSE stream and displays live usage bars in a browser:
+
+```bash
+# 1. Start the server
+bun run lazyusage --serve --port 8080
+
+# 2. In a separate terminal
+cd examples/dashboard
+npm install
+npm run dev
+# Open http://localhost:5173
+```
+
+Port is configurable via query param: `http://localhost:5173?port=3000`
+
+See [`examples/dashboard/README.md`](examples/dashboard/README.md) for full details.
 
 ### Quick usage check (for agents, scripts)
 
 ```bash
-bun run usage-check             # Text output
-bun run usage-check claude      # Claude only
-bun run usage-check --json      # JSON output
-bun run usage-check --debug     # Show timing and data source
+bun run lazyusage-check             # Text output
+bun run lazyusage-check claude      # Claude only
+bun run lazyusage-check --json      # JSON output
+bun run lazyusage-check --debug     # Show timing and data source
 ```
 
 ## JSON output schema
@@ -135,7 +165,7 @@ bun run usage-check --debug     # Show timing and data source
 
 ```bash
 # Exit 1 if any metric below 20%
-bun run usage-check claude --json | jq -e \
+bun run lazyusage-check claude --json | jq -e \
   '.services[0].metrics | all(.remaining_pct >= 20)' > /dev/null
 ```
 
@@ -143,11 +173,12 @@ bun run usage-check claude --json | jq -e \
 
 - [`examples/agent_integration.ts`](examples/agent_integration.ts) - Full agentic loop (TypeScript)
 - [`examples/agent_integration.sh`](examples/agent_integration.sh) - Full agentic loop (bash)
+- [`examples/dashboard/`](examples/dashboard/) - React + Vite web dashboard (see [README](examples/dashboard/README.md))
 
 ## Project structure
 
 ```
-usage-tui/
+lazyusage/
 ├── packages/
 │   ├── core/                  # Data collection + formatting (pure TS)
 │   │   └── src/
@@ -173,7 +204,11 @@ usage-tui/
 ├── examples/
 │   ├── SKILL.md               # Agent skill: capacity management scenarios
 │   ├── agent_integration.ts   # Full agentic capacity loop (TypeScript)
-│   └── agent_integration.sh   # Full agentic capacity loop (bash)
+│   ├── agent_integration.sh   # Full agentic capacity loop (bash)
+│   └── dashboard/             # React + Vite web dashboard POC
+│       ├── src/               # App, hooks, components
+│       ├── e2e/               # agent-browser E2E test suite
+│       └── README.md          # Quick start
 ├── scripts/
 │   └── build.ts               # Pre-bundle CLI for fast cold starts
 ├── SKILL.md                   # Agent guide: capacity strategies
@@ -190,6 +225,9 @@ bun test tests/core/
 
 # TUI hook + component snapshot tests
 bun run test:tui
+
+# Web dashboard E2E tests (agent-browser, starts servers automatically)
+bun run test:dashboard
 
 # E2E tests at 5 terminal sizes (requires tmux)
 bun run test:e2e
@@ -210,7 +248,7 @@ bun run capture-golden
 bun run build
 ```
 
-Pre-bundles the CLI and ledger worker into `dist/` using the SolidJS transform plugin. Eliminates Babel/JSX transform at launch time for faster cold starts. The `bun run usage` script runs from the built bundle.
+Pre-bundles the CLI and ledger worker into `dist/` using the SolidJS transform plugin. Eliminates Babel/JSX transform at launch time for faster cold starts. The `bun run lazyusage` script runs from the built bundle.
 
 ## Architecture
 
@@ -268,7 +306,7 @@ which codex
 Check the data source:
 
 ```bash
-bun run usage-check claude --debug
+bun run lazyusage-check claude --debug
 # Should show "Source: api" (~1s)
 # If "Source: pty" (~8s), check credentials below
 ```
@@ -299,13 +337,13 @@ Both API and PTY failed, using last snapshot. Check:
 
 ```bash
 # Default location
-ls ~/.local/share/usage-cli/usage.db
+ls ~/.local/share/lazyusage/usage.db
 
 # Reset if corrupted
-mv ~/.local/share/usage-cli/usage.db ~/.local/share/usage-cli/usage.db.bak
+mv ~/.local/share/lazyusage/usage.db ~/.local/share/lazyusage/usage.db.bak
 
 # Query directly
-sqlite3 ~/.local/share/usage-cli/usage.db "SELECT * FROM usage_snapshots ORDER BY timestamp DESC LIMIT 5;"
+sqlite3 ~/.local/share/lazyusage/usage.db "SELECT * FROM usage_snapshots ORDER BY timestamp DESC LIMIT 5;"
 ```
 
 ## Performance

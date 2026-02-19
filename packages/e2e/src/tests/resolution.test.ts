@@ -26,7 +26,7 @@ import {
   assertNotContains,
 } from "../helpers/assertions.js";
 import { extractBarWidths } from "../helpers/markers.js";
-import { calculateBarWidth, MIN_BAR_WIDTH, BAR_WIDTH_STEP } from "@usage-tui/core/utils/bars.js";
+import { calculateBarWidth, MIN_BAR_WIDTH, BAR_WIDTH_STEP } from "@lazyusage/core/utils/bars.js";
 
 // Session name prefix for this test file
 const SESSION_PREFIX = "e2e-res";

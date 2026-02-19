@@ -10,7 +10,7 @@ import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 
 export class UsageCache implements UsageProvider {
-  static readonly CACHE_DIR = join(homedir(), ".cache", "usage-cli");
+  static readonly CACHE_DIR = join(homedir(), ".cache", "lazyusage");
   static readonly STALE_THRESHOLD = 300; // 5 minutes
 
   name = "UsageCache";

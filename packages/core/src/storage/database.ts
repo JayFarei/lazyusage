@@ -14,7 +14,7 @@ export class UsageStore {
     homedir(),
     ".local",
     "share",
-    "usage-cli",
+    "lazyusage",
     "usage.db",
   );
 
@@ -22,7 +22,7 @@ export class UsageStore {
 
   constructor(dbPath?: string) {
     const resolvedPath =
-      dbPath ?? process.env.USAGE_CLI_DB_PATH ?? UsageStore.DEFAULT_DB_PATH;
+      dbPath ?? process.env.LAZYUSAGE_DB_PATH ?? UsageStore.DEFAULT_DB_PATH;
 
     if (resolvedPath !== ":memory:") {
       const dir = dirname(resolvedPath);

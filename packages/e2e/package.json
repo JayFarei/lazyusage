@@ -1,9 +1,9 @@
 {
-  "name": "@usage-tui/e2e",
+  "name": "@lazyusage/e2e",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@usage-tui/cli": "workspace:*"
+    "@lazyusage/cli": "workspace:*"
   }
 }

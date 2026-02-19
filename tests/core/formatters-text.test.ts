@@ -5,7 +5,7 @@ import {
   formatAllText,
   formatWithAvailability,
   type MetricsDict,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 describe("formatClaudeText", () => {
   test("formats claude metrics correctly", () => {

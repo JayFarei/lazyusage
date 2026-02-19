@@ -4,7 +4,7 @@ import {
   formatAllJson,
   formatCombinedJson,
   type MetricsDict,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 describe("formatJson", () => {
   test("outputs valid JSON", () => {

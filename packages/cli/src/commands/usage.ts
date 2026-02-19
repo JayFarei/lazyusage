@@ -8,7 +8,7 @@ import {
   formatCodexText,
   formatCombinedJson,
   formatWithAvailability,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 import { detectAvailableServices, validateService, collectMetrics } from "./usage-check.js";
 
 const GROUPED_HELP = `

@@ -6,7 +6,7 @@ import { Show } from "solid-js";
 import { useTheme } from "../theme.js";
 import { LedgerContent } from "./LedgerContent.js";
 import type { ContentTab } from "../hooks/useViewMode.js";
-import type { ProjectUsage } from "@usage-tui/core/parsers/types";
+import type { ProjectUsage } from "@lazyusage/core/parsers/types";
 
 const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
 

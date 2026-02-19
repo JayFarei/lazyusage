@@ -3,8 +3,8 @@
  * Provides mock data factories and testRender wrappers.
  */
 import { testRender } from "@opentui/solid";
-import type { MetricsDict } from "@usage-tui/core";
-import type { ProjectUsage } from "@usage-tui/core/parsers/types.js";
+import type { MetricsDict } from "@lazyusage/core";
+import type { ProjectUsage } from "@lazyusage/core/parsers/types.js";
 import type { JSX } from "solid-js";
 
 // ---------------------------------------------------------------------------

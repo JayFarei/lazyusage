@@ -31,24 +31,24 @@ scripts/
 bun run build
 
 # Interactive TUI (default, runs from dist/)
-bun run usage
-bun run usage claude
-bun run usage codex
+bun run lazyusage
+bun run lazyusage claude
+bun run lazyusage codex
 
 # Development mode (no build, uses Babel transform)
-bun run usage:dev
+bun run lazyusage:dev
 
 # Text snapshot
-bun run usage:dev --text
+bun run lazyusage:dev --text
 
 # JSON snapshot
-bun run usage --json
+bun run lazyusage --json
 
 # Continuous NDJSON stream
-bun run usage --json --live
+bun run lazyusage --json --live
 
 # HTTP server
-bun run usage:dev --serve --port 3000
+bun run lazyusage:dev --serve --port 3000
 ```
 
 ## Running Tests

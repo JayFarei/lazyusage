@@ -6,7 +6,7 @@ import { describe, test, expect } from "bun:test";
 import { join } from "path";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
-import { parseCodexSessions } from "@usage-tui/core/parsers/codex-parser.js";
+import { parseCodexSessions } from "@lazyusage/core/parsers/codex-parser.js";
 
 async function makeTempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "codex-parser-test-"));

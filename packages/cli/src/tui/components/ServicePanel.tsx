@@ -13,7 +13,7 @@ import {
   calculateBarWidth,
   type MetricsDict,
   type MetricData,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 export const LABEL_MAP: Record<string, string> = {
   session: "Session (5h)",

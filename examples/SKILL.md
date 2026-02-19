@@ -1,5 +1,5 @@
 ---
-name: usage-tui
+name: lazyusage
 description: >
   Agent capacity management for Claude CLI and Codex CLI rate limits.
   Provides real-time usage monitoring via JSON, NDJSON streams, and HTTP server.
@@ -18,9 +18,9 @@ Check rate-limit capacity and take intelligent action to avoid hitting limits.
 ## Fetching capacity
 
 ```bash
-bun run usage claude --json       # single service snapshot
-bun run usage --json              # all services
-bun run usage-check claude --json # lightweight, no TUI
+bun run lazyusage claude --json       # single service snapshot
+bun run lazyusage --json              # all services
+bun run lazyusage-check claude --json # lightweight, no TUI
 ```
 
 Returns:
@@ -64,7 +64,7 @@ Before starting expensive work, verify you have room.
 ```typescript
 import { $ } from "bun";
 
-const snap = await $`bun run usage claude --json`.json();
+const snap = await $`bun run lazyusage claude --json`.json();
 const metrics = snap.services[0]?.metrics ?? [];
 const tightest = metrics.reduce((a, b) =>
   a.remaining_pct <= b.remaining_pct ? a : b
@@ -77,7 +77,7 @@ if (tightest.remaining_pct < 20) {
 
 ```bash
 # One-liner: exit 1 if any metric below 20%
-bun run usage-check claude --json | jq -e \
+bun run lazyusage-check claude --json | jq -e \
   '.services[0].metrics | all(.remaining_pct >= 20)' > /dev/null
 ```
 
@@ -146,7 +146,7 @@ await new Promise(r => setTimeout(r, waitMs));
 If Claude is at capacity, Codex might still have room (and vice versa).
 
 ```typescript
-const snap = await $`bun run usage --json`.json();
+const snap = await $`bun run lazyusage --json`.json();
 const ranked = snap.services
   .filter(s => s.available)
   .map(s => ({
@@ -163,7 +163,7 @@ const best = ranked[0]; // use best.name for your API calls
 For long-running loops, subscribe to the NDJSON stream instead of polling.
 
 ```bash
-bun run usage --json --live   # one JSON line per ~10s refresh
+bun run lazyusage --json --live   # one JSON line per ~10s refresh
 ```
 
 ```typescript
@@ -192,7 +192,7 @@ Start the server once, let all agents query it. Avoids redundant API calls.
 
 ```bash
 # Terminal 1: start server
-bun run usage --serve --port 3000
+bun run lazyusage --serve --port 3000
 
 # Any agent:
 curl -s http://localhost:3000/usage | jq '.services[0].metrics'

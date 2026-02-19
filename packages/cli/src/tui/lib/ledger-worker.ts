@@ -12,9 +12,9 @@
  *
  * Accepts optional --since YYYY-MM-DD flag to limit parsing window (default: 28 days ago).
  */
-import { parseClaudeSessions } from "@usage-tui/core/parsers/claude-parser";
-import { parseCodexSessions } from "@usage-tui/core/parsers/codex-parser";
-import { aggregateDaily, aggregateWeekly, aggregateMonthly } from "@usage-tui/core/parsers/aggregator";
+import { parseClaudeSessions } from "@lazyusage/core/parsers/claude-parser";
+import { parseCodexSessions } from "@lazyusage/core/parsers/codex-parser";
+import { aggregateDaily, aggregateWeekly, aggregateMonthly } from "@lazyusage/core/parsers/aggregator";
 
 function defaultSince(): string {
   const d = new Date();

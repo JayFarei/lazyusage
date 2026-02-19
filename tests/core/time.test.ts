@@ -7,7 +7,7 @@ import {
   calculateTimeProgress,
   calculateFallbackTime,
   formatResetFromIso,
-} from "@usage-tui/core/utils/time.js";
+} from "@lazyusage/core/utils/time.js";
 
 describe("format12hTime", () => {
   test("converts 14:31 to 2:31pm", () => {

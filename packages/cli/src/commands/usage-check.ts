@@ -15,7 +15,7 @@ import {
   type MetricsDict,
   type FallbackChain,
   type ServiceName,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 export function detectAvailableServices(): string[] {
   const available: string[] = [];

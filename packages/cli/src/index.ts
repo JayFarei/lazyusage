@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * CLI entry point for usage-tui.
+ * CLI entry point for lazyusage.
  * Port of src/cli.py
  */
 import { Command } from "commander";
@@ -10,7 +10,7 @@ import { usageCommand } from "./commands/usage.js";
 const program = new Command();
 
 program
-  .name("usage-tui")
+  .name("lazyusage")
   .description("Usage monitoring for Claude and Codex CLI")
   .version("0.1.0");
 

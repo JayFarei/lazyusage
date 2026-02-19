@@ -8,7 +8,7 @@ import {
   formatCombinedJson,
   type MetricsDict,
   type FallbackChain,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 async function collectMetrics(
   servicesToQuery: string[],
@@ -46,6 +46,7 @@ export function startServer(options: {
 
   const server = Bun.serve({
     port,
+    idleTimeout: 0, // SSE connections must stay open indefinitely
     async fetch(req) {
       const url = new URL(req.url);
       const path = url.pathname.replace(/\/$/, "") || "/";
@@ -84,13 +85,25 @@ export function startServer(options: {
         const stream = new ReadableStream({
           async start(controller) {
             const encoder = new TextEncoder();
+            // SSE requires newline-free data; minify before framing
             const send = (data: string) => {
-              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              const minified = JSON.stringify(JSON.parse(data));
+              controller.enqueue(encoder.encode(`data: ${minified}\n\n`));
             };
+
+            // Heartbeat comment so EventSource confirms the connection immediately
+            // (before the async collectMetrics call resolves)
+            controller.enqueue(encoder.encode(": connected\n\n"));
 
             // Send initial data
             const { claudeMetrics, codexMetrics } = await collectMetrics(streamService);
             send(formatCombinedJson(claudeMetrics, codexMetrics, services));
+
+            // Keepalive: send an SSE comment every 5s so Bun doesn't consider
+            // the connection idle between data refreshes
+            const keepalive = setInterval(() => {
+              controller.enqueue(encoder.encode(": keepalive\n\n"));
+            }, 5000);
 
             // Set up periodic refresh
             const interval = setInterval(async () => {
@@ -104,6 +117,7 @@ export function startServer(options: {
 
             // Clean up when client disconnects
             req.signal.addEventListener("abort", () => {
+              clearInterval(keepalive);
               clearInterval(interval);
               controller.close();
             });

@@ -2,7 +2,7 @@
  * Reactive metrics state management hook.
  */
 import { createSignal } from "solid-js";
-import type { MetricsDict, ServiceName } from "@usage-tui/core";
+import type { MetricsDict, ServiceName } from "@lazyusage/core";
 
 export function useMetrics() {
   const [claudeMetrics, setClaudeMetrics] = createSignal<MetricsDict | null>(null);

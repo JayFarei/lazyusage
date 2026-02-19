@@ -16,28 +16,28 @@
       },
     },
     "packages/cli": {
-      "name": "@usage-tui/cli",
+      "name": "@lazyusage/cli",
       "version": "0.1.0",
       "bin": {
-        "usage-tui": "src/index.ts",
+        "lazyusage": "src/index.ts",
       },
       "dependencies": {
+        "@lazyusage/core": "workspace:*",
         "@opentui/core": "0.1.77",
         "@opentui/solid": "0.1.77",
-        "@usage-tui/core": "workspace:*",
         "commander": "^12.0.0",
         "solid-js": "^1.9.0",
       },
     },
     "packages/core": {
-      "name": "@usage-tui/core",
+      "name": "@lazyusage/core",
       "version": "0.1.0",
     },
     "packages/e2e": {
-      "name": "@usage-tui/e2e",
+      "name": "@lazyusage/e2e",
       "version": "0.1.0",
       "dependencies": {
-        "@usage-tui/cli": "workspace:*",
+        "@lazyusage/cli": "workspace:*",
       },
     },
   },
@@ -168,6 +168,12 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
+    "@lazyusage/cli": ["@lazyusage/cli@workspace:packages/cli"],
+
+    "@lazyusage/core": ["@lazyusage/core@workspace:packages/core"],
+
+    "@lazyusage/e2e": ["@lazyusage/e2e@workspace:packages/e2e"],
+
     "@opentui/core": ["@opentui/core@0.1.77", "", { "dependencies": { "bun-ffi-structs": "0.1.2", "diff": "8.0.2", "jimp": "1.6.0", "marked": "17.0.1", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@dimforge/rapier2d-simd-compat": "^0.17.3", "@opentui/core-darwin-arm64": "0.1.77", "@opentui/core-darwin-x64": "0.1.77", "@opentui/core-linux-arm64": "0.1.77", "@opentui/core-linux-x64": "0.1.77", "@opentui/core-win32-arm64": "0.1.77", "@opentui/core-win32-x64": "0.1.77", "bun-webgpu": "0.1.4", "planck": "^1.4.2", "three": "0.177.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-lE3kabm6jdqK3AuBq+O0zZrXdxt6ulmibTc57sf+AsPny6cmwYHnWI4wD6hcreFiYoQVNVvdiJchVgPtowMlEg=="],
 
     "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.1.77", "", { "os": "darwin", "cpu": "arm64" }, "sha512-SNqmygCMEsPCW7xWjzCZ5caBf36xaprwVdAnFijGDOuIzLA4iaDa6um8cj3TJh7awenN3NTRsuRc7OuH42UH+g=="],
@@ -187,12 +193,6 @@
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
 
     "@types/node": ["@types/node@16.9.1", "", {}, "sha512-QpLcX9ZSsq3YYUUnD3nFDY8H7wctAhQj/TFKL8Ya8v5fMm3CFXxo8zStsLAl780ltoYoo1WvKUVGBQK+1ifr7g=="],
-
-    "@usage-tui/cli": ["@usage-tui/cli@workspace:packages/cli"],
-
-    "@usage-tui/core": ["@usage-tui/core@workspace:packages/core"],
-
-    "@usage-tui/e2e": ["@usage-tui/e2e@workspace:packages/e2e"],
 
     "@webgpu/types": ["@webgpu/types@0.1.69", "", {}, "sha512-RPmm6kgRbI8e98zSD3RVACvnuktIja5+yLgDAkTmxLr90BEwdTXRQWNLF3ETTTyH/8mKhznZuN5AveXYFEsMGQ=="],
 

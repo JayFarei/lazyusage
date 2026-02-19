@@ -7,8 +7,8 @@ import {
   aggregateDaily,
   aggregateWeekly,
   aggregateMonthly,
-} from "@usage-tui/core/parsers/aggregator.js";
-import type { SessionTokens } from "@usage-tui/core/parsers/types";
+} from "@lazyusage/core/parsers/aggregator.js";
+import type { SessionTokens } from "@lazyusage/core/parsers/types";
 
 /** Get today, N days ago, as YYYY-MM-DD local strings */
 function todayStr(): string {

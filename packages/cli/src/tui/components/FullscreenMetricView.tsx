@@ -13,7 +13,7 @@ import {
   calculateBarWidth,
   type MetricsDict,
   type MetricData,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 import { LABEL_MAP, WINDOW_HOURS, METRIC_KEYS } from "./ServicePanel.js";
 
 const BAR_OVERHEAD = 12;

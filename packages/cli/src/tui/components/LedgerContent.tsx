@@ -4,7 +4,7 @@
  */
 import { For, Show, createMemo } from "solid-js";
 import { useTheme } from "../theme.js";
-import type { ProjectUsage } from "@usage-tui/core/parsers/types";
+import type { ProjectUsage } from "@lazyusage/core/parsers/types";
 
 interface LedgerContentProps {
   data: ProjectUsage[] | null;

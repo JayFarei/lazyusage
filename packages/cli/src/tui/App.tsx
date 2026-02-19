@@ -27,7 +27,7 @@ import {
   DataSource,
   type PersistentFallbackChain,
   type MetricsDict,
-} from "@usage-tui/core";
+} from "@lazyusage/core";
 
 export interface AppProps {
   /** Optional service filter: "claude" | "codex" | "all" | undefined = show both */
@@ -149,7 +149,7 @@ export function App(props: AppProps = {}) {
 
   /** Read last-good cache files synchronously and populate metrics for instant frame 1. */
   function loadCachedData() {
-    const cacheDir = join(homedir(), ".cache", "usage-cli");
+    const cacheDir = join(homedir(), ".cache", "lazyusage");
     for (const [service, visible] of [
       ["claude", showClaude()],
       ["codex", showCodex()],

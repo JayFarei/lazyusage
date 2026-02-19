@@ -7,7 +7,7 @@ import {
   BAR_WIDTH_STEP,
   MIN_BAR_WIDTH,
   MAX_BAR_WIDTH,
-} from "@usage-tui/core/utils/bars.js";
+} from "@lazyusage/core/utils/bars.js";
 
 describe("calculateBarWidth", () => {
   test("snaps to 35 multiples", () => {
