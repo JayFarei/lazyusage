@@ -2,7 +2,7 @@
  * Left panel for one service showing full stacked progress bars for all metrics.
  * Each metric renders: label, capacity bar, time markers, period bar, reset time.
  */
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import { useTerminalDimensions } from "@opentui/solid";
 import { useTheme } from "../theme.js";
 import {
@@ -45,6 +45,8 @@ interface ServicePanelProps {
   selectedIndex: number;
   panelNumber: number;
   panelCount?: number;
+  /** Shared 30s tick from App, replaces per-panel setInterval */
+  tick?: number;
 }
 
 const BAR_OVERHEAD = 12;
@@ -52,9 +54,6 @@ const MIN_LOCAL_BAR = 20;
 
 export function ServicePanel(props: ServicePanelProps) {
   const theme = useTheme();
-  const [tick, setTick] = createSignal(0);
-  const tickInterval = setInterval(() => setTick((t) => t + 1), 30_000);
-  onCleanup(() => clearInterval(tickInterval));
 
   const panelTitle = () => {
     const sub = props.metrics?.subscription_type;
@@ -62,12 +61,12 @@ export function ServicePanel(props: ServicePanelProps) {
     return ` [${props.panelNumber}] ${props.title}${suffix} `;
   };
 
-  const metricEntries = () => {
+  const metricEntries = createMemo(() => {
     if (!props.metrics) return [];
     const keys = METRIC_KEYS[props.service] ?? [];
     const entries: Array<{ key: string; label: string; data: MetricData }> = [];
     for (const key of keys) {
-      const val = props.metrics[key];
+      const val = props.metrics![key];
       if (val && typeof val === "object" && "used_pct" in val) {
         entries.push({
           key,
@@ -77,7 +76,7 @@ export function ServicePanel(props: ServicePanelProps) {
       }
     }
     return entries;
-  };
+  });
 
   const dims = useTerminalDimensions();
   const barWidth = () => {
@@ -128,14 +127,17 @@ export function ServicePanel(props: ServicePanelProps) {
               return idx() === (si === -1 ? 0 : si);
             };
             const mode = () => renderMode();
-            const w = barWidth();
             const windowHrs = WINDOW_HOURS[entry.key] ?? 5;
             const divisions = windowHrs === 168 ? 7 : 5;
 
-            const capBar = () => createCapacityBar(entry.data.used_pct, w);
-            const markers = () => createTimeMarkers(divisions, w);
-            const timePct = () => { tick(); return calculateTimeProgress(entry.data.resets, windowHrs); };
-            const perBar = () => createPeriodBar(timePct(), w);
+            // Memoized bar strings: recompute only when their specific dependencies change
+            const capBar = createMemo(() => createCapacityBar(entry.data.used_pct, barWidth()));
+            const markers = createMemo(() => createTimeMarkers(divisions, barWidth()));
+            const timePct = createMemo(() => {
+              void props.tick; // reactive dependency on shared 30s tick
+              return calculateTimeProgress(entry.data.resets, windowHrs);
+            });
+            const perBar = createMemo(() => createPeriodBar(timePct(), barWidth()));
             const usedPct = () => Math.round(entry.data.used_pct);
             const timePctR = () => Math.round(timePct());
 
@@ -158,7 +160,7 @@ export function ServicePanel(props: ServicePanelProps) {
 
             return (
               <box flexDirection="column" width="100%" paddingLeft={1}>
-                {/* Label - always shown; appends ··· when collapsed */}
+                {/* Label - always shown; appends summary when collapsed */}
                 <text
                   content={labelText()}
                   fg={isSelected() ? theme.green : theme.cyan}

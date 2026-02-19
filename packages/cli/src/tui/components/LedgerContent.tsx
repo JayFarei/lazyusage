@@ -2,7 +2,7 @@
  * Ledger tab: per-project token usage table for a single service.
  * Reused across Daily, Weekly, and Monthly tabs.
  */
-import { For, Show } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import { useTheme } from "../theme.js";
 import type { ProjectUsage } from "@usage-tui/core/parsers/types";
 
@@ -23,14 +23,14 @@ const TABLE_WIDTH = COL_PROJECT + COL_TOKENS + COL_PCT;
 
 export function LedgerContent(props: LedgerContentProps) {
   const theme = useTheme();
-  const rows = () => {
+  const rows = createMemo(() => {
     if (!props.data || props.data.length === 0) return [];
     return props.data.map((p) => ({
       project: p.project,
       tokens: fmt(p.totalTokens),
       pct: p.pctOfTotal.toFixed(1),
     }));
-  };
+  });
 
   const totalTokens = () => {
     if (!props.data) return 0;

@@ -7,8 +7,10 @@
     "packages/e2e"
   ],
   "scripts": {
+    "build": "bun scripts/build.ts",
     "dev": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts",
-    "usage": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage",
+    "usage": "bun dist/cli.js usage",
+    "usage:dev": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage",
     "usage-check": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage-check",
     "test": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts test",
     "test:core": "bun test tests/core/",

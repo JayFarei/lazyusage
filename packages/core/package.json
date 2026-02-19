@@ -12,7 +12,5 @@
     "./parsers/codex-parser": "./src/parsers/codex-parser.ts",
     "./parsers/aggregator": "./src/parsers/aggregator.ts"
   },
-  "dependencies": {
-    "date-fns": "^4.0.0"
-  }
+  "dependencies": {}
 }

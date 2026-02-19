@@ -1,8 +1,9 @@
 /**
- * Example: Agent capacity check before spawning a sub-agent.
+ * Complete agentic capacity management loop.
  *
- * Demonstrates how an AI agent can check capacity before spawning
- * a sub-agent to avoid hitting rate limits.
+ * Combines all SKILL.md scenarios into one runnable demo:
+ * pre-flight check, adaptive throttling, service failover,
+ * and sleep-until-reset.
  *
  * Usage:
  *   bun run examples/agent_integration.ts
@@ -10,97 +11,104 @@
 
 import { $ } from "bun";
 
-interface MetricResult {
-  name: string;
-  remaining_pct: number;
+// -- types ------------------------------------------------------------------
+
+interface Metric { name: string; remaining_pct: number; resets: string }
+interface Service { name: string; available: boolean; metrics: Metric[] }
+interface Snapshot { services: Service[] }
+
+type Level = "green" | "yellow" | "red";
+
+// -- helpers ----------------------------------------------------------------
+
+async function getUsage(svc?: string): Promise<Snapshot> {
+  const cmd = svc ? $`bun run usage:dev ${svc} --json` : $`bun run usage:dev --json`;
+  return cmd.json();
 }
 
-interface ServiceResult {
-  name: string;
-  available: boolean;
-  metrics: MetricResult[];
+function tightest(snap: Snapshot, svc?: string): Metric | null {
+  const s = snap.services.find(
+    (s) => s.available && (!svc || s.name === svc),
+  );
+  if (!s || s.metrics.length === 0) return null;
+  return s.metrics.reduce((a, b) =>
+    a.remaining_pct <= b.remaining_pct ? a : b,
+  );
 }
 
-interface UsageJson {
-  services: ServiceResult[];
+function level(remaining: number): Level {
+  if (remaining >= 50) return "green";
+  if (remaining >= 20) return "yellow";
+  return "red";
 }
 
-/**
- * Check remaining capacity for a service.
- * Returns {hasCapacity, message}.
- */
-async function checkCapacity(
-  service = "claude",
-  threshold = 20,
-): Promise<{ hasCapacity: boolean; message: string }> {
-  try {
-    const output = await $`bun run usage ${service} --json`.text();
-    const data: UsageJson = JSON.parse(output);
-
-    for (const svc of data.services) {
-      if (!svc.available) continue;
-      for (const metric of svc.metrics) {
-        if (metric.remaining_pct < threshold) {
-          return {
-            hasCapacity: false,
-            message:
-              `${svc.name} low capacity: ${metric.name} only ${metric.remaining_pct}% remaining`,
-          };
-        }
-      }
-    }
-
-    return { hasCapacity: true, message: "Capacity available" };
-  } catch (err) {
-    return { hasCapacity: false, message: `Error: ${err}` };
+function msUntilReset(resets: string): number {
+  const now = new Date();
+  const m = resets.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+  if (m) {
+    let h = parseInt(m[1]);
+    if (m[3].toLowerCase() === "pm" && h !== 12) h += 12;
+    if (m[3].toLowerCase() === "am" && h === 12) h = 0;
+    const t = new Date(now);
+    t.setHours(h, parseInt(m[2]), 0, 0);
+    if (t <= now) t.setDate(t.getDate() + 1);
+    return t.getTime() - now.getTime();
   }
+  return 3_600_000;
 }
 
-/**
- * Get the most restrictive (lowest remaining) metric for a service.
- * Returns null if the service is unavailable or an error occurs.
- */
-async function getMostRestrictiveMetric(
-  service = "claude",
-): Promise<{ name: string; remaining_pct: number } | null> {
-  try {
-    const output = await $`bun run usage ${service} --json`.text();
-    const data: UsageJson = JSON.parse(output);
+function bestAlternative(snap: Snapshot, avoid: string): string | null {
+  const alts = snap.services
+    .filter((s) => s.available && s.name !== avoid)
+    .map((s) => ({
+      name: s.name,
+      headroom: Math.min(...s.metrics.map((m) => m.remaining_pct)),
+    }))
+    .sort((a, b) => b.headroom - a.headroom);
+  return alts.length > 0 && alts[0].headroom >= 20 ? alts[0].name : null;
+}
 
-    for (const svc of data.services) {
-      if (svc.name === service && svc.available) {
-        const min = svc.metrics.reduce((a, b) =>
-          a.remaining_pct <= b.remaining_pct ? a : b,
-        );
-        return { name: min.name, remaining_pct: min.remaining_pct };
-      }
-    }
+// -- main loop --------------------------------------------------------------
 
-    return null;
-  } catch {
-    return null;
+const MAX_RETRIES = 3;
+
+for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  console.log(`\n--- Attempt ${attempt} ---`);
+
+  const snap = await getUsage();
+  const metric = tightest(snap, "claude");
+
+  if (!metric) {
+    console.log("No services available.");
+    process.exit(1);
   }
-}
 
-// Example usage: check Claude capacity before spawning sub-agent
-console.log("Checking Claude capacity...");
+  const lv = level(metric.remaining_pct);
+  console.log(`Tightest: ${metric.name} ${metric.remaining_pct}% [${lv}]`);
 
-const metric = await getMostRestrictiveMetric("claude");
-if (!metric) {
-  console.error("Error checking capacity");
-  process.exit(1);
-}
+  if (lv === "green") {
+    console.log("Full speed. Proceeding.");
+    process.exit(0);
+  }
 
-console.log(`Most restrictive metric: ${metric.name} (${metric.remaining_pct}% remaining)`);
+  if (lv === "yellow") {
+    console.log("Throttling: fewer agents, smaller context, cheaper model.");
+    process.exit(0);
+  }
 
-const { hasCapacity, message } = await checkCapacity("claude", 20);
-if (hasCapacity) {
-  console.log(`✓ ${message}`);
-  console.log("Spawning sub-agent...");
-  // spawnSubAgent();
-  process.exit(0);
-} else {
-  console.log(`✗ ${message}`);
-  console.log("Deferring sub-agent spawn");
-  process.exit(1);
+  // red
+  const alt = bestAlternative(snap, "claude");
+  if (alt) {
+    console.log(`Failing over to ${alt}.`);
+    process.exit(0);
+  }
+
+  if (attempt < MAX_RETRIES) {
+    const wait = msUntilReset(metric.resets) + 60_000;
+    console.log(`Sleeping ${Math.ceil(wait / 60_000)} min until ${metric.resets}...`);
+    await new Promise((r) => setTimeout(r, wait));
+  } else {
+    console.log("Max retries reached.");
+    process.exit(1);
+  }
 }

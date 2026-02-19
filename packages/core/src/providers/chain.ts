@@ -8,6 +8,12 @@ import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict }
 import { UsageCache } from "./cache.js";
 import { calculateFallbackTime } from "../utils/time.js";
 
+/** Minimal interface for token refresh - allows test injection without importing ClaudeCredentialStore */
+export interface TokenRefreshable {
+  canRefresh(): boolean;
+  tryRefreshToken(oauthUrl?: string): Promise<boolean>;
+}
+
 /** Orchestrates fallback chain: API -> PTY -> Cache -> Default zeros */
 export class FallbackChain {
   private service: string;
@@ -87,6 +93,7 @@ export class PersistentFallbackChain {
   private service: string;
   private apiProvider: UsageProvider | null;
   private ptyProvider: PersistentUsageProvider;
+  private credStore: TokenRefreshable | undefined;
   private cache: UsageCache;
   private _lastResult: FetchResult | null = null;
   private _ptyStarted = false;
@@ -95,10 +102,12 @@ export class PersistentFallbackChain {
     service: string,
     apiProvider: UsageProvider | null,
     ptyProvider: PersistentUsageProvider,
+    credStore?: TokenRefreshable,
   ) {
     this.service = service;
     this.apiProvider = apiProvider;
     this.ptyProvider = ptyProvider;
+    this.credStore = credStore;
     this.cache = new UsageCache(service);
   }
 
@@ -110,6 +119,19 @@ export class PersistentFallbackChain {
         this.cache.store(result.metrics, result.timestamp);
         this._lastResult = result;
         return result;
+      }
+    }
+
+    // Before falling back to PTY: attempt OAuth token refresh
+    if (this.credStore?.canRefresh()) {
+      const refreshed = await this.credStore.tryRefreshToken();
+      if (refreshed && this.apiProvider?.isAvailable()) {
+        const retryResult = await this.apiProvider!.fetch();
+        if (retryResult.metrics !== null && retryResult.error === null) {
+          this.cache.store(retryResult.metrics, retryResult.timestamp);
+          this._lastResult = retryResult;
+          return retryResult;
+        }
       }
     }
 
@@ -144,6 +166,19 @@ export class PersistentFallbackChain {
         this.cache.store(result.metrics, result.timestamp);
         this._lastResult = result;
         return result;
+      }
+    }
+
+    // Before falling back to PTY: attempt OAuth token refresh
+    if (this.credStore?.canRefresh()) {
+      const refreshed = await this.credStore.tryRefreshToken();
+      if (refreshed && this.apiProvider?.isAvailable()) {
+        const retryResult = await this.apiProvider!.fetch();
+        if (retryResult.metrics !== null && retryResult.error === null) {
+          this.cache.store(retryResult.metrics, retryResult.timestamp);
+          this._lastResult = retryResult;
+          return retryResult;
+        }
       }
     }
 

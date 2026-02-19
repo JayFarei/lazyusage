@@ -1,18 +1,19 @@
 # usage-tui
 
-A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage statistics. Provides an interactive terminal dashboard (TUI), quick text snapshots, JSON output for agents, and an HTTP server mode.
+A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage. Provides an interactive terminal dashboard (TUI), quick text snapshots, JSON output for agents, and an HTTP server mode.
 
 ## Features
 
-- **Interactive TUI**: Real-time bar charts, per-project ledger, keyboard navigation
-- **Multi-source fetching**: API-first with intelligent fallback (API → PTY → cache → zeros)
-- **Fast**: ~1s via API (vs ~8s via PTY), graceful degradation when API is unavailable
-- **Usage history**: SQLite snapshots with deduplication, 30-day retention
-- **Per-project ledger**: Reads JSONL session files to show usage broken down by project (daily/weekly/monthly)
-- **Service filtering**: Monitor Claude, Codex, or both
-- **Multiple output modes**: Interactive TUI, text snapshot, JSON, NDJSON stream, HTTP server
-- **Agent-friendly**: JSON output with availability metadata for programmatic consumption
-- **Source transparency**: Shows where data came from (api / pty / cache)
+- **Interactive TUI** - Real-time bar charts, per-project ledger, keyboard navigation
+- **Multi-source fetching** - API-first with intelligent fallback (API -> token refresh -> PTY -> cache -> zeros)
+- **Fast** - ~1s via API (vs ~8s via PTY), graceful degradation when API is unavailable
+- **OAuth token refresh** - Automatically refreshes expired tokens before falling back to PTY
+- **Usage history** - SQLite snapshots with deduplication, 30-day auto-cleanup
+- **Per-project ledger** - Reads JSONL session files to show usage by project (daily/weekly/monthly)
+- **Service filtering** - Monitor Claude, Codex, or both
+- **Multiple output modes** - TUI, text snapshot, JSON, NDJSON stream, HTTP server
+- **Agent-friendly** - JSON output + SKILL.md with strategies for capacity management
+- **Buildable** - Pre-bundle with `bun run build` for faster cold starts
 
 ## Requirements
 
@@ -24,7 +25,7 @@ A TypeScript/Bun monorepo for monitoring Claude CLI and Codex CLI usage statisti
 
 ```bash
 git clone <repo>
-cd usage-tui-opentui
+cd usage-tui
 bun install
 ```
 
@@ -33,9 +34,16 @@ bun install
 ### Interactive TUI (default)
 
 ```bash
-bun run usage           # Both Claude + Codex panels
-bun run usage claude    # Claude panel only
-bun run usage codex     # Codex panel only
+bun run build              # One-time: pre-bundle for fast startup
+bun run usage              # Both Claude + Codex panels
+bun run usage claude       # Claude panel only
+bun run usage codex        # Codex panel only
+```
+
+For development (no build step, uses Babel transform at runtime):
+
+```bash
+bun run usage:dev
 ```
 
 ### Keyboard controls (TUI)
@@ -54,14 +62,14 @@ bun run usage codex     # Codex panel only
 ### Text snapshot
 
 ```bash
-bun run usage --text            # Both services
-bun run usage claude --text     # Claude only
+bun run usage:dev --text            # Both services
+bun run usage:dev claude --text     # Claude only
 ```
 
 ### JSON output (agent use)
 
 ```bash
-# Single snapshot to stdout
+# Single snapshot
 bun run usage --json
 
 # Continuous NDJSON stream
@@ -74,8 +82,8 @@ bun run usage claude --json
 ### HTTP server
 
 ```bash
-bun run usage --serve               # Port 8080
-bun run usage --serve --port 3000   # Custom port
+bun run usage:dev --serve               # Port 8080
+bun run usage:dev --serve --port 3000   # Custom port
 ```
 
 Endpoints: `GET /usage` (JSON snapshot), `GET /usage/stream` (SSE stream).
@@ -83,7 +91,7 @@ Endpoints: `GET /usage` (JSON snapshot), `GET /usage/stream` (SSE stream).
 ### Quick usage check (for agents, scripts)
 
 ```bash
-bun run usage-check             # Text output, auto-detect services
+bun run usage-check             # Text output
 bun run usage-check claude      # Claude only
 bun run usage-check --json      # JSON output
 bun run usage-check --debug     # Show timing and data source
@@ -93,24 +101,26 @@ bun run usage-check --debug     # Show timing and data source
 
 ```json
 {
+  "timestamp": "2026-02-19T17:55:25.572Z",
+  "available_services": ["claude", "codex"],
   "services": [
     {
       "name": "claude",
       "available": true,
-      "source": "api",
+      "subscription_type": "max",
       "metrics": [
-        { "name": "session", "used_pct": 12, "remaining_pct": 88, "resets": "3:45pm" },
-        { "name": "week_all", "used_pct": 5, "remaining_pct": 95, "resets": "Feb 24 at 9:00am" },
-        { "name": "week_sonnet", "used_pct": 8, "remaining_pct": 92, "resets": "Feb 24 at 9:00am" }
+        { "name": "session",     "used_pct": 26, "remaining_pct": 74, "resets": "9:00pm" },
+        { "name": "week_all",    "used_pct": 19, "remaining_pct": 81, "resets": "Feb 25 at 11:00am" },
+        { "name": "week_sonnet", "used_pct": 18, "remaining_pct": 82, "resets": "Feb 25 at 11:00am" }
       ]
     },
     {
       "name": "codex",
       "available": true,
-      "source": "api",
+      "subscription_type": "Plus",
       "metrics": [
-        { "name": "5h", "used_pct": 0, "remaining_pct": 100, "resets": "6:12pm" },
-        { "name": "weekly", "used_pct": 2, "remaining_pct": 98, "resets": "Feb 24 at 9:00am" }
+        { "name": "5h",     "used_pct": 6,  "remaining_pct": 94, "resets": "11:18pm" },
+        { "name": "weekly", "used_pct": 14, "remaining_pct": 86, "resets": "Feb 23 at 9:59pm" }
       ]
     }
   ]
@@ -119,39 +129,29 @@ bun run usage-check --debug     # Show timing and data source
 
 ## Agent integration
 
-### TypeScript / Bun
+[`examples/SKILL.md`](examples/SKILL.md) is the primary reference for agents. It covers 6 scenarios: pre-flight capacity check, adaptive throttling, sleep-until-reset, service failover, continuous monitoring, and multi-agent shared server.
 
-```typescript
-import { $ } from "bun";
-
-const output = await $`bun run usage claude --json`.text();
-const data = JSON.parse(output);
-const metric = data.services[0].metrics.find(m => m.name === "session");
-if (metric.remaining_pct < 20) {
-  console.log("Low capacity - deferring");
-}
-```
-
-See [`examples/agent_integration.ts`](examples/agent_integration.ts) for a full example.
-
-### Bash
+### Quick check
 
 ```bash
-json=$(bun run usage-check claude --json)
-remaining=$(echo "$json" | jq '.services[0].metrics | min_by(.remaining_pct) | .remaining_pct')
-[ "$remaining" -lt 20 ] && echo "Low capacity" || echo "OK"
+# Exit 1 if any metric below 20%
+bun run usage-check claude --json | jq -e \
+  '.services[0].metrics | all(.remaining_pct >= 20)' > /dev/null
 ```
 
-See [`examples/agent_integration.sh`](examples/agent_integration.sh) for a full example.
+### Runnable examples
+
+- [`examples/agent_integration.ts`](examples/agent_integration.ts) - Full agentic loop (TypeScript)
+- [`examples/agent_integration.sh`](examples/agent_integration.sh) - Full agentic loop (bash)
 
 ## Project structure
 
 ```
-usage-tui-opentui/
+usage-tui/
 ├── packages/
 │   ├── core/                  # Data collection + formatting (pure TS)
 │   │   └── src/
-│   │       ├── providers/     # API / PTY / cache / chain
+│   │       ├── providers/     # API / PTY / cache / chain / credentials
 │   │       ├── parsers/       # Claude + Codex JSONL parsers (ledger)
 │   │       ├── collectors/    # PTY-based collectors
 │   │       ├── formatters/    # Text + JSON output
@@ -168,11 +168,15 @@ usage-tui-opentui/
 │       ├── golden/            # Captured baseline frames (4 resolutions)
 │       └── scripts/           # capture-golden.ts
 ├── tests/
-│   ├── core/                  # Parser + aggregator unit tests
+│   ├── core/                  # Parser, chain, token-refresh unit tests
 │   └── tui/                   # Hook + component snapshot tests
 ├── examples/
-│   ├── agent_integration.ts
-│   └── agent_integration.sh
+│   ├── SKILL.md               # Agent skill: capacity management scenarios
+│   ├── agent_integration.ts   # Full agentic capacity loop (TypeScript)
+│   └── agent_integration.sh   # Full agentic capacity loop (bash)
+├── scripts/
+│   └── build.ts               # Pre-bundle CLI for fast cold starts
+├── SKILL.md                   # Agent guide: capacity strategies
 ├── CLAUDE.md                  # Codebase guidance for Claude Code
 ├── package.json               # Bun workspace root + scripts
 └── tsconfig.json
@@ -181,7 +185,7 @@ usage-tui-opentui/
 ## Running tests
 
 ```bash
-# Core parser + aggregator unit tests
+# Core unit tests (parsers, chain, token refresh)
 bun test tests/core/
 
 # TUI hook + component snapshot tests
@@ -200,25 +204,36 @@ bun run test:soak
 bun run capture-golden
 ```
 
+## Building
+
+```bash
+bun run build
+```
+
+Pre-bundles the CLI and ledger worker into `dist/` using the SolidJS transform plugin. Eliminates Babel/JSX transform at launch time for faster cold starts. The `bun run usage` script runs from the built bundle.
+
 ## Architecture
 
 ### Data flow
 
 ```
 API provider  ──┐
-PTY provider  ──┼──► PersistentFallbackChain ──► UsageStore (SQLite)
-Cache         ──┘                                      │
-                                                  useMetrics()
-                                                       │
-JSONL session files ──► useLedgerData() ────────► App.tsx (SolidJS)
+                ├──► PersistentFallbackChain ──► UsageStore (SQLite)
+Token refresh ──┤         (with retry)                  │
+PTY provider  ──┤                                  useMetrics()
+Cache         ──┘                                       │
+                                                  App.tsx (SolidJS)
+                                                        │
+JSONL session files ──► useLedgerData() ────────────────┘
 ```
 
 ### Data sources (in priority order)
 
 1. **API** - Direct HTTPS to Claude/Codex APIs. Reads OAuth tokens from Keychain (Claude) or `~/.codex/auth.json` (Codex). ~1s.
-2. **PTY** - Launches CLI in a tmux pane, captures output. ~8s.
-3. **Cache** - Last-known-good data from SQLite snapshot store. Instant, but may be stale.
-4. **Fallback** - Zero values with calculated reset times. Always succeeds.
+2. **Token refresh** - If API fails with expired token, attempts OAuth refresh before falling back.
+3. **PTY** - Launches CLI in a tmux pane, captures output. ~8s.
+4. **Cache** - Last-known-good data from SQLite snapshot store. Instant, but may be stale.
+5. **Fallback** - Zero values with calculated reset times. Always succeeds.
 
 ### TUI layout
 
@@ -274,7 +289,7 @@ Running `claude` or `codex` once will refresh tokens if expired.
 
 ### Stale data ("cache" source)
 
-Both API and PTY failed - using last snapshot. Check:
+Both API and PTY failed, using last snapshot. Check:
 
 1. Network connectivity
 2. CLI tools work: `claude`, `codex`

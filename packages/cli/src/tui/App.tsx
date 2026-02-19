@@ -3,6 +3,9 @@
  * 2x2 grid layout: each service row has bars (left) + ledger stats (right).
  */
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { join } from "path";
+import { homedir } from "os";
+import { existsSync, readFileSync } from "fs";
 import { useKeyboard } from "@opentui/solid";
 import { useTheme } from "./theme.js";
 import { ServicePanel } from "./components/ServicePanel.js";
@@ -54,6 +57,9 @@ export function App(props: AppProps = {}) {
     new Date().toLocaleTimeString()
   );
 
+  // Shared 30s tick for time-progress bars (replaces two per-panel setIntervals)
+  const [tick, setTick] = createSignal(0);
+
   const ledger = useLedgerData();
 
   const visiblePanelCount = () => (showClaude() ? 1 : 0) + (showCodex() ? 1 : 0);
@@ -70,28 +76,30 @@ export function App(props: AppProps = {}) {
     const timestamp = new Date().toLocaleTimeString();
     setLastUpdated(timestamp);
 
-    for (const [chain, service] of [
-      [claudeChain, "claude"],
-      [codexChain, "codex"],
-    ] as const) {
-      if (!chain) continue;
-      try {
-        const result = await (chain as PersistentFallbackChain).refresh();
-        const metrics = result.metrics as MetricsDict | null;
-        const error = result.error;
-        const source = result.source;
-        updateMetrics(service, metrics, error, source);
+    // Refresh both chains and ledger concurrently
+    await Promise.all([
+      ...([
+        [claudeChain, "claude"],
+        [codexChain, "codex"],
+      ] as const)
+        .filter(([chain]) => chain !== null)
+        .map(async ([chain, service]) => {
+          try {
+            const result = await (chain as PersistentFallbackChain).refresh();
+            const metrics = result.metrics as MetricsDict | null;
+            const error = result.error;
+            const source = result.source;
+            updateMetrics(service, metrics, error, source);
 
-        if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
-          store.storeSnapshot(service, metrics, source);
-        }
-      } catch (err) {
-        updateMetrics(service, null, String(err), DataSource.FALLBACK);
-      }
-    }
-
-    // Throttled ledger refresh (30s internal throttle)
-    ledger.refresh();
+            if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
+              store.storeSnapshot(service, metrics, source);
+            }
+          } catch (err) {
+            updateMetrics(service, null, String(err), DataSource.FALLBACK);
+          }
+        }),
+      ledger.refresh(),
+    ]);
   }
 
   const autoRefresh = useAutoRefresh(refreshAll, 10);
@@ -139,9 +147,35 @@ export function App(props: AppProps = {}) {
     handleKey({ name: event.name, shift: event.shift });
   });
 
+  /** Read last-good cache files synchronously and populate metrics for instant frame 1. */
+  function loadCachedData() {
+    const cacheDir = join(homedir(), ".cache", "usage-cli");
+    for (const [service, visible] of [
+      ["claude", showClaude()],
+      ["codex", showCodex()],
+    ] as const) {
+      if (!visible) continue;
+      try {
+        const cacheFile = join(cacheDir, `${service}.json`);
+        if (!existsSync(cacheFile)) continue;
+        const data = JSON.parse(readFileSync(cacheFile, "utf-8")) as { metrics?: MetricsDict };
+        if (data.metrics) {
+          updateMetrics(service, data.metrics, null, DataSource.CACHE);
+        }
+      } catch {
+        // Cache read is best-effort
+      }
+    }
+  }
+
   async function startup() {
+    // Show stale cached data on frame 1, before any async chain/credential work
+    loadCachedData();
+
     try {
       store = new UsageStore();
+      // Clean up rows older than 30 days to prevent unbounded table growth
+      try { store.cleanupOldSnapshots(); } catch {}
     } catch {
       // Database not critical
     }
@@ -157,22 +191,27 @@ export function App(props: AppProps = {}) {
       setActivePanel("codex");
     }
 
-    for (const [chain, service] of [
-      [claudeChain, "claude"],
-      [codexChain, "codex"],
-    ] as const) {
-      try {
-        const result = await (chain as PersistentFallbackChain).start();
-        const metrics = result.metrics as MetricsDict | null;
-        updateMetrics(service, metrics, result.error, result.source);
+    // Start both chains concurrently instead of sequentially
+    await Promise.all(
+      ([
+        [claudeChain, "claude"],
+        [codexChain, "codex"],
+      ] as const)
+        .filter(([chain]) => chain !== null)
+        .map(async ([chain, service]) => {
+          try {
+            const result = await (chain as PersistentFallbackChain).start();
+            const metrics = result.metrics as MetricsDict | null;
+            updateMetrics(service, metrics, result.error, result.source);
 
-        if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
-          store.storeSnapshot(service, metrics, result.source);
-        }
-      } catch (err) {
-        updateMetrics(service, null, String(err), DataSource.FALLBACK);
-      }
-    }
+            if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
+              store.storeSnapshot(service, metrics, result.source);
+            }
+          } catch (err) {
+            updateMetrics(service, null, String(err), DataSource.FALLBACK);
+          }
+        })
+    );
 
     setLastUpdated(new Date().toLocaleTimeString());
     autoRefresh.startTimer();
@@ -189,16 +228,19 @@ export function App(props: AppProps = {}) {
   }
 
   let clockTimer: ReturnType<typeof setInterval> | null = null;
+  let tickTimer: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
     clockTimer = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString());
     }, 1000);
+    tickTimer = setInterval(() => setTick((t) => t + 1), 30_000);
     startup();
   });
 
   onCleanup(() => {
     if (clockTimer) clearInterval(clockTimer);
+    if (tickTimer) clearInterval(tickTimer);
     cleanup();
   });
 
@@ -225,6 +267,7 @@ export function App(props: AppProps = {}) {
               selectedIndex={activePanel() === "claude" ? selectedMetricIndex() : -1}
               panelNumber={1}
               panelCount={visiblePanelCount()}
+              tick={tick()}
             />
           </box>
           <box width="60%">
@@ -256,6 +299,7 @@ export function App(props: AppProps = {}) {
               selectedIndex={activePanel() === "codex" ? selectedMetricIndex() : -1}
               panelNumber={2}
               panelCount={visiblePanelCount()}
+              tick={tick()}
             />
           </box>
           <box width="60%">

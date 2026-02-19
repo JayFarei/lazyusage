@@ -15,23 +15,31 @@ packages/
   e2e/    - E2E tests via tmux (resolution, soak, visual equivalency)
 tests/
   tui/    - Unit/snapshot tests for hooks and components (Bun test)
-  core/   - Unit tests for parsers and aggregators
+  core/   - Unit tests for parsers, chain, token refresh
 examples/
-  agent_integration.ts - Example: capacity check before spawning sub-agents
+  SKILL.md               - Agent skill: capacity management scenarios
+  agent_integration.ts   - Full agentic capacity loop (TypeScript)
+  agent_integration.sh   - Full agentic capacity loop (bash)
+scripts/
+  build.ts - Pre-bundle CLI for fast cold starts
 ```
 
 ## Running the CLI
 
 ```bash
-# Interactive TUI (default)
-bun run usage
+# Build first (one-time, for fast startup)
+bun run build
 
-# Single-service TUI
+# Interactive TUI (default, runs from dist/)
+bun run usage
 bun run usage claude
 bun run usage codex
 
+# Development mode (no build, uses Babel transform)
+bun run usage:dev
+
 # Text snapshot
-bun run usage --text
+bun run usage:dev --text
 
 # JSON snapshot
 bun run usage --json
@@ -40,14 +48,14 @@ bun run usage --json
 bun run usage --json --live
 
 # HTTP server
-bun run usage --serve --port 3000
+bun run usage:dev --serve --port 3000
 ```
 
 ## Running Tests
 
 ```bash
-# Core + hook unit tests
-bun test tests/
+# Core unit tests (parsers, chain, token refresh)
+bun test tests/core/
 
 # TUI component tests (requires OpenTUI preload)
 bun run test:tui
@@ -69,18 +77,20 @@ bun run capture-golden
 
 ### Data Flow
 
-1. `PersistentFallbackChain` (core): API -> PTY -> cache -> fallback zeros
-2. `UsageStore` (core): SQLite snapshot storage for history
-3. `useLedgerData` (cli/tui): Reads JSONL files to build per-project usage ledger
-4. `useMetrics` (cli/tui): Reactive signals for live metric state
+1. `PersistentFallbackChain` (core): API -> token refresh -> PTY -> cache -> fallback zeros
+2. `ClaudeCredentialStore` (core): OAuth token refresh with Keychain + file persistence
+3. `UsageStore` (core): SQLite snapshot storage for history (30-day auto-cleanup)
+4. `useLedgerData` (cli/tui): Reads JSONL files to build per-project usage ledger
+5. `useMetrics` (cli/tui): Reactive signals for live metric state
 
 ### TUI Layout (OpenTUI/SolidJS)
 
 - 2x2 grid: Claude row (bars left, stats right) + Codex row (bars left, stats right)
-- `ServicePanel`: horizontal bar chart with time markers
+- `ServicePanel`: horizontal bar chart with time markers (shared 30s tick)
 - `StatsPanel`: tabbed stats panel (Daily / Weekly / Monthly ledger)
 - `StatusBar`: data source, refresh interval, last updated time
 - `HelpOverlay`: keyboard shortcut reference
+- Startup: loads cached data for instant frame-1, then fetches live data concurrently
 
 ### Bar Width Calculation
 
@@ -104,6 +114,7 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 2. **New TUI components**: add to `packages/cli/src/tui/components/`, create snapshot test in `tests/tui/components/`
 3. **New keybindings**: update `packages/cli/src/tui/hooks/useKeybindings.ts`
 4. **E2E golden masters**: run `bun run capture-golden` after layout changes to update baselines
+5. **After layout/component changes**: run `bun run build` to update the dist bundle
 
 ## Dependencies
 
@@ -113,3 +124,6 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 - `commander` - CLI argument parsing
 - `better-sqlite3` - Snapshot storage
 - `tmux` - Required for E2E tests only
+
+# currentDate
+Today's date is 2026-02-19.

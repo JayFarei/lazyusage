@@ -16,5 +16,11 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Python (legacy)
+venv/
+__pycache__/
+*.egg-info/
+*.pyc
+
 # Scratch / temp files
 *.html

@@ -8,6 +8,7 @@
  * 30s throttled refresh, independent of rate-limit polling.
  */
 import { createSignal, type Accessor } from "solid-js";
+import { existsSync } from "fs";
 import type { ProjectUsage } from "@usage-tui/core/parsers/types";
 
 export interface LedgerHook {
@@ -39,7 +40,12 @@ interface LedgerResult {
 const THROTTLE_MS = 30_000;
 const WORKER_TIMEOUT_MS = 60_000;
 
-const WORKER_PATH = new URL("../lib/ledger-worker.ts", import.meta.url).pathname;
+// In dev mode, import.meta.url points to this .ts source file.
+// In bundled mode, import.meta.url points to dist/cli.js and the pre-built
+// dist/ledger-worker.js lives alongside it.
+const _workerJs = new URL("./ledger-worker.js", import.meta.url).pathname;
+const _workerTs = new URL("../lib/ledger-worker.ts", import.meta.url).pathname;
+const WORKER_PATH = existsSync(_workerJs) ? _workerJs : _workerTs;
 
 const activeProcs = new Set<{ kill(): void }>();
 
@@ -71,7 +77,10 @@ export function useLedgerData(): LedgerHook {
         stdin: "ignore",
       });
       activeProcs.add(proc);
-      const timeout = setTimeout(() => proc.kill(), WORKER_TIMEOUT_MS);
+      const timeout = setTimeout(() => {
+        proc.kill();
+        activeProcs.delete(proc);
+      }, WORKER_TIMEOUT_MS);
       const stdout = await new Response(proc.stdout).text();
       const exitCode = await proc.exited;
       clearTimeout(timeout);

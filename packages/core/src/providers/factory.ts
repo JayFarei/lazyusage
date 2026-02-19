@@ -12,13 +12,15 @@ import {
   CodexPTYProvider,
   CodexPersistentPTYProvider,
 } from "./pty.js";
+import { ClaudeCredentialStore } from "./credentials.js";
 
 /** Create Claude provider fallback chain */
 export function createClaudeChain(persistent: boolean = false): FallbackChain | PersistentFallbackChain {
   if (persistent) {
-    const apiProvider = new ClaudeAPIProvider();
+    const credStore = new ClaudeCredentialStore();
+    const apiProvider = new ClaudeAPIProvider(credStore);
     const ptyProvider = new ClaudePersistentPTYProvider();
-    return new PersistentFallbackChain("claude", apiProvider, ptyProvider);
+    return new PersistentFallbackChain("claude", apiProvider, ptyProvider, credStore);
   }
   const providers = [new ClaudeAPIProvider(), new ClaudePTYProvider()];
   return new FallbackChain("claude", providers);

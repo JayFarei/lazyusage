@@ -14,7 +14,11 @@ export class ClaudeAPIProvider implements UsageProvider {
   name = "ClaudeAPIProvider";
   sourceType = DataSource.API;
 
-  private _credentialsStore = new ClaudeCredentialStore();
+  private _credentialsStore: ClaudeCredentialStore;
+
+  constructor(credentialsStore?: ClaudeCredentialStore) {
+    this._credentialsStore = credentialsStore ?? new ClaudeCredentialStore();
+  }
 
   isAvailable(): boolean {
     return this._credentialsStore.isAvailable();
