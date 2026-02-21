@@ -70,8 +70,8 @@ export { ClaudeEphemeralCollector, ClaudePersistentCollector } from "./collector
 export { CodexEphemeralCollector, CodexPersistentCollector } from "./collectors/codex.js";
 
 // Formatters
-export { formatClaudeText, formatCodexText, formatAllText, formatWithAvailability } from "./formatters/text.js";
-export { formatJson, formatAllJson, formatCombinedJson } from "./formatters/json.js";
+export { formatClaudeText, formatCodexText, formatAllText, formatWithAvailability, formatClaudeCapacityText, formatCodexCapacityText, formatCapacityWithAvailability } from "./formatters/text.js";
+export { formatJson, formatAllJson, formatCombinedJson, formatCombinedCapacityJson } from "./formatters/json.js";
 
 // Credentials
 export { ClaudeCredentialStore, CodexCredentialStore } from "./providers/credentials.js";

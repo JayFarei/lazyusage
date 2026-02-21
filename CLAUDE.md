@@ -38,10 +38,19 @@ bun run lazyusage codex
 # Development mode (no build, uses Babel transform)
 bun run lazyusage:dev
 
-# Text snapshot
+# Text snapshot (all fields, single line per service)
+# Format: "Session: 17% allowance used, 42% time elapsed, 25% capacity remaining (resets 4:00pm) | ..."
 bun run lazyusage:dev --text
 
-# JSON snapshot
+# Capacity-only snapshot (most compact agent output)
+# Format: "Session: +25% | Weekly: +18% | Sonnet: +22% [Subscription: max]"
+# capacity remaining = time elapsed % - allowance used % (positive = ahead of pace)
+bun run lazyusage:dev --capacity
+bun run lazyusage:dev claude --capacity        # single service
+bun run lazyusage:dev --capacity --json        # JSON, capacity_remaining only
+bun run lazyusage:dev --capacity --json --live # NDJSON stream, capacity only
+
+# JSON snapshot (structured, all fields including time_elapsed_pct and capacity_remaining)
 bun run lazyusage --json
 
 # Continuous NDJSON stream

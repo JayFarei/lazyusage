@@ -8,6 +8,10 @@ import {
   formatCodexText,
   formatCombinedJson,
   formatWithAvailability,
+  formatClaudeCapacityText,
+  formatCodexCapacityText,
+  formatCapacityWithAvailability,
+  formatCombinedCapacityJson,
 } from "@lazyusage/core";
 import { detectAvailableServices, validateService, collectMetrics } from "./usage-check.js";
 
@@ -19,6 +23,7 @@ Human Options:
 Agent Options:
   --text              Text output, single refresh
   --json              JSON output instead of TUI
+  --capacity          Filter output to capacity_remaining only (use with --text or --json)
   --debug             Show debug information
 
 Software Integration:
@@ -29,12 +34,16 @@ Other:
   -h, --help          display help for command
 
 Modes:
-  usage                      Launch TUI (default)
-  usage --text               Quick text snapshot
-  usage --json               Single JSON snapshot to stdout
-  usage --json --live        Continuous NDJSON stream to stdout
-  usage --serve              Start HTTP server on port 8080
-  usage --serve --port 3000  Server on custom port`;
+  usage                               Launch TUI (default)
+  usage --text                        Quick text snapshot
+  usage --json                        Single JSON snapshot to stdout
+  usage --json --live                 Continuous NDJSON stream to stdout
+  usage --capacity                    Capacity-only text (most compact)
+  usage --capacity --text             Same as --capacity alone
+  usage --capacity --json             Capacity-only JSON snapshot
+  usage --capacity --json --live      Capacity-only NDJSON stream
+  usage --serve                       Start HTTP server on port 8080
+  usage --serve --port 3000           Server on custom port`;
 
 export const usageCommand = new Command("usage")
   .description("Interactive TUI or continuous monitoring")
@@ -42,6 +51,7 @@ export const usageCommand = new Command("usage")
   .option("--live", "Enable continuous updates (TUI mode by default)")
   .option("--json", "JSON output instead of TUI")
   .option("--text", "Text output, single refresh")
+  .option("--capacity", "Filter output to capacity_remaining only (use with --text or --json)")
   .option("--refresh <seconds>", "Refresh interval in seconds (default: 10, min: 5)", "10")
   .option("--debug", "Show debug information")
   .option("--serve", "Start HTTP server (polling + streaming endpoints)")
@@ -65,6 +75,7 @@ export const usageCommand = new Command("usage")
       live?: boolean;
       json?: boolean;
       text?: boolean;
+      capacity?: boolean;
       refresh?: string;
       debug?: boolean;
       serve?: boolean;
@@ -91,6 +102,10 @@ export const usageCommand = new Command("usage")
       console.error("Error: --serve and --json are mutually exclusive (server already outputs JSON).");
       process.exit(1);
     }
+    if (opts.serve && opts.capacity) {
+      console.error("Error: --serve and --capacity are mutually exclusive.");
+      process.exit(1);
+    }
     if (opts.port !== "8080" && !opts.serve) {
       console.error("Error: --port requires --serve.");
       process.exit(1);
@@ -100,6 +115,53 @@ export const usageCommand = new Command("usage")
     if (opts.serve) {
       const { startServer } = await import("../server/index.js");
       startServer({ services, port, refreshInterval: refresh, debug });
+      return;
+    }
+
+    // --capacity --json --live: capacity NDJSON stream
+    if (opts.capacity && opts.json && opts.live) {
+      const abortController = new AbortController();
+      process.on("SIGINT", () => abortController.abort());
+
+      while (!abortController.signal.aborted) {
+        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug, false);
+        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available);
+        console.log(JSON.stringify(JSON.parse(output)));
+        await Bun.sleep(refresh * 1000);
+      }
+      return;
+    }
+
+    // --capacity --json: capacity JSON snapshot
+    if (opts.capacity && opts.json) {
+      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available));
+      return;
+    }
+
+    // --capacity (with or without --text): capacity text - most compact agent output
+    if (opts.capacity) {
+      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+
+      let output: string;
+      if (services.length === 1) {
+        if (services.includes("claude") && claudeMetrics) {
+          output = formatClaudeCapacityText(claudeMetrics);
+        } else if (codexMetrics) {
+          output = formatCodexCapacityText(codexMetrics);
+        } else {
+          output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
+        }
+      } else {
+        output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
+      }
+
+      console.log(output);
+
+      if (debug) {
+        const elapsed = (performance.now() - startTime) / 1000;
+        console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+      }
       return;
     }
 

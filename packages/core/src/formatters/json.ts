@@ -4,6 +4,80 @@
  */
 
 import type { MetricsDict } from "../types.js";
+import { calculateTimeProgress } from "../utils/time.js";
+
+const WINDOW_HOURS: Record<string, number> = {
+  session: 5,
+  week_all: 168,
+  week_sonnet: 168,
+  "5h": 5,
+  weekly: 168,
+};
+
+function enrichMetric(name: string, metric: { used_pct: number; remaining_pct: number; resets: string }): Record<string, unknown> {
+  const windowHours = WINDOW_HOURS[name] ?? 168;
+  const timeElapsedPct = Math.round(calculateTimeProgress(metric.resets, windowHours));
+  const capacityRemaining = timeElapsedPct - metric.used_pct;
+  return {
+    name,
+    used_pct: metric.used_pct,
+    remaining_pct: metric.remaining_pct,
+    time_elapsed_pct: timeElapsedPct,
+    capacity_remaining: capacityRemaining,
+    resets: metric.resets,
+  };
+}
+
+function capacityOnlyMetric(name: string, metric: { used_pct: number; resets: string }): Record<string, unknown> {
+  const windowHours = WINDOW_HOURS[name] ?? 168;
+  const timeElapsedPct = Math.round(calculateTimeProgress(metric.resets, windowHours));
+  return { name, capacity_remaining: timeElapsedPct - metric.used_pct };
+}
+
+/** Format combined metrics with only capacity_remaining per metric */
+export function formatCombinedCapacityJson(
+  claudeMetrics: MetricsDict | null,
+  codexMetrics: MetricsDict | null,
+  availableServices: string[],
+): string {
+  const output: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    available_services: availableServices,
+    services: [] as Array<Record<string, unknown>>,
+  };
+
+  const servicesList = output.services as Array<Record<string, unknown>>;
+
+  const claudeService: Record<string, unknown> = {
+    name: "claude",
+    available: availableServices.includes("claude"),
+    metrics: [] as Array<Record<string, unknown>>,
+  };
+  if (claudeMetrics) {
+    for (const [name, data] of Object.entries(claudeMetrics)) {
+      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
+      const metric = data as { used_pct: number; resets: string };
+      (claudeService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
+    }
+  }
+  servicesList.push(claudeService);
+
+  const codexService: Record<string, unknown> = {
+    name: "codex",
+    available: availableServices.includes("codex"),
+    metrics: [] as Array<Record<string, unknown>>,
+  };
+  if (codexMetrics) {
+    for (const [name, data] of Object.entries(codexMetrics)) {
+      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
+      const metric = data as { used_pct: number; resets: string };
+      (codexService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
+    }
+  }
+  servicesList.push(codexService);
+
+  return JSON.stringify(output, null, 2);
+}
 
 /** Format single service metrics as JSON string */
 export function formatJson(service: string, metrics: MetricsDict): string {
@@ -19,12 +93,7 @@ export function formatJson(service: string, metrics: MetricsDict): string {
       continue;
     }
     const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    (output.metrics as Array<Record<string, unknown>>).push({
-      name,
-      used_pct: metric.used_pct,
-      remaining_pct: metric.remaining_pct,
-      resets: metric.resets,
-    });
+    (output.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
   }
 
   return JSON.stringify(output, null, 2);
@@ -51,23 +120,13 @@ export function formatAllJson(claudeMetrics: MetricsDict, codexMetrics: MetricsD
   for (const [name, data] of Object.entries(claudeMetrics)) {
     if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
     const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    services.claude.metrics.push({
-      name,
-      used_pct: metric.used_pct,
-      remaining_pct: metric.remaining_pct,
-      resets: metric.resets,
-    });
+    services.claude.metrics.push(enrichMetric(name, metric));
   }
 
   for (const [name, data] of Object.entries(codexMetrics)) {
     if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
     const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    services.codex.metrics.push({
-      name,
-      used_pct: metric.used_pct,
-      remaining_pct: metric.remaining_pct,
-      resets: metric.resets,
-    });
+    services.codex.metrics.push(enrichMetric(name, metric));
   }
 
   return JSON.stringify(output, null, 2);
@@ -99,12 +158,7 @@ export function formatCombinedJson(
     for (const [name, data] of Object.entries(claudeMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
       const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-      (claudeService.metrics as Array<Record<string, unknown>>).push({
-        name,
-        used_pct: metric.used_pct,
-        remaining_pct: metric.remaining_pct,
-        resets: metric.resets,
-      });
+      (claudeService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
     }
   }
   servicesList.push(claudeService);
@@ -121,12 +175,7 @@ export function formatCombinedJson(
     for (const [name, data] of Object.entries(codexMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
       const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-      (codexService.metrics as Array<Record<string, unknown>>).push({
-        name,
-        used_pct: metric.used_pct,
-        remaining_pct: metric.remaining_pct,
-        resets: metric.resets,
-      });
+      (codexService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
     }
   }
   servicesList.push(codexService);

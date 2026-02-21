@@ -18,12 +18,54 @@ Check rate-limit capacity and take intelligent action to avoid hitting limits.
 ## Fetching capacity
 
 ```bash
-bun run lazyusage claude --json       # single service snapshot
-bun run lazyusage --json              # all services
-bun run lazyusage-check claude --json # lightweight, no TUI
+# Most compact: capacity delta only, ideal for a quick agent check
+bun run lazyusage claude --capacity        # single service, text
+bun run lazyusage --capacity               # all services, text
+bun run lazyusage claude --capacity --json # single service, JSON
+bun run lazyusage --capacity --json        # all services, JSON
+bun run lazyusage --capacity --json --live # continuous NDJSON stream
+
+# Full text: all fields in one line per service
+bun run lazyusage claude --text
+bun run lazyusage --text
+
+# Full structured data: all fields, machine-readable
+bun run lazyusage claude --json
+bun run lazyusage --json
+bun run lazyusage-check claude --json      # lightweight, no TUI
 ```
 
-Returns:
+**Use `--capacity`** for the most token-efficient check - returns only the headroom delta, nothing else.
+**Use `--text`** when you need full context (allowance used, time elapsed, reset time) but still want a single readable line.
+**Use `--json`** when you need to act on specific fields programmatically.
+
+`--capacity` text example:
+```
+Claude: Session: +25% | Weekly: +18% | Sonnet: +22% [Subscription: Max]
+Codex: 5h: 0% | Weekly: +47% [Subscription: Plus]
+```
+
+`--capacity --json` returns:
+```json
+{
+  "services": [{
+    "name": "claude",
+    "available": true,
+    "metrics": [
+      { "name": "session",     "capacity_remaining": 25 },
+      { "name": "week_all",    "capacity_remaining": 18 },
+      { "name": "week_sonnet", "capacity_remaining": 22 }
+    ]
+  }]
+}
+```
+
+`--text` example output:
+```
+Session: 17% allowance used, 42% time elapsed, 25% capacity remaining (resets 4:00pm) | Weekly: 25% allowance used, 60% time elapsed, 35% capacity remaining (resets Feb 25 at 10:00am) | Sonnet: 22% allowance used, 60% time elapsed, 38% capacity remaining (resets Feb 25 at 10:00am) [Subscription: Max]
+```
+
+`--json` returns:
 
 ```json
 {
@@ -31,15 +73,21 @@ Returns:
     "name": "claude",
     "available": true,
     "metrics": [
-      { "name": "session",     "remaining_pct": 74, "resets": "9:00pm" },
-      { "name": "week_all",    "remaining_pct": 81, "resets": "Feb 25 at 11:00am" },
-      { "name": "week_sonnet", "remaining_pct": 82, "resets": "Feb 25 at 11:00am" }
+      { "name": "session",     "used_pct": 17, "remaining_pct": 83, "time_elapsed_pct": 42, "capacity_remaining": 25, "resets": "9:00pm" },
+      { "name": "week_all",    "used_pct": 25, "remaining_pct": 75, "time_elapsed_pct": 60, "capacity_remaining": 35, "resets": "Feb 25 at 11:00am" },
+      { "name": "week_sonnet", "used_pct": 22, "remaining_pct": 78, "time_elapsed_pct": 60, "capacity_remaining": 38, "resets": "Feb 25 at 11:00am" }
     ]
   }]
 }
 ```
 
-Act on `remaining_pct`. The `resets` field tells you when the window clears.
+Key fields:
+- `remaining_pct` - raw allowance left in this window (100 - used_pct)
+- `time_elapsed_pct` - how far through the window you are (e.g., 42% of a 5h session has passed)
+- `capacity_remaining` - `time_elapsed_pct - used_pct`; positive means ahead of pace, negative means burning faster than expected
+- `resets` - when the window clears
+
+Act on `remaining_pct` for hard limits. Use `capacity_remaining` to detect burn-rate trends.
 
 | Service | Metric | Window |
 |---------|--------|--------|
@@ -73,12 +121,25 @@ const tightest = metrics.reduce((a, b) =>
 if (tightest.remaining_pct < 20) {
   // defer, reduce scope, or sleep
 }
+
+// Also check burn rate: if capacity_remaining < -20, you're consuming 20%+ faster than pace
+const overPace = metrics.filter(m => m.capacity_remaining < -20);
+if (overPace.length > 0) {
+  // Consider throttling even if remaining_pct looks OK
+}
 ```
 
 ```bash
 # One-liner: exit 1 if any metric below 20%
 bun run lazyusage-check claude --json | jq -e \
   '.services[0].metrics | all(.remaining_pct >= 20)' > /dev/null
+
+# Most compact check - capacity delta only
+bun run lazyusage claude --capacity
+
+# Capacity JSON for programmatic burn-rate check
+bun run lazyusage claude --capacity --json | jq -e \
+  '.services[0].metrics | all(.capacity_remaining >= 0)' > /dev/null
 ```
 
 ## Scenario 2: Adaptive throttling

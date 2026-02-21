@@ -63,8 +63,30 @@ bun run lazyusage:dev
 ### Text snapshot
 
 ```bash
-bun run lazyusage:dev --text            # Both services
-bun run lazyusage:dev claude --text     # Claude only
+bun run lazyusage --text                # Both services
+bun run lazyusage claude --text         # Claude only
+```
+
+Example:
+```
+Claude: Session: 17% allowance used, 42% time elapsed, 25% capacity remaining (resets 4:00pm) | Weekly: 25% allowance used, 60% time elapsed, 35% capacity remaining (resets Feb 25 at 10:00am) | Sonnet: 22% allowance used, 60% time elapsed, 38% capacity remaining (resets Feb 25 at 10:00am) [Subscription: Max]
+```
+
+### Capacity snapshot
+
+Most compact output. Filters to `capacity_remaining` only (`time elapsed % - allowance used %`). Positive = ahead of pace, negative = burning faster than expected.
+
+```bash
+bun run lazyusage --capacity            # Both services, text
+bun run lazyusage claude --capacity     # Claude only, text
+bun run lazyusage --capacity --json     # Both services, JSON
+bun run lazyusage --capacity --json --live  # Continuous NDJSON stream
+```
+
+Example:
+```
+Claude: Session: +25% | Weekly: +18% | Sonnet: +22% [Subscription: Max]
+Codex: 5h: 0% | Weekly: +47% [Subscription: Plus]
 ```
 
 ### JSON output (agent use)
@@ -139,9 +161,9 @@ bun run lazyusage-check --debug     # Show timing and data source
       "available": true,
       "subscription_type": "max",
       "metrics": [
-        { "name": "session",     "used_pct": 26, "remaining_pct": 74, "resets": "9:00pm" },
-        { "name": "week_all",    "used_pct": 19, "remaining_pct": 81, "resets": "Feb 25 at 11:00am" },
-        { "name": "week_sonnet", "used_pct": 18, "remaining_pct": 82, "resets": "Feb 25 at 11:00am" }
+        { "name": "session",     "used_pct": 26, "remaining_pct": 74, "time_elapsed_pct": 61, "capacity_remaining": 35, "resets": "9:00pm" },
+        { "name": "week_all",    "used_pct": 19, "remaining_pct": 81, "time_elapsed_pct": 45, "capacity_remaining": 26, "resets": "Feb 25 at 11:00am" },
+        { "name": "week_sonnet", "used_pct": 18, "remaining_pct": 82, "time_elapsed_pct": 45, "capacity_remaining": 27, "resets": "Feb 25 at 11:00am" }
       ]
     },
     {
@@ -149,13 +171,21 @@ bun run lazyusage-check --debug     # Show timing and data source
       "available": true,
       "subscription_type": "Plus",
       "metrics": [
-        { "name": "5h",     "used_pct": 6,  "remaining_pct": 94, "resets": "11:18pm" },
-        { "name": "weekly", "used_pct": 14, "remaining_pct": 86, "resets": "Feb 23 at 9:59pm" }
+        { "name": "5h",     "used_pct": 6,  "remaining_pct": 94, "time_elapsed_pct": 12, "capacity_remaining": 6,  "resets": "11:18pm" },
+        { "name": "weekly", "used_pct": 14, "remaining_pct": 86, "time_elapsed_pct": 67, "capacity_remaining": 53, "resets": "Feb 23 at 9:59pm" }
       ]
     }
   ]
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `used_pct` | Allowance consumed this window |
+| `remaining_pct` | Raw allowance left (100 - used_pct) |
+| `time_elapsed_pct` | How far through the window you are (session = 5h, weekly = 168h) |
+| `capacity_remaining` | `time_elapsed_pct - used_pct`; positive = ahead of pace, negative = burning faster than expected |
+| `resets` | When this window clears |
 
 ## Agent integration
 
@@ -211,7 +241,6 @@ lazyusage/
 │       └── README.md          # Quick start
 ├── scripts/
 │   └── build.ts               # Pre-bundle CLI for fast cold starts
-├── SKILL.md                   # Agent guide: capacity strategies
 ├── CLAUDE.md                  # Codebase guidance for Claude Code
 ├── package.json               # Bun workspace root + scripts
 └── tsconfig.json
