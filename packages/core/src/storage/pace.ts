@@ -36,7 +36,7 @@ export function buildPaceData(
     if (ts < weekAgo) continue;
 
     const usedPct = entry.used_pct;
-    if (usedPct === undefined && usedPct !== 0) continue;
+    if (usedPct === undefined) continue;
 
     const hourFloor = Math.floor(ts / 3600_000) * 3600_000;
     const existing = points.get(hourFloor) ?? { sum: 0, count: 0 };

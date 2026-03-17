@@ -14,3 +14,22 @@ export const RATE_LIMIT_DEFAULT_SECONDS = 60;
 
 /** TUI tick interval in milliseconds (30 seconds) */
 export const TICK_INTERVAL_MS = 30_000;
+
+/** Human-readable labels for DataSource enum values */
+export const DATA_SOURCE_LABELS: Record<string, string> = {
+  api: "API",
+  pty: "Terminal",
+  cache: "Cached",
+  fallback: "Offline",
+};
+
+/** Codex plan type display names (shared by API and session providers) */
+export const CODEX_PLAN_TYPE_MAP: Record<string, string> = {
+  plus: "Plus",
+  pro: "Pro",
+  free: "Free",
+  go: "Go",
+  team: "Team",
+  business: "Business",
+  enterprise: "Enterprise",
+};

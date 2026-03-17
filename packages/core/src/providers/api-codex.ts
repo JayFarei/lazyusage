@@ -7,17 +7,7 @@ import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 import { CodexCredentialStore } from "./credentials.js";
 import { formatResetFromIso } from "../utils/time.js";
-import { API_TIMEOUT_MS } from "../constants.js";
-
-const PLAN_TYPE_MAP: Record<string, string> = {
-  plus: "Plus",
-  pro: "Pro",
-  free: "Free",
-  go: "Go",
-  team: "Team",
-  business: "Business",
-  enterprise: "Enterprise",
-};
+import { API_TIMEOUT_MS, CODEX_PLAN_TYPE_MAP } from "../constants.js";
 
 export class CodexAPIProvider implements UsageProvider {
   static readonly API_URL = "https://chatgpt.com/backend-api/wham/usage";
@@ -112,7 +102,7 @@ export class CodexAPIProvider implements UsageProvider {
     const weeklyUsed = getPercent(secondary);
 
     return {
-      subscription_type: PLAN_TYPE_MAP[plan] ?? plan,
+      subscription_type: CODEX_PLAN_TYPE_MAP[plan] ?? plan,
       "5h": {
         used_pct: fiveHourUsed,
         remaining_pct: 100 - fiveHourUsed,

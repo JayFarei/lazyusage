@@ -54,7 +54,7 @@ export function formatCodexText(metrics: MetricsDict): string {
 
 function fmtCapacity(label: string, m: MetricEntry, windowHours: number): string {
   const timeElapsed = Math.round(calculateTimeProgress(m.resets, windowHours));
-  const cap = timeElapsed - m.used_pct;
+  const cap = Math.round(timeElapsed - m.used_pct);
   const sign = cap > 0 ? "+" : "";
   return `${label}: ${sign}${cap}%`;
 }

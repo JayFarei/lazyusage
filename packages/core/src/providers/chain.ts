@@ -252,7 +252,7 @@ export class PersistentFallbackChain {
   getSourcePlan(): SourcePlan {
     const planner = new SourcePlanner(
       this.apiProvider,
-      this._ptyStarted || true, // PTY is always potentially available
+      true, // PTY is always potentially available
       true, // Cache is always available
       this.credStore,
     );

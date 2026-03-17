@@ -9,16 +9,7 @@ import { join } from "path";
 import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 import { formatResetFromIso } from "../utils/time.js";
-
-const PLAN_TYPE_MAP: Record<string, string> = {
-  plus: "Plus",
-  pro: "Pro",
-  free: "Free",
-  go: "Go",
-  team: "Team",
-  business: "Business",
-  enterprise: "Enterprise",
-};
+import { CODEX_PLAN_TYPE_MAP } from "../constants.js";
 
 interface RateLimits {
   limit_id?: string;
@@ -183,7 +174,7 @@ export class CodexSessionProvider implements UsageProvider {
     };
 
     return {
-      subscription_type: PLAN_TYPE_MAP[plan] ?? plan,
+      subscription_type: CODEX_PLAN_TYPE_MAP[plan] ?? plan,
       "5h": {
         used_pct: primaryUsed,
         remaining_pct: 100 - primaryUsed,

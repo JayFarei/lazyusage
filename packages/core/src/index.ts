@@ -76,7 +76,7 @@ export { formatClaudeText, formatCodexText, formatWithAvailability, formatClaude
 export { formatJson, formatAllJson, formatCombinedJson, formatCombinedCapacityJson } from "./formatters/json.js";
 
 // Constants
-export { WEEKLY_WINDOW_HOURS, SESSION_WINDOW_HOURS, API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS, TICK_INTERVAL_MS } from "./constants.js";
+export { WEEKLY_WINDOW_HOURS, SESSION_WINDOW_HOURS, API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS, TICK_INTERVAL_MS, DATA_SOURCE_LABELS, CODEX_PLAN_TYPE_MAP } from "./constants.js";
 
 // Credentials
 export { ClaudeCredentialStore, CodexCredentialStore, RefreshFailureGate } from "./providers/credentials.js";

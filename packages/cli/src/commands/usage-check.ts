@@ -142,13 +142,11 @@ export const usageCheckCommand = new Command("usage-check")
   .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
   .option("--text", "Output as text (default)")
   .option("--debug", "Show execution timing and source info")
-  .option("--source <mode>", "Data source preference: auto (default)")
   .action(async (service: string | undefined, opts: {
     json?: boolean;
     jsonOnly?: boolean;
     text?: boolean;
     debug?: boolean;
-    source?: string;
   }) => {
     const jsonOnly = opts.jsonOnly ?? false;
 

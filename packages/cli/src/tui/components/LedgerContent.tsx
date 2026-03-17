@@ -36,7 +36,7 @@ export function LedgerContent(props: LedgerContentProps) {
     }));
   });
 
-  const totals = () => {
+  const totals = createMemo(() => {
     if (!props.data) return { input: 0, output: 0, total: 0 };
     return props.data.reduce(
       (acc, p) => ({
@@ -46,7 +46,7 @@ export function LedgerContent(props: LedgerContentProps) {
       }),
       { input: 0, output: 0, total: 0 },
     );
-  };
+  });
 
   const header = "  " +
     "Project".padEnd(COL_PROJECT) +

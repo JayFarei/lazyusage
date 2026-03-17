@@ -306,7 +306,10 @@ export class ClaudeCredentialStore {
 export class CodexCredentialStore {
   static readonly CREDENTIALS_FILE = join(homedir(), ".codex", "auth.json");
 
+  private static readonly DISK_READ_TTL_MS = 60_000; // Re-read from disk at most once per minute
+
   private _credentials: CodexCredentials | null = null;
+  private _lastDiskReadAt = 0;
 
   getCredentials(): CodexCredentials | null {
     if (this._credentials !== null) {
@@ -316,8 +319,12 @@ export class CodexCredentialStore {
     return this._readFromDisk();
   }
 
-  /** True if a refresh token exists on disk (Codex CLI manages its own refresh) */
+  /** True if a refresh token exists (uses TTL-cached disk read) */
   canRefresh(): boolean {
+    const now = Date.now();
+    if (this._credentials && now - this._lastDiskReadAt < CodexCredentialStore.DISK_READ_TTL_MS) {
+      return (this._credentials.refreshToken?.length ?? 0) > 0;
+    }
     const creds = this._readFromDisk();
     return (creds?.refreshToken?.length ?? 0) > 0;
   }
@@ -359,6 +366,7 @@ export class CodexCredentialStore {
       };
 
       this._credentials = creds;
+      this._lastDiskReadAt = Date.now();
       return creds;
     } catch {
       return null;
