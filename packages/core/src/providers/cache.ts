@@ -5,7 +5,7 @@
 
 import { homedir } from "os";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync } from "fs";
 import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 
@@ -76,6 +76,7 @@ export class UsageCache implements UsageProvider {
     try {
       const data = { timestamp, metrics };
       writeFileSync(this.cacheFile, JSON.stringify(data, null, 2));
+      chmodSync(this.cacheFile, 0o600);
     } catch {
       // Silently fail, cache is best-effort
     }

@@ -2,7 +2,7 @@
  * Maximum-mode overlay for a service: shows ALL metrics with full bars.
  * Triggered by `g` when focused on the service panel.
  */
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show } from "solid-js";
 import { useTerminalDimensions } from "@opentui/solid";
 import { useTheme } from "../theme.js";
 import {
@@ -23,14 +23,13 @@ interface FullscreenMetricViewProps {
   service: "claude" | "codex";
   metricKey: string;
   metrics: MetricsDict | null;
+  tick?: number;
 }
 
 export function FullscreenMetricView(props: FullscreenMetricViewProps) {
   const theme = useTheme();
   const dims = useTerminalDimensions();
-  const [tick, setTick] = createSignal(0);
-  const tickInterval = setInterval(() => setTick((t) => t + 1), 30_000);
-  onCleanup(() => clearInterval(tickInterval));
+  const tick = () => props.tick ?? 0;
 
   const barWidth = () => {
     const cols = dims().width;

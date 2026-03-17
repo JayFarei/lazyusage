@@ -11,6 +11,8 @@ import {
   createPeriodBar,
   calculateTimeProgress,
   calculateBarWidth,
+  parseTimeToDatetime,
+  formatTimeRemaining,
   type MetricsDict,
   type MetricData,
 } from "@lazyusage/core";
@@ -195,10 +197,15 @@ export function ServicePanel(props: ServicePanelProps) {
                     height={1}
                   />
                 </Show>
-                {/* Reset time */}
+                {/* Reset time with countdown */}
                 <Show when={showResetTime()}>
                   <text
-                    content={`    Resets: ${entry.data.resets}`}
+                    content={(() => {
+                      void props.tick;
+                      const resetDate = parseTimeToDatetime(entry.data.resets);
+                      const remaining = formatTimeRemaining(new Date(), resetDate, windowHrs);
+                      return `    Resets: ${entry.data.resets} (${remaining})`;
+                    })()}
                     fg={theme.subtext}
                     height={1}
                   />

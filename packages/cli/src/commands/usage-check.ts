@@ -8,10 +8,12 @@ import {
   createCodexChain,
   formatClaudeText,
   formatCodexText,
-  formatAllText,
   formatCombinedJson,
   formatWithAvailability,
+  detectWarning,
+  formatWarningStderr,
   UsageStore,
+  ExitCode,
   type MetricsDict,
   type FallbackChain,
   type ServiceName,
@@ -33,7 +35,7 @@ function validateService(
       console.error(
         "Error: No CLI tools found. Please install 'claude' or 'codex' CLI.",
       );
-      process.exit(1);
+      process.exit(ExitCode.BINARY_NOT_FOUND);
     }
     return available;
   }
@@ -45,7 +47,7 @@ function validateService(
       console.error(
         `Error: 'all' requested but ${missing.join(", ")} not available. Only ${available.join(", ")} found.`,
       );
-      process.exit(1);
+      process.exit(ExitCode.BINARY_NOT_FOUND);
     }
     return ["claude", "codex"];
   }
@@ -54,7 +56,7 @@ function validateService(
     console.error(
       `Error: '${service}' CLI not found in PATH. Available: ${available.length > 0 ? available.join(", ") : "none"}`,
     );
-    process.exit(1);
+    process.exit(ExitCode.BINARY_NOT_FOUND);
   }
 
   return [service];
@@ -64,11 +66,12 @@ async function collectMetrics(
   services: string[],
   debug: boolean,
   store: boolean = true,
-): Promise<{ claudeMetrics: MetricsDict | null; codexMetrics: MetricsDict | null }> {
+): Promise<{ claudeMetrics: MetricsDict | null; codexMetrics: MetricsDict | null; sources: Record<string, string> }> {
   let claudeMetrics: MetricsDict | null = null;
   let codexMetrics: MetricsDict | null = null;
   let claudeSource: string | null = null;
   let codexSource: string | null = null;
+  const sources: Record<string, string> = {};
 
   if (services.includes("claude")) {
     if (debug) console.error("Collecting Claude metrics...");
@@ -76,11 +79,14 @@ async function collectMetrics(
     const result = await chain.fetch();
     claudeMetrics = result.metrics as MetricsDict | null;
     claudeSource = result.source;
+    if (claudeSource) sources.claude = claudeSource;
     if (debug) {
       console.error(`  Source: ${result.source}`);
       if (result.stale) console.error("  Warning: Data is stale");
       if (result.error) console.error(`  Error: ${result.error}`);
     }
+    const warning = detectWarning("claude", result);
+    if (warning) console.error(formatWarningStderr(warning));
   }
 
   if (services.includes("codex")) {
@@ -89,18 +95,21 @@ async function collectMetrics(
     const result = await chain.fetch();
     codexMetrics = result.metrics as MetricsDict | null;
     codexSource = result.source;
+    if (codexSource) sources.codex = codexSource;
     if (debug) {
       console.error(`  Source: ${result.source}`);
       if (result.stale) console.error("  Warning: Data is stale");
       if (result.error) console.error(`  Error: ${result.error}`);
     }
+    const warning = detectWarning("codex", result);
+    if (warning) console.error(formatWarningStderr(warning));
   }
 
   if (store) {
     storeSnapshots(claudeMetrics, codexMetrics, claudeSource, codexSource);
   }
 
-  return { claudeMetrics, codexMetrics };
+  return { claudeMetrics, codexMetrics, sources };
 }
 
 function storeSnapshots(
@@ -130,17 +139,54 @@ export const usageCheckCommand = new Command("usage-check")
   .description("Fast point-in-time usage snapshot")
   .argument("[service]", "Service to check: claude, codex, or all")
   .option("--json", "Output as JSON")
+  .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
   .option("--text", "Output as text (default)")
   .option("--debug", "Show execution timing and source info")
-  .action(async (service: string | undefined, opts: { json?: boolean; text?: boolean; debug?: boolean }) => {
+  .option("--source <mode>", "Data source preference: auto (default)")
+  .action(async (service: string | undefined, opts: {
+    json?: boolean;
+    jsonOnly?: boolean;
+    text?: boolean;
+    debug?: boolean;
+    source?: string;
+  }) => {
+    const jsonOnly = opts.jsonOnly ?? false;
+
+    if (jsonOnly) {
+      const origError = console.error;
+      console.error = () => {};
+      try {
+        const startTime = performance.now();
+        const available = detectAvailableServices();
+        const services = validateService(service, available);
+        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, opts.debug ?? false);
+
+        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
+        console.log(output);
+
+        if (opts.debug) {
+          console.error = origError;
+          const elapsed = (performance.now() - startTime) / 1000;
+          console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+        }
+      } catch (e) {
+        console.error = origError;
+        console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        process.exit(ExitCode.FAILURE);
+      } finally {
+        console.error = origError;
+      }
+      return;
+    }
+
     const startTime = performance.now();
     const available = detectAvailableServices();
     const services = validateService(service, available);
-    const { claudeMetrics, codexMetrics } = await collectMetrics(services, opts.debug ?? false);
+    const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, opts.debug ?? false);
 
     let output: string;
     if (opts.json) {
-      output = formatCombinedJson(claudeMetrics, codexMetrics, available);
+      output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
     } else {
       if (services.length === 1) {
         if (services.includes("claude") && claudeMetrics) {

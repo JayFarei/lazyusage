@@ -5,7 +5,7 @@
 import { Database } from "bun:sqlite";
 import { homedir } from "os";
 import { join, dirname } from "path";
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync, chmodSync } from "fs";
 import { parseTimeToDatetime } from "../utils/time.js";
 import type { HistoryEntry, MetricsDict, ServiceName } from "../types.js";
 
@@ -32,10 +32,14 @@ export class UsageStore {
     }
 
     this.db = new Database(resolvedPath);
+    if (resolvedPath !== ":memory:") {
+      try { chmodSync(resolvedPath, 0o600); } catch { /* may not exist yet */ }
+    }
     this.initDatabase();
   }
 
   private initDatabase(): void {
+    this.db.run("PRAGMA journal_mode = WAL");
     this.db.run(`
       CREATE TABLE IF NOT EXISTS usage_snapshots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

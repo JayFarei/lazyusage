@@ -8,17 +8,14 @@ import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict }
 import { ClaudeEphemeralCollector, ClaudePersistentCollector } from "../collectors/claude.js";
 import { CodexEphemeralCollector, CodexPersistentCollector } from "../collectors/codex.js";
 
-/** Check if all metrics have used_pct == 0 (potentially stale data) */
+/** Check if metrics are genuinely missing (null or no metric entries at all) */
 function isLikelyStale(metrics: MetricsDict | null): boolean {
   if (!metrics) return true;
-  return Object.entries(metrics)
-    .filter(([key]) => key !== "subscription_type")
-    .every(([, value]) => {
-      if (typeof value === "object" && value !== null && "used_pct" in value) {
-        return value.used_pct === 0;
-      }
-      return false;
-    });
+  // Check if there are any actual metric entries (not just subscription_type)
+  const metricEntries = Object.entries(metrics).filter(([key]) => key !== "subscription_type");
+  if (metricEntries.length === 0) return true;
+  // All-zero used_pct is legitimate after limit adjustments, not stale
+  return false;
 }
 
 /** Ephemeral PTY-based Claude usage provider */

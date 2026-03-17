@@ -34,10 +34,11 @@ async function collectMetrics(
 export function startServer(options: {
   services: string[];
   port: number;
+  host?: string;
   refreshInterval: number;
   debug: boolean;
 }) {
-  const { services, port, refreshInterval, debug } = options;
+  const { services, port, host = "127.0.0.1", refreshInterval, debug } = options;
 
   const corsHeaders: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,7 @@ export function startServer(options: {
 
   const server = Bun.serve({
     port,
+    hostname: host,
     idleTimeout: 0, // SSE connections must stay open indefinitely
     async fetch(req) {
       const url = new URL(req.url);
@@ -155,11 +157,11 @@ export function startServer(options: {
   });
 
   if (debug) {
-    console.log(`Usage server running on http://localhost:${port}`);
+    console.log(`Usage server running on http://${host}:${port}`);
     console.log(`Available services: ${services.join(", ")}`);
     console.log(`Refresh interval: ${refreshInterval}s`);
   } else {
-    console.log(`Usage server running on http://localhost:${port}`);
+    console.log(`Usage server running on http://${host}:${port}`);
   }
 
   return server;

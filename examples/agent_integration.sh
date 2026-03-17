@@ -18,9 +18,9 @@ check_jq() {
 fetch() {
   local svc="${1:-}"
   if [ -n "$svc" ]; then
-    bun run --cwd "$(dirname "$0")/.." usage:dev "$svc" --json 2>/dev/null
+    bun run --cwd "$(dirname "$0")/.." lazyusage:dev "$svc" --json 2>/dev/null
   else
-    bun run --cwd "$(dirname "$0")/.." usage:dev --json 2>/dev/null
+    bun run --cwd "$(dirname "$0")/.." lazyusage:dev --json 2>/dev/null
   fi
 }
 

@@ -36,7 +36,7 @@ export class ClaudeEphemeralCollector implements EphemeralCollector {
 
       return parseClaudeOutput(combinedOutput);
     } finally {
-      session.cleanup();
+      await session.cleanup();
     }
   }
 }
@@ -81,7 +81,7 @@ export class ClaudePersistentCollector implements PersistentCollector {
   private _hasRealData(metrics: MetricsDict): boolean {
     for (const key of ["session", "week_all", "week_sonnet"]) {
       const entry = metrics[key];
-      if (entry && typeof entry === "object" && "used_pct" in entry && entry.used_pct > 0) {
+      if (entry && typeof entry === "object" && "used_pct" in entry && typeof entry.used_pct === "number") {
         return true;
       }
     }

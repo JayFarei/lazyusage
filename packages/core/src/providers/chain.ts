@@ -7,6 +7,7 @@ import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict } from "../types.js";
 import { UsageCache } from "./cache.js";
 import { calculateFallbackTime } from "../utils/time.js";
+import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 
 /** Minimal interface for token refresh - allows test injection without importing ClaudeCredentialStore */
 export interface TokenRefreshable {
@@ -28,7 +29,9 @@ export class FallbackChain {
   }
 
   async fetch(): Promise<FetchResult> {
-    // Try each provider in order
+    // Try each provider in order (API -> PTY -> etc.)
+    // On failure (including 429), continue to next provider.
+    // ClaudeAPIProvider._rateLimitedUntil handles fast 429 skips internally.
     for (const provider of this.providers) {
       if (!provider.isAvailable()) continue;
 
@@ -65,7 +68,7 @@ export class FallbackChain {
       metrics,
       source: DataSource.FALLBACK,
       timestamp: Date.now() / 1000,
-      error: "All providers failed, using fallback zeros",
+      error: "Unable to fetch usage data",
       stale: false,
     };
   }
@@ -74,17 +77,53 @@ export class FallbackChain {
     if (this.service === "claude") {
       return {
         subscription_type: "Unknown",
-        session: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(5, true) },
-        week_all: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
-        week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
+        session: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
+        week_all: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
+        week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
       };
     }
     // codex
     return {
       subscription_type: "Unknown",
-      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(5, true) },
-      weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
+      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
+      weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
     };
+  }
+}
+
+/** Describes the availability of each data source and the recommended fetch order */
+export interface SourcePlan {
+  sources: Array<{ name: string; type: string; available: boolean }>;
+  recommended: string[];
+}
+
+/** Probes source availability and returns an ordered execution plan */
+export class SourcePlanner {
+  constructor(
+    private apiProvider: UsageProvider | null,
+    private ptyAvailable: boolean,
+    private cacheAvailable: boolean,
+    private credStore?: TokenRefreshable,
+  ) {}
+
+  plan(): SourcePlan {
+    const sources: SourcePlan["sources"] = [];
+
+    const apiAvail = this.apiProvider?.isAvailable() ?? false;
+    sources.push({ name: "api", type: "api", available: apiAvail });
+
+    if (this.credStore?.canRefresh()) {
+      sources.push({ name: "api-refresh", type: "api", available: true });
+    }
+
+    sources.push({ name: "pty", type: "pty", available: this.ptyAvailable });
+    sources.push({ name: "cache", type: "cache", available: this.cacheAvailable });
+
+    const recommended = sources
+      .filter((s) => s.available)
+      .map((s) => s.name);
+
+    return { sources, recommended };
   }
 }
 
@@ -111,8 +150,9 @@ export class PersistentFallbackChain {
     this.cache = new UsageCache(service);
   }
 
-  async start(): Promise<FetchResult> {
-    // Try API first (if available)
+  /** Attempt API fetch, with optional OAuth token refresh on failure */
+  private async _tryApiWithRefresh(): Promise<FetchResult | null> {
+    // Try API first
     if (this.apiProvider !== null && this.apiProvider.isAvailable()) {
       const result = await this.apiProvider.fetch();
       if (result.metrics !== null && result.error === null) {
@@ -122,7 +162,7 @@ export class PersistentFallbackChain {
       }
     }
 
-    // Before falling back to PTY: attempt OAuth token refresh
+    // Attempt OAuth token refresh before falling back
     if (this.credStore?.canRefresh()) {
       const refreshed = await this.credStore.tryRefreshToken();
       if (refreshed && this.apiProvider?.isAvailable()) {
@@ -134,6 +174,13 @@ export class PersistentFallbackChain {
         }
       }
     }
+
+    return null; // API path exhausted
+  }
+
+  async start(): Promise<FetchResult> {
+    const apiResult = await this._tryApiWithRefresh();
+    if (apiResult) return apiResult;
 
     // Fallback to PTY
     const result = await this.ptyProvider.start();
@@ -152,35 +199,14 @@ export class PersistentFallbackChain {
       return cacheResult;
     }
 
-    // Return fallback
     const fallbackResult = this._createFallbackResult();
     this._lastResult = fallbackResult;
     return fallbackResult;
   }
 
   async refresh(): Promise<FetchResult> {
-    // Try API first (if available)
-    if (this.apiProvider !== null && this.apiProvider.isAvailable()) {
-      const result = await this.apiProvider.fetch();
-      if (result.metrics !== null && result.error === null) {
-        this.cache.store(result.metrics, result.timestamp);
-        this._lastResult = result;
-        return result;
-      }
-    }
-
-    // Before falling back to PTY: attempt OAuth token refresh
-    if (this.credStore?.canRefresh()) {
-      const refreshed = await this.credStore.tryRefreshToken();
-      if (refreshed && this.apiProvider?.isAvailable()) {
-        const retryResult = await this.apiProvider!.fetch();
-        if (retryResult.metrics !== null && retryResult.error === null) {
-          this.cache.store(retryResult.metrics, retryResult.timestamp);
-          this._lastResult = retryResult;
-          return retryResult;
-        }
-      }
-    }
+    const apiResult = await this._tryApiWithRefresh();
+    if (apiResult) return apiResult;
 
     // Fallback to PTY refresh
     if (!this._ptyStarted) {
@@ -204,13 +230,9 @@ export class PersistentFallbackChain {
 
     // Return last good result if available
     if (this._lastResult !== null && this._lastResult.metrics !== null) {
-      return {
-        ...this._lastResult,
-        stale: true,
-      };
+      return { ...this._lastResult, stale: true };
     }
 
-    // Return fallback
     const fallbackResult = this._createFallbackResult();
     this._lastResult = fallbackResult;
     return fallbackResult;
@@ -227,13 +249,23 @@ export class PersistentFallbackChain {
     return this._lastResult;
   }
 
+  getSourcePlan(): SourcePlan {
+    const planner = new SourcePlanner(
+      this.apiProvider,
+      this._ptyStarted || true, // PTY is always potentially available
+      true, // Cache is always available
+      this.credStore,
+    );
+    return planner.plan();
+  }
+
   private _createFallbackResult(): FetchResult {
     const metrics = this._createFallbackMetrics();
     return {
       metrics,
       source: DataSource.FALLBACK,
       timestamp: Date.now() / 1000,
-      error: "All providers failed, using fallback zeros",
+      error: "Unable to fetch usage data",
       stale: false,
     };
   }
@@ -242,15 +274,15 @@ export class PersistentFallbackChain {
     if (this.service === "claude") {
       return {
         subscription_type: "Unknown",
-        session: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(5, true) },
-        week_all: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
-        week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
+        session: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
+        week_all: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
+        week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
       };
     }
     return {
       subscription_type: "Unknown",
-      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(5, true) },
-      weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(168, false) },
+      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
+      weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
     };
   }
 }

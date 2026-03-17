@@ -5,8 +5,73 @@
 
 import { homedir } from "os";
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, chmodSync } from "fs";
+import { API_TIMEOUT_MS } from "../constants.js";
 import type { ClaudeCredentials, CodexCredentials } from "../types.js";
+
+/**
+ * Circuit breaker for OAuth token refresh.
+ * Exponential backoff for transient errors (5m base, 6h max).
+ * Terminal blocking for invalid_grant that auto-heals when credentials change on disk.
+ */
+export class RefreshFailureGate {
+  private static readonly BASE_BACKOFF_MS = 5 * 60_000;  // 5 minutes
+  private static readonly MAX_BACKOFF_MS = 6 * 3600_000; // 6 hours
+
+  private _consecutiveFailures = 0;
+  private _blockedUntil = 0;
+  private _terminalError = false;
+  private _lastRefreshTokenHash = "";
+
+  /** Check if a refresh attempt is currently allowed */
+  canAttempt(currentRefreshToken: string): boolean {
+    // Auto-heal: if the refresh token changed on disk, reset the gate
+    const tokenHash = this._hashToken(currentRefreshToken);
+    if (this._lastRefreshTokenHash && tokenHash !== this._lastRefreshTokenHash) {
+      this.reset();
+    }
+    this._lastRefreshTokenHash = tokenHash;
+
+    if (this._terminalError) return false;
+    return Date.now() >= this._blockedUntil;
+  }
+
+  /** Record a successful refresh, resetting all state */
+  recordSuccess(): void {
+    this._consecutiveFailures = 0;
+    this._blockedUntil = 0;
+    this._terminalError = false;
+  }
+
+  /** Record a failed refresh. Terminal errors (invalid_grant) block permanently until credential change. */
+  recordFailure(errorMessage: string): void {
+    if (/invalid_grant/i.test(errorMessage)) {
+      this._terminalError = true;
+      return;
+    }
+
+    this._consecutiveFailures++;
+    const backoff = Math.min(
+      RefreshFailureGate.BASE_BACKOFF_MS * Math.pow(2, this._consecutiveFailures - 1),
+      RefreshFailureGate.MAX_BACKOFF_MS,
+    );
+    this._blockedUntil = Date.now() + backoff;
+  }
+
+  /** Reset the gate (e.g., when credentials change) */
+  reset(): void {
+    this._consecutiveFailures = 0;
+    this._blockedUntil = 0;
+    this._terminalError = false;
+  }
+
+  /** Simple hash for token comparison */
+  private _hashToken(token: string): string {
+    // Use first and last 8 chars as a simple fingerprint
+    if (token.length < 16) return token;
+    return `${token.slice(0, 8)}...${token.slice(-8)}`;
+  }
+}
 
 /** Manages Claude credential discovery from Keychain and file */
 export class ClaudeCredentialStore {
@@ -15,6 +80,7 @@ export class ClaudeCredentialStore {
 
   private _credentials: ClaudeCredentials | null = null;
   private _refreshInProgress = false;
+  private _refreshGate = new RefreshFailureGate();
 
   getCredentials(): ClaudeCredentials | null {
     if (this._credentials !== null) {
@@ -64,6 +130,8 @@ export class ClaudeCredentialStore {
     const creds = this._getStaleCredentials();
     if (!creds?.refreshToken?.startsWith("sk-ant-ort01-")) return false;
 
+    if (!this._refreshGate.canAttempt(creds.refreshToken)) return false;
+
     this._refreshInProgress = true;
     try {
       const resp = await globalThis.fetch(oauthUrl, {
@@ -74,9 +142,13 @@ export class ClaudeCredentialStore {
           refresh_token: creds.refreshToken,
           client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
       });
-      if (!resp.ok) return false;
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => `HTTP ${resp.status}`);
+        this._refreshGate.recordFailure(errorText);
+        return false;
+      }
       const data = await resp.json() as Record<string, unknown>;
       this._credentials = {
         ...creds,
@@ -84,9 +156,13 @@ export class ClaudeCredentialStore {
         refreshToken: data.refresh_token as string,
         expiresAt: Date.now() + ((data.expires_in as number) * 1000),
       };
+      this._refreshGate.recordSuccess();
       this._persistCredentials(this._credentials).catch(() => {});
       return true;
-    } catch { return false; }
+    } catch (e) {
+      this._refreshGate.recordFailure(e instanceof Error ? e.message : "unknown");
+      return false;
+    }
     finally { this._refreshInProgress = false; }
   }
 
@@ -128,6 +204,7 @@ export class ClaudeCredentialStore {
     const envFile = process.env.CLAUDE_CREDENTIALS_FILE;
     if (envFile) {
       await Bun.write(envFile, payload);
+      chmodSync(envFile, 0o600);
       return;
     }
 
@@ -145,6 +222,7 @@ export class ClaudeCredentialStore {
 
     // Fall back to credentials file
     await Bun.write(ClaudeCredentialStore.CREDENTIALS_FILE, payload);
+    chmodSync(ClaudeCredentialStore.CREDENTIALS_FILE, 0o600);
   }
 
   private _getFromKeychain(): ClaudeCredentials | null {
@@ -224,7 +302,7 @@ export class ClaudeCredentialStore {
   }
 }
 
-/** Manages Codex credential discovery from file */
+/** Manages Codex credential discovery from file, with disk-based refresh */
 export class CodexCredentialStore {
   static readonly CREDENTIALS_FILE = join(homedir(), ".codex", "auth.json");
 
@@ -235,6 +313,34 @@ export class CodexCredentialStore {
       return this._credentials;
     }
 
+    return this._readFromDisk();
+  }
+
+  /** True if a refresh token exists on disk (Codex CLI manages its own refresh) */
+  canRefresh(): boolean {
+    const creds = this._readFromDisk();
+    return (creds?.refreshToken?.length ?? 0) > 0;
+  }
+
+  /**
+   * Re-reads credentials from disk. The Codex CLI auto-refreshes tokens
+   * and writes them back to auth.json, so a disk re-read picks up fresh tokens.
+   * Returns true if credentials were successfully refreshed.
+   */
+  async tryRefreshToken(): Promise<boolean> {
+    this._credentials = null; // Clear cache to force disk re-read
+    const creds = this._readFromDisk();
+    return creds !== null && creds.accessToken.length > 0;
+  }
+
+  isAvailable(): boolean {
+    const creds = this.getCredentials();
+    if (creds === null) return false;
+    if (!creds.accessToken || !creds.refreshToken) return false;
+    return true;
+  }
+
+  private _readFromDisk(): CodexCredentials | null {
     try {
       if (!existsSync(CodexCredentialStore.CREDENTIALS_FILE)) {
         return null;
@@ -257,12 +363,5 @@ export class CodexCredentialStore {
     } catch {
       return null;
     }
-  }
-
-  isAvailable(): boolean {
-    const creds = this.getCredentials();
-    if (creds === null) return false;
-    if (!creds.accessToken || !creds.refreshToken) return false;
-    return true;
   }
 }

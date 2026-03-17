@@ -12,23 +12,30 @@ import {
   formatCodexCapacityText,
   formatCapacityWithAvailability,
   formatCombinedCapacityJson,
+  ExitCode,
+  setLogLevel,
+  type LogLevel,
 } from "@lazyusage/core";
 import { detectAvailableServices, validateService, collectMetrics } from "./usage-check.js";
 
 const GROUPED_HELP = `
 Human Options:
-  --live              Enable continuous updates (TUI mode by default)
+  --live              Enable continuous NDJSON stream (use with --json)
   --refresh <seconds> Refresh interval in seconds (default: 10, min: 5)
 
 Agent Options:
   --text              Text output, single refresh
   --json              JSON output instead of TUI
+  --json-only         JSON output with errors as JSON on stdout (machine-safe)
   --capacity          Filter output to capacity_remaining only (use with --text or --json)
   --debug             Show debug information
+  --verbose           Enable verbose output (same as --log-level debug)
+  --log-level <level> Log level: error, warning, info, debug, trace
 
 Software Integration:
   --serve             Start HTTP server (polling + streaming endpoints)
   --port <number>     Server port (default: 8080, requires --serve)
+  --host <address>    Server bind address (default: 127.0.0.1, requires --serve)
 
 Other:
   -h, --help          display help for command
@@ -38,6 +45,7 @@ Modes:
   usage --text                        Quick text snapshot
   usage --json                        Single JSON snapshot to stdout
   usage --json --live                 Continuous NDJSON stream to stdout
+  usage --json-only                   Machine-safe JSON (errors as JSON)
   usage --capacity                    Capacity-only text (most compact)
   usage --capacity --text             Same as --capacity alone
   usage --capacity --json             Capacity-only JSON snapshot
@@ -48,14 +56,18 @@ Modes:
 export const usageCommand = new Command("usage")
   .description("Interactive TUI or continuous monitoring")
   .argument("[service]", "Service to monitor: claude, codex, or all")
-  .option("--live", "Enable continuous updates (TUI mode by default)")
+  .option("--live", "Enable continuous NDJSON stream (use with --json)")
   .option("--json", "JSON output instead of TUI")
+  .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
   .option("--text", "Text output, single refresh")
   .option("--capacity", "Filter output to capacity_remaining only (use with --text or --json)")
   .option("--refresh <seconds>", "Refresh interval in seconds (default: 10, min: 5)", "10")
   .option("--debug", "Show debug information")
+  .option("--verbose", "Enable verbose output (same as --log-level debug)")
+  .option("--log-level <level>", "Log level: error, warning, info, debug, trace")
   .option("--serve", "Start HTTP server (polling + streaming endpoints)")
   .option("--port <number>", "Server port (default: 8080, requires --serve)", "8080")
+  .option("--host <address>", "Server bind address (default: 127.0.0.1, use 0.0.0.0 for all interfaces)", "127.0.0.1")
   .configureHelp({
     formatHelp(cmd, helper) {
       const usage = helper.commandUsage(cmd);
@@ -74,68 +86,116 @@ export const usageCommand = new Command("usage")
     opts: {
       live?: boolean;
       json?: boolean;
+      jsonOnly?: boolean;
       text?: boolean;
       capacity?: boolean;
       refresh?: string;
       debug?: boolean;
+      verbose?: boolean;
+      logLevel?: string;
       serve?: boolean;
       port?: string;
+      host?: string;
     },
   ) => {
+    // Configure logging
+    if (opts.logLevel) {
+      setLogLevel(opts.logLevel as LogLevel);
+    } else if (opts.verbose || opts.debug) {
+      setLogLevel("debug");
+    }
+
+    const jsonOnly = opts.jsonOnly ?? false;
+
+    // When jsonOnly is set, suppress stderr and wrap in try-catch
+    if (jsonOnly) {
+      const origError = console.error;
+      console.error = () => {};
+      try {
+        const available = detectAvailableServices();
+        const services = validateService(service, available);
+        const debug = opts.debug ?? false;
+
+        // --json-only with --capacity
+        if (opts.capacity) {
+          const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
+          console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources));
+          return;
+        }
+
+        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
+        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources));
+      } catch (e) {
+        console.error = origError;
+        console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        process.exit(ExitCode.FAILURE);
+      } finally {
+        console.error = origError;
+      }
+      return;
+    }
+
     const startTime = performance.now();
     const available = detectAvailableServices();
     const services = validateService(service, available);
-    const refresh = Math.max(5, parseInt(opts.refresh ?? "10", 10));
+    const refresh = Math.max(5, parseInt(opts.refresh ?? "10", 10) || 10);
     const debug = opts.debug ?? false;
-    const port = parseInt(opts.port ?? "8080", 10);
+    const port = parseInt(opts.port ?? "8080", 10) || 8080;
+    const useJson = opts.json || jsonOnly;
 
     // Validate flag conflicts
     if (opts.serve && opts.text) {
       console.error("Error: --serve and --text are mutually exclusive.");
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
     if (opts.serve && opts.live) {
       console.error("Error: --serve and --live are mutually exclusive (server has its own streaming).");
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
     if (opts.serve && opts.json) {
       console.error("Error: --serve and --json are mutually exclusive (server already outputs JSON).");
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
     if (opts.serve && opts.capacity) {
       console.error("Error: --serve and --capacity are mutually exclusive.");
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
     if (opts.port !== "8080" && !opts.serve) {
       console.error("Error: --port requires --serve.");
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
+    }
+    if (opts.host !== "127.0.0.1" && !opts.serve) {
+      console.error("Error: --host requires --serve.");
+      process.exit(ExitCode.FAILURE);
     }
 
     // Route to appropriate mode
     if (opts.serve) {
       const { startServer } = await import("../server/index.js");
-      startServer({ services, port, refreshInterval: refresh, debug });
+      startServer({ services, port, host: opts.host, refreshInterval: refresh, debug });
       return;
     }
 
     // --capacity --json --live: capacity NDJSON stream
-    if (opts.capacity && opts.json && opts.live) {
+    if (opts.capacity && useJson && opts.live) {
       const abortController = new AbortController();
       process.on("SIGINT", () => abortController.abort());
 
       while (!abortController.signal.aborted) {
-        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug, false);
-        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available);
+        const loopStart = performance.now();
+        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug, false);
+        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources);
         console.log(JSON.stringify(JSON.parse(output)));
-        await Bun.sleep(refresh * 1000);
+        const elapsed = (performance.now() - loopStart) / 1000;
+        await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
       }
       return;
     }
 
     // --capacity --json: capacity JSON snapshot
-    if (opts.capacity && opts.json) {
-      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
-      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available));
+    if (opts.capacity && useJson) {
+      const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
+      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources));
       return;
     }
 
@@ -191,24 +251,26 @@ export const usageCommand = new Command("usage")
       return;
     }
 
-    if (opts.json && !opts.live) {
+    if (useJson && !opts.live) {
       // Single JSON snapshot
-      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
-      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available));
+      const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
+      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources));
       return;
     }
 
-    if (opts.json && opts.live) {
+    if (useJson && opts.live) {
       // Continuous NDJSON stream to stdout
       const abortController = new AbortController();
       process.on("SIGINT", () => abortController.abort());
 
       while (!abortController.signal.aborted) {
-        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug, false);
-        const output = formatCombinedJson(claudeMetrics, codexMetrics, available);
+        const loopStart = performance.now();
+        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug, false);
+        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
         // NDJSON: compact single-line JSON objects
         console.log(JSON.stringify(JSON.parse(output)));
-        await Bun.sleep(refresh * 1000);
+        const elapsed = (performance.now() - loopStart) / 1000;
+        await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
       }
       return;
     }

@@ -56,17 +56,16 @@ describe("LedgerContent - with data", () => {
     expect(frame).toContain("100,000"); // 60k + 40k
   });
 
-  test("truncates long project names at 24 chars", async () => {
+  test("truncates long project names with ellipsis", async () => {
     const data = mockProjectUsage([
       { project: "a-very-long-project-name-that-exceeds-limit", totalTokens: 1000 },
     ]);
     const { captureCharFrame } = await renderComponent(() => (
       <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 80, height: 15 });
+    ), { width: 100, height: 15 });
     const frame = captureCharFrame();
-    // Project name in LedgerContent is shortened via shortProject() to last path component
-    // then truncated to COL_PROJECT-2 = 24 chars in display
-    expect(frame).toContain("a-very-long-project-name"); // first 24 chars
+    // Project name truncated to COL_PROJECT-4 = 18 chars + ".." indicator
+    expect(frame).toContain("a-very-long-projec..");
   });
 
   test("snapshot with data", async () => {

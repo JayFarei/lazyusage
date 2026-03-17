@@ -7,6 +7,7 @@ import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 import { CodexCredentialStore } from "./credentials.js";
 import { formatResetFromIso } from "../utils/time.js";
+import { API_TIMEOUT_MS } from "../constants.js";
 
 const PLAN_TYPE_MAP: Record<string, string> = {
   plus: "Plus",
@@ -51,7 +52,7 @@ export class CodexAPIProvider implements UsageProvider {
           Authorization: `Bearer ${creds.accessToken}`,
           Accept: "application/json",
         },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
       });
 
       if (!response.ok) {

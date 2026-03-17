@@ -21,9 +21,12 @@
     "test:soak": "bun test packages/e2e/src/tests/soak.test.ts --timeout 660000",
     "capture-golden": "bun run packages/e2e/scripts/capture-golden.ts",
     "typecheck": "bunx tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format . --write",
     "test:dashboard": "bash examples/dashboard/e2e/run-tests.sh"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
     "@opentui/core": "0.1.77",

@@ -6,7 +6,7 @@ exports[`ServicePanel - Claude metrics snapshot with Claude metrics 1`] = `
 │   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░ ◆ 50%                                                                          │
 │        ┃    ┃    ┃    ┃    ┃    ┃                                                                                    │
 │   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ⏱ 100%                                                                         │
-│     Resets: Feb 18 at 11:00am                                                                                        │
+│     Resets: Feb 18 at 11:00am (0m)                                                                                   │
 │                                                                                                                      │
 │   Weekly (Sonnet)  ◆ 10%  ⏱ 100%                                                                                     │
 │   Session (5h)  ◆ 25%  ⏱ 100%                                                                                        │

@@ -115,3 +115,12 @@ export interface CodexCredentials {
   accountId: string;
   lastRefresh: string;
 }
+
+/** CLI exit codes for machine consumers */
+export enum ExitCode {
+  SUCCESS = 0,
+  FAILURE = 1,
+  BINARY_NOT_FOUND = 2,
+  PARSE_ERROR = 3,
+  TIMEOUT = 4,
+}

@@ -38,7 +38,7 @@ export function App(props: AppProps = {}) {
   const showClaude = () => !props.service || props.service === "all" || props.service === "claude";
   const showCodex = () => !props.service || props.service === "all" || props.service === "codex";
   const theme = useTheme();
-  const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, updateMetrics } =
+  const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, warnings, updateMetrics, checkWarning } =
     useMetrics();
   const {
     activePanel, setActivePanel,
@@ -90,6 +90,7 @@ export function App(props: AppProps = {}) {
             const error = result.error;
             const source = result.source;
             updateMetrics(service, metrics, error, source);
+            checkWarning(service, result);
 
             if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
               store.storeSnapshot(service, metrics, source);
@@ -203,6 +204,7 @@ export function App(props: AppProps = {}) {
             const result = await (chain as PersistentFallbackChain).start();
             const metrics = result.metrics as MetricsDict | null;
             updateMetrics(service, metrics, result.error, result.source);
+            checkWarning(service, result);
 
             if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
               store.storeSnapshot(service, metrics, result.source);
@@ -244,8 +246,18 @@ export function App(props: AppProps = {}) {
     cleanup();
   });
 
-  const footerHints = () =>
-    " [1]Claude  [2]Codex  [3]ClaudeStats  [4]CodexStats  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  r=Refresh  p=Pause  ?=Help  q=Quit";
+  const footerHints = () => {
+    const panels: string[] = [];
+    if (showClaude()) {
+      panels.push("[1]Claude");
+      panels.push("[3]ClaudeStats");
+    }
+    if (showCodex()) {
+      panels.push("[2]Codex");
+      panels.push("[4]CodexStats");
+    }
+    return ` ${panels.join("  ")}  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  r=Refresh  p=Pause  ?=Help  q=Quit`;
+  };
 
   return (
     <box
@@ -325,9 +337,10 @@ export function App(props: AppProps = {}) {
         autoRefreshEnabled={autoRefresh.enabled()}
         refreshInterval={autoRefresh.interval()}
         dataSource={dataSources()}
+        warnings={warnings()}
       />
       {/* Footer keybinding hints */}
-      <text content={footerHints()} fg={theme.blue} height={1} paddingLeft={1} />
+      <text content={footerHints()} fg={theme.blue} height={1} flexShrink={0} paddingLeft={1} />
 
       {/* Fullscreen metric overlay */}
       <Show when={fullscreenTarget() === "service"}>
@@ -335,6 +348,7 @@ export function App(props: AppProps = {}) {
           service={activePanel()}
           metricKey={selectedMetricKey()}
           metrics={activePanel() === "claude" ? claudeMetrics() : codexMetrics()}
+          tick={tick()}
         />
       </Show>
 

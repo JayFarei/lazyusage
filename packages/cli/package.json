@@ -1,11 +1,14 @@
 {
   "name": "@lazyusage/cli",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "lazyusage": "src/index.ts"
+    "lazyusage": "dist/cli.js"
+  },
+  "files": ["dist/"],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@opentui/core": "0.1.77",

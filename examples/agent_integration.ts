@@ -22,7 +22,7 @@ type Level = "green" | "yellow" | "red";
 // -- helpers ----------------------------------------------------------------
 
 async function getUsage(svc?: string): Promise<Snapshot> {
-  const cmd = svc ? $`bun run usage:dev ${svc} --json` : $`bun run usage:dev --json`;
+  const cmd = svc ? $`bun run lazyusage:dev ${svc} --json` : $`bun run lazyusage:dev --json`;
   return cmd.json();
 }
 

@@ -4,6 +4,8 @@ archive/
 # Node / Bun
 node_modules/
 dist/
+dist/*.whl
+dist/*.tar.gz
 
 # IDE
 .vscode/

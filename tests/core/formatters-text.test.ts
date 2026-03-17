@@ -2,7 +2,6 @@ import { describe, test, expect } from "bun:test";
 import {
   formatClaudeText,
   formatCodexText,
-  formatAllText,
   formatWithAvailability,
   type MetricsDict,
 } from "@lazyusage/core";
@@ -16,8 +15,8 @@ describe("formatClaudeText", () => {
       week_sonnet: { used_pct: 10, remaining_pct: 90, resets: "Feb 9 at 8:19pm" },
     };
     const result = formatClaudeText(metrics);
-    expect(result).toContain("Session: 25% used");
-    expect(result).toContain("75% remaining");
+    expect(result).toContain("Session: 25% allowance used");
+    expect(result).toContain("capacity remaining");
     expect(result).toContain("resets 2:31pm");
     expect(result).toContain("[Subscription: Max]");
   });
@@ -31,7 +30,7 @@ describe("formatClaudeText", () => {
     };
     const result = formatClaudeText(metrics);
     expect(result).not.toContain("[Subscription:");
-    expect(result).toContain("Session: 0% used");
+    expect(result).toContain("Session: 0% allowance used");
   });
 
   test("includes weekly and sonnet metrics", () => {
@@ -42,8 +41,8 @@ describe("formatClaudeText", () => {
       week_sonnet: { used_pct: 20, remaining_pct: 80, resets: "Feb 15 at 1:00pm" },
     };
     const result = formatClaudeText(metrics);
-    expect(result).toContain("Weekly: 30% used");
-    expect(result).toContain("Sonnet: 20% used");
+    expect(result).toContain("Weekly: 30% allowance used");
+    expect(result).toContain("Sonnet: 20% allowance used");
   });
 
   test("uses pipe separator between metrics", () => {
@@ -56,18 +55,31 @@ describe("formatClaudeText", () => {
     const result = formatClaudeText(metrics);
     expect(result).toContain(" | ");
   });
+
+  test("rounds fractional percentages", () => {
+    const metrics: MetricsDict = {
+      subscription_type: null,
+      session: { used_pct: 25.7, remaining_pct: 74.3, resets: "3:00pm" },
+      week_all: { used_pct: 15.3, remaining_pct: 84.7, resets: "Feb 10 at 3:00pm" },
+      week_sonnet: { used_pct: 10.9, remaining_pct: 89.1, resets: "Feb 10 at 3:00pm" },
+    };
+    const result = formatClaudeText(metrics);
+    expect(result).toContain("Session: 26% allowance used");
+    expect(result).toContain("Weekly: 15% allowance used");
+    expect(result).toContain("Sonnet: 11% allowance used");
+  });
 });
 
 describe("formatCodexText", () => {
-  test("formats codex metrics correctly", () => {
+  test("formats codex metrics with Session label", () => {
     const metrics: MetricsDict = {
       subscription_type: "Plus",
       "5h": { used_pct: 20, remaining_pct: 80, resets: "3:15pm" },
       weekly: { used_pct: 12, remaining_pct: 88, resets: "Feb 10 at 9:00pm" },
     };
     const result = formatCodexText(metrics);
-    expect(result).toContain("5h: 20% used");
-    expect(result).toContain("80% remaining");
+    expect(result).toContain("Session: 20% allowance used");
+    expect(result).toContain("capacity remaining");
     expect(result).toContain("[Subscription: Plus]");
   });
 
@@ -79,7 +91,7 @@ describe("formatCodexText", () => {
     };
     const result = formatCodexText(metrics);
     expect(result).not.toContain("[Subscription:");
-    expect(result).toContain("5h: 0% used");
+    expect(result).toContain("Session: 0% allowance used");
   });
 
   test("includes weekly metrics", () => {
@@ -89,27 +101,7 @@ describe("formatCodexText", () => {
       weekly: { used_pct: 25, remaining_pct: 75, resets: "Feb 12 at 4:00pm" },
     };
     const result = formatCodexText(metrics);
-    expect(result).toContain("Weekly: 25% used");
-  });
-});
-
-describe("formatAllText", () => {
-  test("combines claude and codex on separate lines", () => {
-    const claudeMetrics: MetricsDict = {
-      subscription_type: null,
-      session: { used_pct: 10, remaining_pct: 90, resets: "1:00pm" },
-      week_all: { used_pct: 5, remaining_pct: 95, resets: "Feb 10 at 1:00pm" },
-      week_sonnet: { used_pct: 3, remaining_pct: 97, resets: "Feb 10 at 1:00pm" },
-    };
-    const codexMetrics: MetricsDict = {
-      subscription_type: null,
-      "5h": { used_pct: 20, remaining_pct: 80, resets: "3:00pm" },
-      weekly: { used_pct: 10, remaining_pct: 90, resets: "Feb 10 at 3:00pm" },
-    };
-    const result = formatAllText(claudeMetrics, codexMetrics);
-    expect(result).toContain("Claude:");
-    expect(result).toContain("Codex:");
-    expect(result.split("\n")).toHaveLength(2);
+    expect(result).toContain("Weekly: 25% allowance used");
   });
 });
 
@@ -128,7 +120,7 @@ describe("formatWithAvailability", () => {
       week_sonnet: { used_pct: 10, remaining_pct: 90, resets: "Feb 9 at 8:19pm" },
     };
     const result = formatWithAvailability(claudeMetrics, null, ["claude"]);
-    expect(result).toContain("Claude: Session: 25% used");
+    expect(result).toContain("Claude: Session: 25% allowance used");
     expect(result).toContain("Codex: [not available]");
   });
 });

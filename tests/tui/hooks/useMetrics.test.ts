@@ -4,6 +4,7 @@
 import { describe, test, expect } from "bun:test";
 import { createRoot } from "solid-js";
 import { useMetrics } from "../../../packages/cli/src/tui/hooks/useMetrics.js";
+import { DataSource } from "@lazyusage/core";
 import { mockClaudeMetrics, mockCodexMetrics } from "../helpers.js";
 
 describe("useMetrics - updateMetrics for claude", () => {
@@ -87,6 +88,72 @@ describe("useMetrics - dataSources", () => {
       expect(dataSources().claude).toBe("api");
       updateMetrics("claude", null, "err", "fallback");
       expect(dataSources().claude).toBe("fallback");
+      dispose();
+    });
+  });
+});
+
+describe("useMetrics - checkWarning", () => {
+  test("adds warning from degraded FetchResult", () => {
+    createRoot((dispose) => {
+      const { warnings, checkWarning } = useMetrics();
+      expect(warnings()).toEqual([]);
+      checkWarning("claude", {
+        metrics: null,
+        source: DataSource.FALLBACK,
+        timestamp: Date.now() / 1000,
+        error: "All providers failed, using fallback zeros",
+        stale: false,
+      });
+      expect(warnings().length).toBe(1);
+      expect(warnings()[0].service).toBe("claude");
+      dispose();
+    });
+  });
+
+  test("clears warning when result is healthy", () => {
+    createRoot((dispose) => {
+      const { warnings, checkWarning } = useMetrics();
+      // First add a warning
+      checkWarning("claude", {
+        metrics: null,
+        source: DataSource.FALLBACK,
+        timestamp: Date.now() / 1000,
+        error: "All providers failed, using fallback zeros",
+        stale: false,
+      });
+      expect(warnings().length).toBe(1);
+      // Then clear it
+      checkWarning("claude", {
+        metrics: { session: { used_pct: 10, remaining_pct: 90, resets: "2h" } },
+        source: DataSource.API,
+        timestamp: Date.now() / 1000,
+        error: null,
+        stale: false,
+      });
+      expect(warnings().length).toBe(0);
+      dispose();
+    });
+  });
+
+  test("warnings are per-service", () => {
+    createRoot((dispose) => {
+      const { warnings, checkWarning } = useMetrics();
+      checkWarning("claude", {
+        metrics: null,
+        source: DataSource.FALLBACK,
+        timestamp: Date.now() / 1000,
+        error: "All providers failed, using fallback zeros",
+        stale: false,
+      });
+      checkWarning("codex", {
+        metrics: null,
+        source: DataSource.FALLBACK,
+        timestamp: Date.now() / 1000,
+        error: "All providers failed, using fallback zeros",
+        stale: false,
+      });
+      expect(warnings().length).toBe(2);
       dispose();
     });
   });

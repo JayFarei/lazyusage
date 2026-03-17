@@ -10,8 +10,8 @@ type MetricEntry = { used_pct: number; remaining_pct: number; resets: string };
 
 function fmtMetric(label: string, m: MetricEntry, windowHours: number): string {
   const timeElapsed = Math.round(calculateTimeProgress(m.resets, windowHours));
-  const capacityRemaining = timeElapsed - m.used_pct;
-  return `${label}: ${m.used_pct}% allowance used, ${timeElapsed}% time elapsed, ${capacityRemaining}% capacity remaining (resets ${m.resets})`;
+  const capacityRemaining = Math.round(timeElapsed - m.used_pct);
+  return `${label}: ${Math.round(m.used_pct)}% allowance used, ${timeElapsed}% time elapsed, ${capacityRemaining}% capacity remaining (resets ${m.resets})`;
 }
 
 /** Format Claude metrics as text with subscription suffix */
@@ -40,7 +40,7 @@ export function formatCodexText(metrics: MetricsDict): string {
   const weekly = metrics.weekly as MetricEntry;
 
   const base = [
-    fmtMetric("5h", fiveH, 5),
+    fmtMetric("Session", fiveH, 5),
     fmtMetric("Weekly", weekly, 168),
   ].join(" | ");
 
@@ -82,7 +82,7 @@ export function formatCodexCapacityText(metrics: MetricsDict): string {
   const weekly = metrics.weekly as MetricEntry;
 
   const base = [
-    fmtCapacity("5h", fiveH, 5),
+    fmtCapacity("Session", fiveH, 5),
     fmtCapacity("Weekly", weekly, 168),
   ].join(" | ");
 
@@ -113,13 +113,6 @@ export function formatCapacityWithAvailability(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Format combined Claude and Codex metrics */
-export function formatAllText(claudeMetrics: MetricsDict, codexMetrics: MetricsDict): string {
-  const claudeLine = formatClaudeText(claudeMetrics);
-  const codexLine = formatCodexText(codexMetrics);
-  return `Claude: ${claudeLine}\nCodex: ${codexLine}`;
-}
 
 /** Format metrics with graceful handling of missing services */
 export function formatWithAvailability(

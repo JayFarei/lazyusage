@@ -5,13 +5,14 @@
 
 import type { MetricsDict } from "../types.js";
 import { calculateTimeProgress } from "../utils/time.js";
+import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 
 const WINDOW_HOURS: Record<string, number> = {
-  session: 5,
-  week_all: 168,
-  week_sonnet: 168,
-  "5h": 5,
-  weekly: 168,
+  session: SESSION_WINDOW_HOURS,
+  week_all: WEEKLY_WINDOW_HOURS,
+  week_sonnet: WEEKLY_WINDOW_HOURS,
+  "5h": SESSION_WINDOW_HOURS,
+  weekly: WEEKLY_WINDOW_HOURS,
 };
 
 function enrichMetric(name: string, metric: { used_pct: number; remaining_pct: number; resets: string }): Record<string, unknown> {
@@ -39,6 +40,7 @@ export function formatCombinedCapacityJson(
   claudeMetrics: MetricsDict | null,
   codexMetrics: MetricsDict | null,
   availableServices: string[],
+  sources?: Record<string, string>,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -51,6 +53,7 @@ export function formatCombinedCapacityJson(
   const claudeService: Record<string, unknown> = {
     name: "claude",
     available: availableServices.includes("claude"),
+    source: sources?.claude ?? null,
     metrics: [] as Array<Record<string, unknown>>,
   };
   if (claudeMetrics) {
@@ -65,6 +68,7 @@ export function formatCombinedCapacityJson(
   const codexService: Record<string, unknown> = {
     name: "codex",
     available: availableServices.includes("codex"),
+    source: sources?.codex ?? null,
     metrics: [] as Array<Record<string, unknown>>,
   };
   if (codexMetrics) {
@@ -137,6 +141,7 @@ export function formatCombinedJson(
   claudeMetrics: MetricsDict | null,
   codexMetrics: MetricsDict | null,
   availableServices: string[],
+  sources?: Record<string, string>,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -150,6 +155,7 @@ export function formatCombinedJson(
   const claudeService: Record<string, unknown> = {
     name: "claude",
     available: availableServices.includes("claude"),
+    source: sources?.claude ?? null,
     subscription_type: claudeMetrics ? ((claudeMetrics.subscription_type as string) ?? null) : null,
     metrics: [] as Array<Record<string, unknown>>,
   };
@@ -167,6 +173,7 @@ export function formatCombinedJson(
   const codexService: Record<string, unknown> = {
     name: "codex",
     available: availableServices.includes("codex"),
+    source: sources?.codex ?? null,
     subscription_type: codexMetrics ? ((codexMetrics.subscription_type as string) ?? null) : null,
     metrics: [] as Array<Record<string, unknown>>,
   };

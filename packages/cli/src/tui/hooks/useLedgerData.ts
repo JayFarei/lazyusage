@@ -87,7 +87,9 @@ export function useLedgerData(): LedgerHook {
       activeProcs.delete(proc);
 
       if (exitCode !== 0) {
-        setError("Ledger worker exited with error");
+        const stderrText = await new Response(proc.stderr).text();
+        const detail = stderrText.trim();
+        setError(detail ? `Ledger worker error: ${detail}` : "Ledger worker exited with error");
         return;
       }
 

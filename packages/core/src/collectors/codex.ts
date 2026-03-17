@@ -27,7 +27,7 @@ export class CodexEphemeralCollector implements EphemeralCollector {
 
       return parseCodexOutput(output);
     } finally {
-      session.cleanup();
+      await session.cleanup();
     }
   }
 }
@@ -65,7 +65,7 @@ export class CodexPersistentCollector implements PersistentCollector {
   private _hasRealData(metrics: MetricsDict): boolean {
     for (const key of ["5h", "weekly"]) {
       const entry = metrics[key];
-      if (entry && typeof entry === "object" && "used_pct" in entry && entry.used_pct > 0) {
+      if (entry && typeof entry === "object" && "used_pct" in entry && typeof entry.used_pct === "number") {
         return true;
       }
     }

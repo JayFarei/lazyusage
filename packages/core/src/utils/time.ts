@@ -128,6 +128,15 @@ export function calculateTimeProgress(
   const now = new Date();
   const resetTime = parseTimeToDatetime(resetTimeStr);
   const windowMs = windowHours * 3600_000;
+
+  // parseTimeToDatetime assumes past times are "tomorrow", but for progress
+  // calculation a reset time in the past means the window already elapsed.
+  // If resetTime is more than windowHours in the future, it was incorrectly
+  // bumped to tomorrow, so correct it back.
+  if (resetTime.getTime() - now.getTime() > windowMs) {
+    resetTime.setDate(resetTime.getDate() - 1);
+  }
+
   const windowStart = new Date(resetTime.getTime() - windowMs);
   const elapsedMs = now.getTime() - windowStart.getTime();
   const percentage = (elapsedMs / windowMs) * 100;

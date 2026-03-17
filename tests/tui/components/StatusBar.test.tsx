@@ -76,8 +76,8 @@ describe("StatusBar - text content", () => {
     ), { width: 180, height: 1 });
     const frame = captureCharFrame();
     expect(frame).toContain("Source:");
-    expect(frame).toContain("Claude: api");
-    expect(frame).toContain("Codex: pty");
+    expect(frame).toContain("Claude: API");
+    expect(frame).toContain("Codex: Terminal");
   });
 
   test("snapshot matches expected format", async () => {
@@ -92,6 +92,39 @@ describe("StatusBar - text content", () => {
     ), { width: 80, height: 1 });
     const frame = captureCharFrame();
     expect(frame).toMatchSnapshot();
+  });
+});
+
+describe("StatusBar - warnings", () => {
+  test("renders warning text when warnings provided", async () => {
+    const warnings = [{ service: "claude", message: "claude auth expired", action: "run `claude` to re-authenticate" }];
+    const { captureCharFrame } = await renderComponent(() => (
+      <StatusBar
+        lastUpdated="10:00:00 AM"
+        currentTime="10:01:00 AM"
+        autoRefreshEnabled={true}
+        refreshInterval={10}
+        dataSource={{}}
+        warnings={warnings}
+      />
+    ), { width: 120, height: 2 });
+    const frame = captureCharFrame();
+    expect(frame).toContain("claude auth expired");
+  });
+
+  test("does not render warning row when warnings is empty", async () => {
+    const { captureCharFrame } = await renderComponent(() => (
+      <StatusBar
+        lastUpdated="10:00:00 AM"
+        currentTime="10:01:00 AM"
+        autoRefreshEnabled={true}
+        refreshInterval={10}
+        dataSource={{}}
+        warnings={[]}
+      />
+    ), { width: 120, height: 1 });
+    const frame = captureCharFrame();
+    expect(frame).not.toContain("!");
   });
 });
 
