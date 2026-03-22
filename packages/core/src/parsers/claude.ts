@@ -109,13 +109,20 @@ export function applyFallbacks(metrics: Record<string, { used_pct: number | null
   }
 }
 
-/** Parse complete Claude usage output */
-export function parseClaudeOutput(output: string): MetricsDict {
+/** Parse complete Claude usage output.
+ * Returns metrics dict and whether any usage regex actually matched.
+ * When no regex matches (e.g. rate limit error), all values come from applyFallbacks(). */
+export function parseClaudeOutput(output: string): MetricsDict & { __parsed: boolean } {
   const metrics = {
     session: parseSession(output),
     week_all: parseWeekAll(output),
     week_sonnet: parseWeekSonnet(output),
   };
+
+  // Track whether any metric was actually parsed from real output
+  const parsed = metrics.session.used_pct !== null
+    || metrics.week_all.used_pct !== null
+    || metrics.week_sonnet.used_pct !== null;
 
   applyFallbacks(metrics);
 
@@ -123,6 +130,7 @@ export function parseClaudeOutput(output: string): MetricsDict {
 
   return {
     subscription_type: subscription,
+    __parsed: parsed,
     ...metrics,
-  } as unknown as MetricsDict;
+  } as unknown as MetricsDict & { __parsed: boolean };
 }

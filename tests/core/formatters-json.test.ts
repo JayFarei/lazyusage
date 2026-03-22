@@ -146,6 +146,31 @@ describe("formatCombinedJson", () => {
     expect(claudeSvc.subscription_type).toBe("Max");
   });
 
+  test("includes resource-awareness metadata when provided", () => {
+    const claudeMetrics: MetricsDict = {
+      subscription_type: "Max",
+      session: { used_pct: 25, remaining_pct: 75, resets: "2:31pm" },
+    };
+    const result = formatCombinedJson(
+      claudeMetrics,
+      null,
+      ["claude"],
+      undefined,
+      {
+        claude: {
+          source: "cache" as never,
+          stale: true,
+          error: "API unavailable",
+        },
+      },
+    );
+    const parsed = JSON.parse(result);
+    const claudeSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "claude");
+    expect(claudeSvc.source).toBe("cache");
+    expect(claudeSvc.stale).toBe(true);
+    expect(claudeSvc.error).toBe("API unavailable");
+  });
+
   test("handles null metrics gracefully", () => {
     const result = formatCombinedJson(null, null, []);
     const parsed = JSON.parse(result);
@@ -153,6 +178,8 @@ describe("formatCombinedJson", () => {
     for (const svc of parsed.services) {
       expect(svc.metrics).toEqual([]);
       expect(svc.subscription_type).toBeNull();
+      expect(svc.stale).toBe(false);
+      expect(svc.error).toBeNull();
     }
   });
 

@@ -1,8 +1,15 @@
 /**
  * Unit tests for CodexAPIProvider.
- * Mocks globalThis.fetch to test API interaction and response parsing.
+ *
+ * The provider reads credentials from ~/.codex/auth.json which most CI/dev
+ * environments lack. Tests are split into:
+ *   1. No-credential path (always exercised)
+ *   2. Mock-fetch paths (exercised only when real credentials exist)
+ *
+ * Each mock-fetch test asserts the no-credential fallback explicitly so
+ * a missing auth.json never causes a silent skip.
  */
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, afterEach } from "bun:test";
 import { CodexAPIProvider } from "../../packages/core/src/providers/api-codex.js";
 import { DataSource } from "../../packages/core/src/types.js";
 
@@ -34,121 +41,128 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+/**
+ * Helper: run a test that requires Codex credentials.
+ * When credentials are absent the test still exercises the no-credential
+ * error path and makes meaningful assertions instead of silently returning.
+ */
+function withCredentialsOrFallback(
+  provider: CodexAPIProvider,
+  fn: () => Promise<void>,
+): () => Promise<void> {
+  return async () => {
+    if (!provider.isAvailable()) {
+      const result = await provider.fetch();
+      expect(result.error).toBe("No credentials available");
+      expect(result.metrics).toBeNull();
+      expect(result.source).toBe(DataSource.API);
+      return;
+    }
+    await fn();
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Tests
+// Tests: no-credential path (always exercised, even on CI)
+// ---------------------------------------------------------------------------
+
+describe("CodexAPIProvider - no credentials", () => {
+  test("isAvailable returns boolean", () => {
+    const provider = new CodexAPIProvider();
+    expect(typeof provider.isAvailable()).toBe("boolean");
+  });
+
+  test("fetch returns clear error when credentials absent", async () => {
+    const provider = new CodexAPIProvider();
+    if (provider.isAvailable()) return; // machine has real creds, skip
+
+    const result = await provider.fetch();
+    expect(result.error).toBe("No credentials available");
+    expect(result.metrics).toBeNull();
+    expect(result.source).toBe(DataSource.API);
+    expect(result.stale).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: mock-fetch paths (require real ~/.codex/auth.json)
+// Each test still asserts the no-credential fallback when creds are absent.
 // ---------------------------------------------------------------------------
 
 describe("CodexAPIProvider - successful fetch + parse", () => {
-  test("parses API response into correct MetricsDict", async () => {
-    const provider = new CodexAPIProvider();
+  const provider = new CodexAPIProvider();
 
-    // Mock isAvailable by mocking the entire fetch path
-    // The provider creates its own credential store, so if credentials don't exist,
-    // it returns "No credentials available". We mock fetch to test parse logic.
-    // Since CodexAPIProvider instantiates its own CodexCredentialStore internally,
-    // we test by checking the error path when no credentials are available.
+  test("parses API response into correct MetricsDict", withCredentialsOrFallback(provider, async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(makeCodexApiResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+
     const result = await provider.fetch();
-
-    // Without real credentials, we get "No credentials available"
-    // This confirms the credential check path works
-    if (result.error === "No credentials available") {
-      expect(result.metrics).toBeNull();
-      expect(result.source).toBe(DataSource.API);
-      // This is expected when no ~/.codex/auth.json exists
-      return;
-    }
-
-    // If somehow credentials exist, verify the parse
+    expect(result.error).toBeNull();
     expect(result.source).toBe(DataSource.API);
-  });
-});
+    expect(result.metrics).not.toBeNull();
 
-describe("CodexAPIProvider - isAvailable", () => {
-  test("returns false when no credentials file exists", () => {
-    const provider = new CodexAPIProvider();
-    // In CI or fresh environments, no auth.json exists
-    // Just verify isAvailable returns a boolean
-    const available = provider.isAvailable();
-    expect(typeof available).toBe("boolean");
-  });
+    const fiveH = result.metrics!["5h"] as { used_pct: number; remaining_pct: number };
+    expect(fiveH.used_pct).toBe(30);
+    expect(fiveH.remaining_pct).toBe(70);
+
+    const weekly = result.metrics!["weekly"] as { used_pct: number; remaining_pct: number };
+    expect(weekly.used_pct).toBe(12);
+    expect(weekly.remaining_pct).toBe(88);
+
+    expect(result.metrics!["subscription_type"]).toBe("Plus");
+  }));
 });
 
 describe("CodexAPIProvider - fetch error paths", () => {
-  test("returns error when fetch throws network error", async () => {
-    const provider = new CodexAPIProvider();
+  const provider = new CodexAPIProvider();
 
-    // Only test if credentials are available
-    if (!provider.isAvailable()) {
-      // Without credentials, we get the "No credentials available" error
-      const result = await provider.fetch();
-      expect(result.error).toContain("No credentials available");
-      return;
-    }
-
-    globalThis.fetch = async () => {
+  test("returns error when fetch throws network error", withCredentialsOrFallback(provider, async () => {
+    globalThis.fetch = (async () => {
       throw new Error("DNS resolution failed");
-    };
+    }) as unknown as typeof fetch;
 
     const result = await provider.fetch();
     expect(result.error).toContain("DNS resolution failed");
     expect(result.metrics).toBeNull();
-  });
+  }));
 
-  test("returns error on non-200 response", async () => {
-    const provider = new CodexAPIProvider();
-
-    if (!provider.isAvailable()) {
-      const result = await provider.fetch();
-      expect(result.error).toContain("No credentials available");
-      return;
-    }
-
-    globalThis.fetch = async () =>
-      new Response("Forbidden", { status: 403, statusText: "Forbidden" });
+  test("returns error on non-200 response", withCredentialsOrFallback(provider, async () => {
+    globalThis.fetch = (async () =>
+      new Response("Forbidden", { status: 403, statusText: "Forbidden" })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
     expect(result.error).toContain("403");
     expect(result.metrics).toBeNull();
-  });
+  }));
 
-  test("returns error when fetch throws AbortError (timeout)", async () => {
-    const provider = new CodexAPIProvider();
-
-    if (!provider.isAvailable()) {
-      const result = await provider.fetch();
-      expect(result.error).toContain("No credentials available");
-      return;
-    }
-
-    globalThis.fetch = async () => {
+  test("returns error when fetch throws AbortError (timeout)", withCredentialsOrFallback(provider, async () => {
+    globalThis.fetch = (async () => {
       throw new DOMException("The operation was aborted", "AbortError");
-    };
+    }) as unknown as typeof fetch;
 
     const result = await provider.fetch();
     expect(result.error).toContain("aborted");
     expect(result.metrics).toBeNull();
-  });
+  }));
 });
 
-describe("CodexAPIProvider - response parsing via mock", () => {
-  test("handles empty response body gracefully", async () => {
-    const provider = new CodexAPIProvider();
+describe("CodexAPIProvider - response parsing", () => {
+  const provider = new CodexAPIProvider();
 
-    if (!provider.isAvailable()) {
-      // Skip if no credentials
-      return;
-    }
-
-    globalThis.fetch = async () =>
+  test("handles empty response body with zero defaults", withCredentialsOrFallback(provider, async () => {
+    globalThis.fetch = (async () =>
       new Response(JSON.stringify({}), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      });
+      })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
     expect(result.error).toBeNull();
     expect(result.metrics).not.toBeNull();
     const fiveH = result.metrics!["5h"] as { used_pct: number };
     expect(fiveH.used_pct).toBe(0);
-  });
+  }));
 });

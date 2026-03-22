@@ -2,7 +2,7 @@
  * Visual snapshot tests for StatusBar component.
  */
 import { describe, test, expect } from "bun:test";
-import { renderComponent, findSpansByText } from "../helpers.js";
+import { renderComponent, findSpansByText, assertSpanFgColor } from "../helpers.js";
 import { StatusBar } from "../../../packages/cli/src/tui/components/StatusBar.js";
 import { catppuccinMocha } from "../../../packages/cli/src/tui/theme.js";
 
@@ -129,7 +129,7 @@ describe("StatusBar - warnings", () => {
 });
 
 describe("StatusBar - colors", () => {
-  test("text rendered in subtext color", async () => {
+  test("status text rendered in subtext color", async () => {
     const { captureSpans } = await renderComponent(() => (
       <StatusBar
         lastUpdated="10:00:00 AM"
@@ -140,10 +140,8 @@ describe("StatusBar - colors", () => {
       />
     ), { width: 120, height: 1 });
     const spans = captureSpans();
-    // Find a span with status bar text
-    const textSpans = spans.lines.flatMap((l) =>
-      l.spans.filter((s) => s.text.includes("Last updated")),
-    );
-    expect(textSpans.length).toBeGreaterThan(0);
+    const matches = findSpansByText(spans, "Last updated");
+    expect(matches.length).toBeGreaterThan(0);
+    assertSpanFgColor(matches[0].span, catppuccinMocha.subtext, "StatusBar text");
   });
 });

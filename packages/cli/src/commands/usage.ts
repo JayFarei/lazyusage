@@ -118,13 +118,13 @@ export const usageCommand = new Command("usage")
 
         // --json-only with --capacity
         if (opts.capacity) {
-          const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
-          console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources));
+          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+          console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
           return;
         }
 
-        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
-        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources));
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
       } catch (e) {
         console.error = origError;
         console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -183,8 +183,8 @@ export const usageCommand = new Command("usage")
 
       while (!abortController.signal.aborted) {
         const loopStart = performance.now();
-        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug, false);
-        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources);
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
         console.log(JSON.stringify(JSON.parse(output)));
         const elapsed = (performance.now() - loopStart) / 1000;
         await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
@@ -194,8 +194,8 @@ export const usageCommand = new Command("usage")
 
     // --capacity --json: capacity JSON snapshot
     if (opts.capacity && useJson) {
-      const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
-      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources));
+      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
       return;
     }
 
@@ -253,8 +253,8 @@ export const usageCommand = new Command("usage")
 
     if (useJson && !opts.live) {
       // Single JSON snapshot
-      const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug);
-      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources));
+      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
       return;
     }
 
@@ -265,8 +265,8 @@ export const usageCommand = new Command("usage")
 
       while (!abortController.signal.aborted) {
         const loopStart = performance.now();
-        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, debug, false);
-        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
         // NDJSON: compact single-line JSON objects
         console.log(JSON.stringify(JSON.parse(output)));
         const elapsed = (performance.now() - loopStart) / 1000;

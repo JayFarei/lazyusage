@@ -1,21 +1,50 @@
 /**
- * Acceptance tests for service filter feature (Phase 4).
- * Tests that `usage claude` shows only Claude panel and `usage codex` shows only Codex.
+ * Integration tests for service filter and single-service keybinding behavior.
  *
- * These tests define the EXPECTED behavior. They are written BEFORE the implementation.
+ * Tests that `usage claude` shows only Claude panel and `usage codex` shows only Codex
+ * at the component level. Full App-level filter is verified by E2E tests.
  */
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { renderComponent } from "../helpers.js";
 import { ServicePanel } from "../../../packages/cli/src/tui/components/ServicePanel.js";
 import { mockClaudeMetrics, mockCodexMetrics } from "../helpers.js";
+import { createKeybindingHandler } from "../../../packages/cli/src/tui/hooks/useKeybindings.js";
+import type { KeybindingHandlers } from "../../../packages/cli/src/tui/hooks/useKeybindings.js";
 
 // ---------------------------------------------------------------------------
-// Tests for the App with service prop - these test the filter behavior
-// via the component contract rather than the full App (which requires real providers)
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Build a full KeybindingHandlers object with all required keys. */
+function makeFullHandlers(overrides: Partial<KeybindingHandlers> = {}): KeybindingHandlers {
+  return {
+    setActivePanel: mock(() => {}) as any,
+    focusStatsPanel: mock(() => {}) as any,
+    navigateMetric: mock(() => {}) as any,
+    cycleTab: mock(() => {}) as any,
+    togglePause: mock(() => {}) as any,
+    triggerRefresh: mock(() => {}) as any,
+    speedUp: mock(() => {}) as any,
+    slowDown: mock(() => {}) as any,
+    setHelpVisible: mock(() => {}) as any,
+    helpVisible: () => false,
+    quit: mock(() => {}) as any,
+    switchFocusSide: mock(() => {}) as any,
+    toggleFullscreen: mock(() => {}) as any,
+    exitFullscreen: mock(() => {}) as any,
+    fullscreenActive: () => false,
+    cycleSortColumn: mock(() => {}) as any,
+    toggleSortDirection: mock(() => {}) as any,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ServicePanel: service-specific rendering
 // ---------------------------------------------------------------------------
 
 describe("ServicePanel - service-specific rendering", () => {
-  test("claude service panel shows Claude metrics keys", async () => {
+  test("claude panel shows Claude metric keys", async () => {
     const { captureCharFrame } = await renderComponent(() => (
       <ServicePanel
         service="claude"
@@ -28,15 +57,12 @@ describe("ServicePanel - service-specific rendering", () => {
       />
     ), { width: 120, height: 40 });
     const frame = captureCharFrame();
-    // Claude-specific metrics
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly (All)");
     expect(frame).toContain("Weekly (Sonnet)");
-    // NOT Codex-specific
-    expect(frame).not.toContain("Session (5h)\n"); // only as label, not duplicated
   });
 
-  test("codex service panel shows Codex metrics keys only", async () => {
+  test("codex panel shows only Codex metric keys", async () => {
     const { captureCharFrame } = await renderComponent(() => (
       <ServicePanel
         service="codex"
@@ -49,75 +75,36 @@ describe("ServicePanel - service-specific rendering", () => {
       />
     ), { width: 120, height: 40 });
     const frame = captureCharFrame();
-    // Codex metrics
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly");
-    // NOT Claude-specific
     expect(frame).not.toContain("Weekly (All)");
     expect(frame).not.toContain("Weekly (Sonnet)");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests for the FilteredApp component (to be implemented)
-// These test the App-level service filter prop
+// Keybinding: single-service mode
 // ---------------------------------------------------------------------------
 
-describe("App service filter - acceptance tests", () => {
-  /**
-   * When service="claude" is passed to App:
-   * - Only Claude row renders
-   * - No Codex panel title in frame
-   */
-  test("service=claude renders only Claude panel", async () => {
-    // Import App dynamically after implementation
-    const { App } = await import("../../../packages/cli/src/tui/App.js");
+describe("Keybinding - single service mode", () => {
+  test("key '2' still calls setActivePanel (App-level filter handles visibility)", () => {
+    let activePanel = "claude";
+    const setActivePanel = mock((panel: string) => { activePanel = panel; });
+    const handlers = makeFullHandlers({ setActivePanel: setActivePanel as any });
+    const handleKey = createKeybindingHandler(handlers);
 
-    // We can't easily mount the full App (it connects to real providers)
-    // Instead verify the service prop is accepted by checking the App module exports
-    // The implementation test is handled via E2E tests in Phase 5
-
-    // This test serves as a placeholder/contract spec
-    // It passes once the App accepts a `service` prop
-    expect(typeof App).toBe("function");
-  });
-
-  test("App module exports App function", async () => {
-    const mod = await import("../../../packages/cli/src/tui/App.js");
-    expect(typeof mod.App).toBe("function");
+    handleKey({ name: "2" });
+    expect(setActivePanel).toHaveBeenCalledWith("codex");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Keybinding behavior tests for single-service mode
+// App module contract
 // ---------------------------------------------------------------------------
 
-describe("createKeybindingHandler - single service mode", () => {
-  test("when only claude available, key '2' should have no effect on activePanel", async () => {
-    const { createKeybindingHandler } = await import(
-      "../../../packages/cli/src/tui/hooks/useKeybindings.js"
-    );
-    const { mock } = await import("bun:test");
-
-    let activePanel = "claude";
-    const setActivePanel = mock((panel: string) => { activePanel = panel; });
-
-    const handleKey = createKeybindingHandler({
-      setActivePanel: setActivePanel as any,
-      navigateMetric: mock(() => {}) as any,
-      cycleTab: mock(() => {}) as any,
-      togglePause: mock(() => {}) as any,
-      triggerRefresh: mock(() => {}) as any,
-      speedUp: mock(() => {}) as any,
-      slowDown: mock(() => {}) as any,
-      setHelpVisible: mock(() => {}) as any,
-      helpVisible: () => false,
-      quit: mock(() => {}) as any,
-    });
-
-    // Key '2' calls setActivePanel("codex") unconditionally in current impl
-    // This is acceptable - the App-level filter handles what's visible
-    handleKey({ name: "2" });
-    expect(setActivePanel).toHaveBeenCalledWith("codex");
+describe("App module exports", () => {
+  test("App is exported as a function", async () => {
+    const { App } = await import("../../../packages/cli/src/tui/App.js");
+    expect(typeof App).toBe("function");
   });
 });

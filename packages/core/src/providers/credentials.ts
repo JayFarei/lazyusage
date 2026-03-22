@@ -78,21 +78,36 @@ export class ClaudeCredentialStore {
   static readonly KEYCHAIN_SERVICE = "Claude Code-credentials";
   static readonly CREDENTIALS_FILE = join(homedir(), ".claude", ".credentials.json");
 
+  private static readonly CREDENTIAL_TTL_MS = 60_000; // Re-read from Keychain/file at most once per minute
+
   private _credentials: ClaudeCredentials | null = null;
+  private _lastReadAt = 0;
   private _refreshInProgress = false;
   private _refreshGate = new RefreshFailureGate();
 
   getCredentials(): ClaudeCredentials | null {
-    if (this._credentials !== null) {
+    const now = Date.now();
+    // Return cached credentials if they're fresh AND not expired
+    if (
+      this._credentials !== null &&
+      now - this._lastReadAt < ClaudeCredentialStore.CREDENTIAL_TTL_MS &&
+      this._credentials.expiresAt > now
+    ) {
       return this._credentials;
     }
 
+    return this._readCredentials();
+  }
+
+  /** Read credentials from all sources (env, Keychain, file) */
+  private _readCredentials(): ClaudeCredentials | null {
     // Env override (for testing and headless envs)
     const envFile = process.env.CLAUDE_CREDENTIALS_FILE;
     if (envFile) {
       const fileCreds = this._getFromFilePath(envFile);
       if (fileCreds !== null) {
         this._credentials = fileCreds;
+        this._lastReadAt = Date.now();
         return fileCreds;
       }
     }
@@ -101,6 +116,7 @@ export class ClaudeCredentialStore {
     const keychainCreds = this._getFromKeychain();
     if (keychainCreds !== null) {
       this._credentials = keychainCreds;
+      this._lastReadAt = Date.now();
       return keychainCreds;
     }
 
@@ -108,6 +124,7 @@ export class ClaudeCredentialStore {
     const fileCreds = this._getFromFile();
     if (fileCreds !== null) {
       this._credentials = fileCreds;
+      this._lastReadAt = Date.now();
       return fileCreds;
     }
 
@@ -156,6 +173,7 @@ export class ClaudeCredentialStore {
         refreshToken: data.refresh_token as string,
         expiresAt: Date.now() + ((data.expires_in as number) * 1000),
       };
+      this._lastReadAt = Date.now();
       this._refreshGate.recordSuccess();
       this._persistCredentials(this._credentials).catch(() => {});
       return true;
@@ -169,19 +187,17 @@ export class ClaudeCredentialStore {
   /**
    * Reads raw credentials bypassing expiry check.
    * Returns credentials struct even if access token is expired.
+   * Re-reads from source when TTL has elapsed, so we pick up tokens
+   * refreshed by the Claude CLI itself.
    */
   private _getStaleCredentials(): ClaudeCredentials | null {
-    // If we have cached credentials (even expired), return them - refresh token is still valid
-    if (this._credentials !== null) return this._credentials;
-    // Otherwise read fresh from env file, Keychain, or file
-    const envFile = process.env.CLAUDE_CREDENTIALS_FILE;
-    if (envFile) {
-      const result = this._getFromFilePath(envFile);
-      if (result) return result;
+    const now = Date.now();
+    // Return cached credentials if TTL hasn't expired
+    if (this._credentials !== null && now - this._lastReadAt < ClaudeCredentialStore.CREDENTIAL_TTL_MS) {
+      return this._credentials;
     }
-    const keychainCreds = this._getFromKeychain();
-    if (keychainCreds) return keychainCreds;
-    return this._getFromFile();
+    // Re-read from sources (Keychain/file may have fresher tokens)
+    return this._readCredentials() ?? this._credentials;
   }
 
   /**

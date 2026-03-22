@@ -37,3 +37,6 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Smoke test packaged CLI
+        run: bun run test:smoke

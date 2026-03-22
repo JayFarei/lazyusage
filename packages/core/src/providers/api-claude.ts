@@ -81,6 +81,12 @@ export class ClaudeAPIProvider implements UsageProvider {
    */
   private static _rateLimitedUntil = 0;
 
+  /** Check if the usage API is currently rate-limited.
+   * Also applies to PTY since `/usage` uses the same API under the hood. */
+  static isRateLimited(): boolean {
+    return Date.now() < ClaudeAPIProvider._rateLimitedUntil;
+  }
+
   private async _fetchWithRetry(accessToken: string): Promise<Response> {
     // Skip if we know we're still rate-limited
     if (Date.now() < ClaudeAPIProvider._rateLimitedUntil) {

@@ -8,27 +8,44 @@ import {
   formatCombinedJson,
   type MetricsDict,
   type FallbackChain,
+  type ServiceResourceInfo,
+  type ServiceName,
 } from "@lazyusage/core";
 
 async function collectMetrics(
   servicesToQuery: string[],
-): Promise<{ claudeMetrics: MetricsDict | null; codexMetrics: MetricsDict | null }> {
+): Promise<{
+  claudeMetrics: MetricsDict | null;
+  codexMetrics: MetricsDict | null;
+  serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>>;
+}> {
   let claudeMetrics: MetricsDict | null = null;
   let codexMetrics: MetricsDict | null = null;
+  const serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>> = {};
 
   if (servicesToQuery.includes("claude")) {
     const chain = createClaudeChain(false) as FallbackChain;
     const result = await chain.fetch();
     claudeMetrics = result.metrics as MetricsDict | null;
+    serviceInfo.claude = {
+      source: result.source,
+      stale: result.stale,
+      error: result.error,
+    };
   }
 
   if (servicesToQuery.includes("codex")) {
     const chain = createCodexChain(false) as FallbackChain;
     const result = await chain.fetch();
     codexMetrics = result.metrics as MetricsDict | null;
+    serviceInfo.codex = {
+      source: result.source,
+      stale: result.stale,
+      error: result.error,
+    };
   }
 
-  return { claudeMetrics, codexMetrics };
+  return { claudeMetrics, codexMetrics, serviceInfo };
 }
 
 export function startServer(options: {
@@ -42,6 +59,7 @@ export function startServer(options: {
 
   const corsHeaders: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-store",
     "Content-Type": "application/json",
   };
 
@@ -71,6 +89,8 @@ export function startServer(options: {
             status: "ok",
             services,
             refresh_interval: refreshInterval,
+            host,
+            local_only: host === "127.0.0.1" || host === "localhost",
           }),
           { headers: corsHeaders },
         );
@@ -98,8 +118,8 @@ export function startServer(options: {
             controller.enqueue(encoder.encode(": connected\n\n"));
 
             // Send initial data
-            const { claudeMetrics, codexMetrics } = await collectMetrics(streamService);
-            send(formatCombinedJson(claudeMetrics, codexMetrics, services));
+            const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(streamService);
+            send(formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo));
 
             // Keepalive: send an SSE comment every 5s so Bun doesn't consider
             // the connection idle between data refreshes
@@ -110,8 +130,8 @@ export function startServer(options: {
             // Set up periodic refresh
             const interval = setInterval(async () => {
               try {
-                const { claudeMetrics, codexMetrics } = await collectMetrics(streamService);
-                send(formatCombinedJson(claudeMetrics, codexMetrics, services));
+                const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(streamService);
+                send(formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo));
               } catch {
                 // Skip failed refreshes
               }
@@ -150,8 +170,8 @@ export function startServer(options: {
       }
 
       // Collect and return metrics
-      const { claudeMetrics, codexMetrics } = await collectMetrics(servicesToQuery);
-      const output = formatCombinedJson(claudeMetrics, codexMetrics, services);
+      const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(servicesToQuery);
+      const output = formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo);
       return new Response(output, { headers: corsHeaders });
     },
   });

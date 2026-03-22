@@ -13,6 +13,7 @@ export type {
   ServiceMetrics,
   ServiceName,
   MetricsDict,
+  ServiceResourceInfo,
   UsageProvider,
   PersistentUsageProvider,
   EphemeralCollector,

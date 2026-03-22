@@ -30,6 +30,13 @@ export interface FetchResult {
   stale: boolean;
 }
 
+/** Machine-readable freshness and fallback metadata for a service snapshot */
+export interface ServiceResourceInfo {
+  source: DataSource | null;
+  stale: boolean;
+  error: string | null;
+}
+
 /** Claude service metrics */
 export interface ClaudeMetrics {
   subscription_type: string | null;

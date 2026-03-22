@@ -1,14 +1,41 @@
 {
   "name": "@lazyusage/cli",
   "version": "0.1.0",
+  "description": "Terminal and JSON usage monitoring for Claude CLI and Codex CLI.",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "./dist/cli.js",
   "bin": {
-    "lazyusage": "dist/cli.js"
+    "lazyusage": "./dist/cli.js"
   },
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jayfarei/lazyusage.git"
+  },
+  "homepage": "https://github.com/jayfarei/lazyusage#readme",
+  "bugs": {
+    "url": "https://github.com/jayfarei/lazyusage/issues"
+  },
+  "keywords": [
+    "bun",
+    "claude",
+    "codex",
+    "dashboard",
+    "rate-limit",
+    "tui"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "build": "bun --cwd ../.. run build",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@opentui/core": "0.1.77",

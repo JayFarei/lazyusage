@@ -8,10 +8,11 @@
   ],
   "scripts": {
     "build": "bun scripts/build.ts",
+    "build:core": "bunx tsc -p packages/core/tsconfig.json",
     "dev": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts",
-    "lazyusage": "bun dist/cli.js usage",
+    "lazyusage": "bun packages/cli/dist/cli.js",
     "lazyusage:dev": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage",
-    "lazyusage-check": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts packages/cli/src/index.ts usage-check",
+    "lazyusage-check": "bun packages/cli/dist/cli.js usage-check",
     "test": "bun --preload=./packages/cli/node_modules/@opentui/solid/scripts/preload.ts test",
     "test:core": "bun test tests/core/",
     "test:cli": "bun test tests/cli/",
@@ -23,7 +24,8 @@
     "typecheck": "bunx tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format . --write",
-    "test:dashboard": "bash examples/dashboard/e2e/run-tests.sh"
+    "test:dashboard": "bash examples/dashboard/e2e/run-tests.sh",
+    "test:smoke": "bun run build && bun packages/cli/dist/cli.js --help >/dev/null && bun packages/cli/dist/cli.js usage-check --help >/dev/null"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

@@ -107,3 +107,53 @@ describe("usePanelState - cycleTab", () => {
     });
   });
 });
+
+describe("usePanelState - sort controls", () => {
+  test("default sort state is totalTokens desc", () => {
+    createRoot((dispose) => {
+      const { sortState } = usePanelState();
+      expect(sortState()).toEqual({ column: "totalTokens", direction: "desc" });
+      dispose();
+    });
+  });
+
+  test("cycleSortColumn cycles through all columns and wraps", () => {
+    createRoot((dispose) => {
+      const { sortState, cycleSortColumn } = usePanelState();
+      // totalTokens -> project -> inputTokens -> outputTokens -> pctOfTotal -> totalTokens
+      cycleSortColumn();
+      expect(sortState().column).toBe("project");
+      cycleSortColumn();
+      expect(sortState().column).toBe("inputTokens");
+      cycleSortColumn();
+      expect(sortState().column).toBe("outputTokens");
+      cycleSortColumn();
+      expect(sortState().column).toBe("pctOfTotal");
+      cycleSortColumn();
+      expect(sortState().column).toBe("totalTokens"); // wraps
+      dispose();
+    });
+  });
+
+  test("toggleSortDirection flips between asc and desc", () => {
+    createRoot((dispose) => {
+      const { sortState, toggleSortDirection } = usePanelState();
+      expect(sortState().direction).toBe("desc");
+      toggleSortDirection();
+      expect(sortState().direction).toBe("asc");
+      toggleSortDirection();
+      expect(sortState().direction).toBe("desc");
+      dispose();
+    });
+  });
+
+  test("cycleSortColumn preserves sort direction", () => {
+    createRoot((dispose) => {
+      const { sortState, cycleSortColumn, toggleSortDirection } = usePanelState();
+      toggleSortDirection(); // switch to asc
+      cycleSortColumn(); // move to project
+      expect(sortState()).toEqual({ column: "project", direction: "asc" });
+      dispose();
+    });
+  });
+});

@@ -26,6 +26,8 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
     switchFocusSide: mock(() => {}),
     toggleFullscreen: mock(() => {}),
     exitFullscreen: mock(() => {}),
+    cycleSortColumn: mock(() => {}),
+    toggleSortDirection: mock(() => {}),
   };
 
   const handlers: KeybindingHandlers = {
@@ -44,6 +46,8 @@ function makeHandlers(overrides: Partial<KeybindingHandlers> = {}): {
     toggleFullscreen: mocks.toggleFullscreen as any,
     exitFullscreen: mocks.exitFullscreen as any,
     fullscreenActive: () => false,
+    cycleSortColumn: mocks.cycleSortColumn as any,
+    toggleSortDirection: mocks.toggleSortDirection as any,
     ...overrides,
   };
 
@@ -165,6 +169,24 @@ describe("createKeybindingHandler - quit", () => {
   });
 });
 
+describe("createKeybindingHandler - sort controls", () => {
+  test("key 's' calls cycleSortColumn", () => {
+    const { mocks, handlers } = makeHandlers();
+    const handleKey = createKeybindingHandler(handlers);
+    handleKey({ name: "s" });
+    expect(mocks.cycleSortColumn).toHaveBeenCalled();
+    expect(mocks.toggleSortDirection).not.toHaveBeenCalled();
+  });
+
+  test("key 's' with shift calls toggleSortDirection", () => {
+    const { mocks, handlers } = makeHandlers();
+    const handleKey = createKeybindingHandler(handlers);
+    handleKey({ name: "s", shift: true });
+    expect(mocks.toggleSortDirection).toHaveBeenCalled();
+    expect(mocks.cycleSortColumn).not.toHaveBeenCalled();
+  });
+});
+
 describe("createKeybindingHandler - help overlay", () => {
   test("'?' toggles help visible", () => {
     const { mocks, handlers } = makeHandlers();
@@ -174,54 +196,20 @@ describe("createKeybindingHandler - help overlay", () => {
   });
 
   test("any key while help visible closes it", () => {
-    let helpVisible = true;
-    const mocks = { setHelpVisible: mock((_v: boolean) => {}) };
-    const handlers: KeybindingHandlers = {
-      setActivePanel: mock(() => {}) as any,
-      focusStatsPanel: mock(() => {}) as any,
-      navigateMetric: mock(() => {}) as any,
-      cycleTab: mock(() => {}) as any,
-      togglePause: mock(() => {}) as any,
-      triggerRefresh: mock(() => {}) as any,
-      speedUp: mock(() => {}) as any,
-      slowDown: mock(() => {}) as any,
-      setHelpVisible: mocks.setHelpVisible as any,
-      helpVisible: () => helpVisible,
-      quit: mock(() => {}) as any,
-      switchFocusSide: mock(() => {}) as any,
-      toggleFullscreen: mock(() => {}) as any,
-      exitFullscreen: mock(() => {}) as any,
-      fullscreenActive: () => false,
-    };
+    const { mocks, handlers } = makeHandlers({
+      helpVisible: () => true,
+    });
     const handleKey = createKeybindingHandler(handlers);
-    handleKey({ name: "j" }); // any key while help visible
+    handleKey({ name: "j" });
     expect(mocks.setHelpVisible).toHaveBeenCalledWith(false);
   });
 
-  test("help toggle: '?' closes help if already visible", () => {
-    let helpVisible = true;
-    const mocks = { setHelpVisible: mock((_v: boolean) => {}) };
-    const handlers: KeybindingHandlers = {
-      setActivePanel: mock(() => {}) as any,
-      focusStatsPanel: mock(() => {}) as any,
-      navigateMetric: mock(() => {}) as any,
-      cycleTab: mock(() => {}) as any,
-      togglePause: mock(() => {}) as any,
-      triggerRefresh: mock(() => {}) as any,
-      speedUp: mock(() => {}) as any,
-      slowDown: mock(() => {}) as any,
-      setHelpVisible: mocks.setHelpVisible as any,
-      helpVisible: () => helpVisible,
-      quit: mock(() => {}) as any,
-      switchFocusSide: mock(() => {}) as any,
-      toggleFullscreen: mock(() => {}) as any,
-      exitFullscreen: mock(() => {}) as any,
-      fullscreenActive: () => false,
-    };
+  test("'?' closes help if already visible", () => {
+    const { mocks, handlers } = makeHandlers({
+      helpVisible: () => true,
+    });
     const handleKey = createKeybindingHandler(handlers);
     handleKey({ name: "?" });
-    // When help is visible and '?' is pressed, it first checks '?' and calls toggle
-    // The toggle logic: setHelpVisible(!helpVisible()) = setHelpVisible(false) since helpVisible=true
     expect(mocks.setHelpVisible).toHaveBeenCalledWith(false);
   });
 });

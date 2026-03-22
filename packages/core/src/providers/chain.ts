@@ -8,6 +8,7 @@ import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict }
 import { UsageCache } from "./cache.js";
 import { calculateFallbackTime } from "../utils/time.js";
 import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
+import { ClaudeAPIProvider } from "./api-claude.js";
 
 /** Minimal interface for token refresh - allows test injection without importing ClaudeCredentialStore */
 export interface TokenRefreshable {
@@ -182,14 +183,17 @@ export class PersistentFallbackChain {
     const apiResult = await this._tryApiWithRefresh();
     if (apiResult) return apiResult;
 
-    // Fallback to PTY
-    const result = await this.ptyProvider.start();
-    this._ptyStarted = true;
+    // Skip PTY when API is rate-limited (PTY's /usage hits the same API)
+    if (this.service !== "claude" || !ClaudeAPIProvider.isRateLimited()) {
+      // Fallback to PTY
+      const result = await this.ptyProvider.start();
+      this._ptyStarted = true;
 
-    if (result.metrics !== null && result.error === null) {
-      this.cache.store(result.metrics, result.timestamp);
-      this._lastResult = result;
-      return result;
+      if (result.metrics !== null && result.error === null && !result.stale) {
+        this.cache.store(result.metrics, result.timestamp);
+        this._lastResult = result;
+        return result;
+      }
     }
 
     // Try cache as last resort
@@ -208,20 +212,23 @@ export class PersistentFallbackChain {
     const apiResult = await this._tryApiWithRefresh();
     if (apiResult) return apiResult;
 
-    // Fallback to PTY refresh
-    if (!this._ptyStarted) {
-      return this.start();
+    // Skip PTY when API is rate-limited (PTY's /usage hits the same API)
+    if (this.service !== "claude" || !ClaudeAPIProvider.isRateLimited()) {
+      // Fallback to PTY refresh
+      if (!this._ptyStarted) {
+        return this.start();
+      }
+
+      const result = await this.ptyProvider.refresh();
+
+      if (result.metrics !== null && result.error === null && !result.stale) {
+        this.cache.store(result.metrics, result.timestamp);
+        this._lastResult = result;
+        return result;
+      }
     }
 
-    const result = await this.ptyProvider.refresh();
-
-    if (result.metrics !== null && result.error === null && !result.stale) {
-      this.cache.store(result.metrics, result.timestamp);
-      this._lastResult = result;
-      return result;
-    }
-
-    // If PTY failed or returned stale data, try cache
+    // If PTY failed, was skipped, or returned stale data, try cache
     const cacheResult = await this.cache.fetch();
     if (cacheResult.metrics !== null && cacheResult.error === null) {
       this._lastResult = cacheResult;

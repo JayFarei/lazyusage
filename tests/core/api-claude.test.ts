@@ -56,10 +56,12 @@ beforeEach(() => {
   // Reset static rate limit state
   (ClaudeAPIProvider as any)._rateLimitedUntil = 0;
   tempCredsPath = makeTempCredsPath();
+  process.env.CLAUDE_CREDENTIALS_FILE = tempCredsPath;
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  delete process.env.CLAUDE_CREDENTIALS_FILE;
   try {
     rmSync(tempCredsPath, { force: true });
   } catch {
@@ -74,14 +76,14 @@ afterEach(() => {
 describe("ClaudeAPIProvider - successful fetch + parse", () => {
   test("parses API response into correct MetricsDict", async () => {
     writeCredsFile(tempCredsPath);
-    const credStore = new ClaudeCredentialStore(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
     const provider = new ClaudeAPIProvider(credStore);
 
-    globalThis.fetch = async () =>
+    globalThis.fetch = (async () =>
       new Response(JSON.stringify(makeApiResponse()), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      });
+      })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 
@@ -106,10 +108,10 @@ describe("ClaudeAPIProvider - successful fetch + parse", () => {
 describe("ClaudeAPIProvider - rate limit (429)", () => {
   test("returns error on 429 response and sets rate limit timer", async () => {
     writeCredsFile(tempCredsPath);
-    const credStore = new ClaudeCredentialStore(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
     const provider = new ClaudeAPIProvider(credStore);
 
-    globalThis.fetch = async () =>
+    globalThis.fetch = (async () =>
       new Response(
         JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_error" } }),
         {
@@ -117,7 +119,7 @@ describe("ClaudeAPIProvider - rate limit (429)", () => {
           statusText: "Too Many Requests",
           headers: { "Retry-After": "120" },
         },
-      );
+      )) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 
@@ -133,13 +135,13 @@ describe("ClaudeAPIProvider - rate limit (429)", () => {
 describe("ClaudeAPIProvider - timeout", () => {
   test("returns error when fetch throws AbortError", async () => {
     writeCredsFile(tempCredsPath);
-    const credStore = new ClaudeCredentialStore(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
     const provider = new ClaudeAPIProvider(credStore);
 
-    globalThis.fetch = async () => {
+    globalThis.fetch = (async () => {
       const err = new DOMException("The operation was aborted", "AbortError");
       throw err;
-    };
+    }) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 
@@ -151,15 +153,15 @@ describe("ClaudeAPIProvider - timeout", () => {
 describe("ClaudeAPIProvider - malformed response", () => {
   test("handles missing fields with zero defaults", async () => {
     writeCredsFile(tempCredsPath);
-    const credStore = new ClaudeCredentialStore(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
     const provider = new ClaudeAPIProvider(credStore);
 
     // Response with missing fields
-    globalThis.fetch = async () =>
+    globalThis.fetch = (async () =>
       new Response(JSON.stringify({}), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      });
+      })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 
@@ -173,12 +175,12 @@ describe("ClaudeAPIProvider - malformed response", () => {
 describe("ClaudeAPIProvider - network error", () => {
   test("returns error when fetch throws", async () => {
     writeCredsFile(tempCredsPath);
-    const credStore = new ClaudeCredentialStore(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
     const provider = new ClaudeAPIProvider(credStore);
 
-    globalThis.fetch = async () => {
+    globalThis.fetch = (async () => {
       throw new Error("Network connection failed");
-    };
+    }) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 

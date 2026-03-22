@@ -3,9 +3,13 @@
  * Manages active panel, selected metric, and content tab.
  */
 import { createSignal } from "solid-js";
+import type { SortDirection } from "../components/DataTable.js";
 
 export type ActivePanel = "claude" | "codex";
 export type ContentTab = "daily" | "weekly" | "monthly";
+
+const SORT_COLUMNS = ["totalTokens", "project", "inputTokens", "outputTokens", "pctOfTotal"] as const;
+export type LedgerSortColumn = (typeof SORT_COLUMNS)[number];
 
 const METRIC_KEYS_MAP: Record<ActivePanel, string[]> = {
   claude: ["week_all", "week_sonnet", "session"],
@@ -18,6 +22,8 @@ export function usePanelState() {
   const [selectedMetricIndex, setSelectedMetricIndex] = createSignal(0);
   const [focusedSide, setFocusedSide] = createSignal<"service" | "stats">("service");
   const [fullscreenTarget, setFullscreenTarget] = createSignal<"service" | "stats" | null>(null);
+  const [sortColumn, setSortColumn] = createSignal<LedgerSortColumn>("totalTokens");
+  const [sortDirection, setSortDirection] = createSignal<SortDirection>("desc");
 
   const metricKeysForPanel = (panel: ActivePanel): string[] =>
     METRIC_KEYS_MAP[panel];
@@ -70,6 +76,19 @@ export function usePanelState() {
     setFullscreenTarget(null);
   }
 
+  function cycleSortColumn() {
+    setSortColumn((current) => {
+      const idx = SORT_COLUMNS.indexOf(current);
+      return SORT_COLUMNS[(idx + 1) % SORT_COLUMNS.length];
+    });
+  }
+
+  function toggleSortDirection() {
+    setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+  }
+
+  const sortState = () => ({ column: sortColumn(), direction: sortDirection() });
+
   return {
     activePanel,
     setActivePanel: switchPanel,
@@ -86,5 +105,8 @@ export function usePanelState() {
     switchFocusSide,
     toggleFullscreen,
     exitFullscreen,
+    sortState,
+    cycleSortColumn,
+    toggleSortDirection,
   };
 }

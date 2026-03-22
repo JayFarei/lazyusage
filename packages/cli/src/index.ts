@@ -17,4 +17,10 @@ program
 program.addCommand(usageCheckCommand);
 program.addCommand(usageCommand);
 
-program.parse();
+const rawArgs = process.argv.slice(2);
+const passThroughCommands = new Set(["usage", "usage-check", "help"]);
+const passThroughFlags = new Set(["-h", "--help", "-V", "--version"]);
+const shouldInjectUsage = rawArgs.length === 0
+  || (!passThroughCommands.has(rawArgs[0] ?? "") && !passThroughFlags.has(rawArgs[0] ?? ""));
+
+program.parse(shouldInjectUsage ? [process.argv[0], process.argv[1], "usage", ...rawArgs] : process.argv);

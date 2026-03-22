@@ -8,13 +8,14 @@ import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict }
 import { ClaudeEphemeralCollector, ClaudePersistentCollector } from "../collectors/claude.js";
 import { CodexEphemeralCollector, CodexPersistentCollector } from "../collectors/codex.js";
 
-/** Check if metrics are genuinely missing (null or no metric entries at all) */
+/** Check if metrics are genuinely missing or came entirely from fallbacks */
 function isLikelyStale(metrics: MetricsDict | null): boolean {
   if (!metrics) return true;
   // Check if there are any actual metric entries (not just subscription_type)
-  const metricEntries = Object.entries(metrics).filter(([key]) => key !== "subscription_type");
+  const metricEntries = Object.entries(metrics).filter(([key]) => key !== "subscription_type" && key !== "__parsed");
   if (metricEntries.length === 0) return true;
-  // All-zero used_pct is legitimate after limit adjustments, not stale
+  // If parser flagged that no regex matched, all values are from applyFallbacks()
+  if ("__parsed" in metrics && (metrics as any).__parsed === false) return true;
   return false;
 }
 
@@ -73,6 +74,17 @@ export class ClaudePersistentPTYProvider implements PersistentUsageProvider {
     const timestamp = Date.now() / 1000;
     try {
       const metrics = await this._collector.start();
+
+      if (isLikelyStale(metrics)) {
+        return {
+          metrics,
+          source: this.sourceType,
+          timestamp,
+          error: "Empty metrics returned (possibly stale session)",
+          stale: true,
+        };
+      }
+
       return { metrics, source: this.sourceType, timestamp, error: null, stale: false };
     } catch (e) {
       return {
@@ -185,6 +197,17 @@ export class CodexPersistentPTYProvider implements PersistentUsageProvider {
     const timestamp = Date.now() / 1000;
     try {
       const metrics = await this._collector.start();
+
+      if (isLikelyStale(metrics)) {
+        return {
+          metrics,
+          source: this.sourceType,
+          timestamp,
+          error: "Empty metrics returned (possibly stale session)",
+          stale: true,
+        };
+      }
+
       return { metrics, source: this.sourceType, timestamp, error: null, stale: false };
     } catch (e) {
       return {

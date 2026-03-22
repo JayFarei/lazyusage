@@ -44,6 +44,8 @@ describe("Server - /health endpoint", () => {
     expect(body.status).toBe("ok");
     expect(body.services).toEqual(["claude", "codex"]);
     expect(body.refresh_interval).toBe(60);
+    expect(body.host).toBe("127.0.0.1");
+    expect(body.local_only).toBe(true);
   });
 });
 
@@ -57,6 +59,9 @@ describe("Server - / root endpoint", () => {
     expect(typeof body).toBe("object");
     // formatCombinedJson returns a JSON string with services array
     expect(body.services).toBeDefined();
+    expect(body.services[0]).toHaveProperty("source");
+    expect(body.services[0]).toHaveProperty("stale");
+    expect(body.services[0]).toHaveProperty("error");
   }, 15_000);
 });
 

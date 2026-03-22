@@ -9,8 +9,9 @@ export const SESSION_WINDOW_HOURS = 5;
 /** Default API request timeout in milliseconds */
 export const API_TIMEOUT_MS = 10_000;
 
-/** Default retry-after duration in seconds when no header provided */
-export const RATE_LIMIT_DEFAULT_SECONDS = 60;
+/** Default retry-after duration in seconds when no header provided.
+ * The Anthropic usage API allows ~1 request per 3-4 minutes. */
+export const RATE_LIMIT_DEFAULT_SECONDS = 240;
 
 /** TUI tick interval in milliseconds (30 seconds) */
 export const TICK_INTERVAL_MS = 30_000;

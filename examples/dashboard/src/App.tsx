@@ -45,7 +45,7 @@ export default function App() {
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
             <p className="text-red-400 font-medium">Could not connect to lazyusage server</p>
             <p className="text-gray-500 text-sm">
-              Make sure it's running: <code className="bg-gray-800 px-1.5 py-0.5 rounded">bun run lazyusage --serve --port {port}</code>
+              Make sure it's running: <code className="bg-gray-800 px-1.5 py-0.5 rounded">lazyusage --serve --port {port}</code>
             </p>
           </div>
         )}

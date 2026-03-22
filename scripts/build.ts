@@ -1,29 +1,48 @@
 #!/usr/bin/env bun
 /**
- * Pre-bundle the CLI entry point and ledger worker using the SolidJS transform plugin.
- * Eliminates the Babel/JSX transform at launch time for faster cold starts.
+ * Build publishable workspace artifacts.
  *
  * Usage: bun run build
  * Outputs:
- *   dist/cli.js          - main TUI binary (run with: bun dist/cli.js usage)
- *   dist/ledger-worker.js - standalone worker for JSONL parsing
+ *   packages/core/dist/   - compiled JS + declarations
+ *   packages/cli/dist/    - publishable CLI bundle + ledger worker
  */
 import solidTransformPlugin from "../packages/cli/node_modules/@opentui/solid/scripts/solid-plugin";
-import { mkdirSync } from "fs";
+import { mkdirSync, rmSync } from "fs";
 
-mkdirSync("dist", { recursive: true });
+const rootDir = new URL("../", import.meta.url).pathname;
+const coreDir = `${rootDir}packages/core`;
+const cliDir = `${rootDir}packages/cli`;
+const coreDistDir = `${coreDir}/dist`;
+const cliDistDir = `${cliDir}/dist`;
+
+rmSync(coreDistDir, { recursive: true, force: true });
+rmSync(cliDistDir, { recursive: true, force: true });
+mkdirSync(coreDistDir, { recursive: true });
+mkdirSync(cliDistDir, { recursive: true });
+
+const coreBuild = Bun.spawnSync(["bunx", "tsc", "-p", "packages/core/tsconfig.json"], {
+  cwd: rootDir,
+  stdout: "inherit",
+  stderr: "inherit",
+});
+
+if (coreBuild.exitCode !== 0) {
+  process.exit(coreBuild.exitCode);
+}
 
 // Build 1: main CLI (JSX transform required for SolidJS components)
 const cliResult = await Bun.build({
   entrypoints: ["./packages/cli/src/index.ts"],
-  outdir: "./dist",
+  outdir: "./packages/cli/dist",
   target: "bun",
   naming: "cli.js",
   plugins: [solidTransformPlugin],
   // @opentui/core must be external (native arm64/x64 binary cannot be bundled).
   // @opentui/solid and solid-js are bundled together so they share a single reactive
   // runtime instance. Making solid-js external causes Bun to pick up the SSR version.
-  external: ["better-sqlite3", "bun:sqlite", "bun:ffi", "@opentui/core"],
+  external: ["better-sqlite3", "bun:sqlite", "bun:ffi", "@opentui/core", "@lazyusage/core"],
+  root: rootDir,
 });
 
 if (!cliResult.success) {
@@ -32,14 +51,15 @@ if (!cliResult.success) {
 }
 
 // Build 2: ledger worker (no JSX, plain TypeScript, self-contained)
-// Lives alongside dist/cli.js so the WORKER_PATH detection in useLedgerData.ts
+// Lives alongside packages/cli/dist/cli.js so WORKER_PATH detection in useLedgerData.ts
 // picks it up via: existsSync("./ledger-worker.js") relative to import.meta.url
 const workerResult = await Bun.build({
   entrypoints: ["./packages/cli/src/tui/lib/ledger-worker.ts"],
-  outdir: "./dist",
+  outdir: "./packages/cli/dist",
   target: "bun",
   naming: "ledger-worker.js",
   external: ["bun:sqlite", "bun:ffi"],
+  root: rootDir,
 });
 
 if (!workerResult.success) {

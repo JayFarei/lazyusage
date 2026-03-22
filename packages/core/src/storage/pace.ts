@@ -2,6 +2,7 @@
  * Hourly pace aggregator for usage trend visualization.
  * Reads from UsageStore snapshots and produces 168 hourly data points (1 week).
  */
+import type { ServiceName } from "../types.js";
 import { UsageStore } from "./database.js";
 
 export interface PacePoint {
@@ -22,7 +23,7 @@ export interface PaceData {
  */
 export function buildPaceData(
   store: UsageStore,
-  service: string,
+  service: ServiceName,
   metricKey: string,
 ): PaceData {
   const now = Date.now();

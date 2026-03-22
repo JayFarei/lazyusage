@@ -50,7 +50,8 @@ assert_not() {
 header "Starting servers"
 
 cd "$REPO_ROOT"
-bun dist/cli.js usage --serve --port "$API_PORT" &
+bun run build >/dev/null
+bun packages/cli/dist/cli.js --serve --port "$API_PORT" &
 API_PID=$!
 
 cd "$DASHBOARD_DIR"
@@ -127,7 +128,7 @@ npx agent-browser wait 7000 >/dev/null
 ERROR_BODY=$(npx agent-browser get text body 2>&1)
 assert "Error banner shown"                    "$ERROR_BODY" "Error"
 assert "Error message mentions port"           "$ERROR_BODY" "19999"
-assert "Error message includes bun run hint"   "$ERROR_BODY" "bun run lazyusage"
+assert "Error message includes lazyusage hint" "$ERROR_BODY" "lazyusage --serve"
 assert "Previous data still visible on error"  "$ERROR_BODY" "claude"
 
 npx agent-browser screenshot >/dev/null

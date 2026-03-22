@@ -17,6 +17,7 @@ import {
   type MetricsDict,
   type FallbackChain,
   type ServiceName,
+  type ServiceResourceInfo,
 } from "@lazyusage/core";
 
 export function detectAvailableServices(): string[] {
@@ -66,12 +67,18 @@ async function collectMetrics(
   services: string[],
   debug: boolean,
   store: boolean = true,
-): Promise<{ claudeMetrics: MetricsDict | null; codexMetrics: MetricsDict | null; sources: Record<string, string> }> {
+): Promise<{
+  claudeMetrics: MetricsDict | null;
+  codexMetrics: MetricsDict | null;
+  sources: Record<string, string>;
+  serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>>;
+}> {
   let claudeMetrics: MetricsDict | null = null;
   let codexMetrics: MetricsDict | null = null;
   let claudeSource: string | null = null;
   let codexSource: string | null = null;
   const sources: Record<string, string> = {};
+  const serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>> = {};
 
   if (services.includes("claude")) {
     if (debug) console.error("Collecting Claude metrics...");
@@ -80,6 +87,11 @@ async function collectMetrics(
     claudeMetrics = result.metrics as MetricsDict | null;
     claudeSource = result.source;
     if (claudeSource) sources.claude = claudeSource;
+    serviceInfo.claude = {
+      source: result.source,
+      stale: result.stale,
+      error: result.error,
+    };
     if (debug) {
       console.error(`  Source: ${result.source}`);
       if (result.stale) console.error("  Warning: Data is stale");
@@ -96,6 +108,11 @@ async function collectMetrics(
     codexMetrics = result.metrics as MetricsDict | null;
     codexSource = result.source;
     if (codexSource) sources.codex = codexSource;
+    serviceInfo.codex = {
+      source: result.source,
+      stale: result.stale,
+      error: result.error,
+    };
     if (debug) {
       console.error(`  Source: ${result.source}`);
       if (result.stale) console.error("  Warning: Data is stale");
@@ -109,7 +126,7 @@ async function collectMetrics(
     storeSnapshots(claudeMetrics, codexMetrics, claudeSource, codexSource);
   }
 
-  return { claudeMetrics, codexMetrics, sources };
+  return { claudeMetrics, codexMetrics, sources, serviceInfo };
 }
 
 function storeSnapshots(
@@ -157,9 +174,9 @@ export const usageCheckCommand = new Command("usage-check")
         const startTime = performance.now();
         const available = detectAvailableServices();
         const services = validateService(service, available);
-        const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, opts.debug ?? false);
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
 
-        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
+        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
         console.log(output);
 
         if (opts.debug) {
@@ -180,11 +197,11 @@ export const usageCheckCommand = new Command("usage-check")
     const startTime = performance.now();
     const available = detectAvailableServices();
     const services = validateService(service, available);
-    const { claudeMetrics, codexMetrics, sources } = await collectMetrics(services, opts.debug ?? false);
+    const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
 
     let output: string;
     if (opts.json) {
-      output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources);
+      output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
     } else {
       if (services.length === 1) {
         if (services.includes("claude") && claudeMetrics) {

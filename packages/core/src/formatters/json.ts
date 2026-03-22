@@ -3,7 +3,7 @@
  * Port of src/formatters/json.py
  */
 
-import type { MetricsDict } from "../types.js";
+import type { MetricsDict, ServiceName, ServiceResourceInfo } from "../types.js";
 import { calculateTimeProgress } from "../utils/time.js";
 import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 
@@ -35,12 +35,34 @@ function capacityOnlyMetric(name: string, metric: { used_pct: number; resets: st
   return { name, capacity_remaining: timeElapsedPct - metric.used_pct };
 }
 
+type ServiceInfoMap = Partial<Record<ServiceName, ServiceResourceInfo>>;
+
+function buildServiceEnvelope(
+  serviceName: ServiceName,
+  availableServices: string[],
+  metrics: MetricsDict | null,
+  sources?: Record<string, string>,
+  serviceInfo?: ServiceInfoMap,
+): Record<string, unknown> {
+  const info = serviceInfo?.[serviceName];
+  return {
+    name: serviceName,
+    available: availableServices.includes(serviceName),
+    source: info?.source ?? sources?.[serviceName] ?? null,
+    stale: info?.stale ?? false,
+    error: info?.error ?? null,
+    subscription_type: metrics ? ((metrics.subscription_type as string) ?? null) : null,
+    metrics: [] as Array<Record<string, unknown>>,
+  };
+}
+
 /** Format combined metrics with only capacity_remaining per metric */
 export function formatCombinedCapacityJson(
   claudeMetrics: MetricsDict | null,
   codexMetrics: MetricsDict | null,
   availableServices: string[],
   sources?: Record<string, string>,
+  serviceInfo?: ServiceInfoMap,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -50,12 +72,7 @@ export function formatCombinedCapacityJson(
 
   const servicesList = output.services as Array<Record<string, unknown>>;
 
-  const claudeService: Record<string, unknown> = {
-    name: "claude",
-    available: availableServices.includes("claude"),
-    source: sources?.claude ?? null,
-    metrics: [] as Array<Record<string, unknown>>,
-  };
+  const claudeService = buildServiceEnvelope("claude", availableServices, claudeMetrics, sources, serviceInfo);
   if (claudeMetrics) {
     for (const [name, data] of Object.entries(claudeMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
@@ -65,12 +82,7 @@ export function formatCombinedCapacityJson(
   }
   servicesList.push(claudeService);
 
-  const codexService: Record<string, unknown> = {
-    name: "codex",
-    available: availableServices.includes("codex"),
-    source: sources?.codex ?? null,
-    metrics: [] as Array<Record<string, unknown>>,
-  };
+  const codexService = buildServiceEnvelope("codex", availableServices, codexMetrics, sources, serviceInfo);
   if (codexMetrics) {
     for (const [name, data] of Object.entries(codexMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
@@ -142,6 +154,7 @@ export function formatCombinedJson(
   codexMetrics: MetricsDict | null,
   availableServices: string[],
   sources?: Record<string, string>,
+  serviceInfo?: ServiceInfoMap,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -152,14 +165,7 @@ export function formatCombinedJson(
   const servicesList = output.services as Array<Record<string, unknown>>;
 
   // Claude service
-  const claudeService: Record<string, unknown> = {
-    name: "claude",
-    available: availableServices.includes("claude"),
-    source: sources?.claude ?? null,
-    subscription_type: claudeMetrics ? ((claudeMetrics.subscription_type as string) ?? null) : null,
-    metrics: [] as Array<Record<string, unknown>>,
-  };
-
+  const claudeService = buildServiceEnvelope("claude", availableServices, claudeMetrics, sources, serviceInfo);
   if (claudeMetrics) {
     for (const [name, data] of Object.entries(claudeMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
@@ -170,14 +176,7 @@ export function formatCombinedJson(
   servicesList.push(claudeService);
 
   // Codex service
-  const codexService: Record<string, unknown> = {
-    name: "codex",
-    available: availableServices.includes("codex"),
-    source: sources?.codex ?? null,
-    subscription_type: codexMetrics ? ((codexMetrics.subscription_type as string) ?? null) : null,
-    metrics: [] as Array<Record<string, unknown>>,
-  };
-
+  const codexService = buildServiceEnvelope("codex", availableServices, codexMetrics, sources, serviceInfo);
   if (codexMetrics) {
     for (const [name, data] of Object.entries(codexMetrics)) {
       if (name === "subscription_type" || typeof data !== "object" || data === null) continue;

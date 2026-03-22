@@ -7,6 +7,7 @@ import { useTheme } from "../theme.js";
 import { LedgerContent } from "./LedgerContent.js";
 import type { ContentTab } from "../hooks/useViewMode.js";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import type { SortState } from "./DataTable.js";
 
 export interface StatsPanelProps {
   contentTab: ContentTab;
@@ -18,6 +19,8 @@ export interface StatsPanelProps {
   error?: string | null;
   isActive?: boolean;
   panelNumber?: number;
+  sortState?: SortState<ProjectUsage>;
+  onSort?: (column: keyof ProjectUsage) => void;
 }
 
 const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
@@ -82,7 +85,7 @@ export function StatsPanel(props: StatsPanelProps) {
                 trackOptions: { backgroundColor: theme.surface0 },
               }}
             >
-              <LedgerContent data={props.daily} service={props.service} title="Today" />
+              <LedgerContent data={props.daily} service={props.service} title="Today" sortState={props.sortState} onSort={props.onSort} />
             </scrollbox>
           </Show>
 
@@ -96,7 +99,7 @@ export function StatsPanel(props: StatsPanelProps) {
                 trackOptions: { backgroundColor: theme.surface0 },
               }}
             >
-              <LedgerContent data={props.weekly} service={props.service} title="Last 7 Days" />
+              <LedgerContent data={props.weekly} service={props.service} title="Last 7 Days" sortState={props.sortState} onSort={props.onSort} />
             </scrollbox>
           </Show>
 
@@ -110,7 +113,7 @@ export function StatsPanel(props: StatsPanelProps) {
                 trackOptions: { backgroundColor: theme.surface0 },
               }}
             >
-              <LedgerContent data={props.monthly} service={props.service} title="Last 28 Days" />
+              <LedgerContent data={props.monthly} service={props.service} title="Last 28 Days" sortState={props.sortState} onSort={props.onSort} />
             </scrollbox>
           </Show>
         </Show>

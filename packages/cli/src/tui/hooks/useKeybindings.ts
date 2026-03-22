@@ -19,6 +19,8 @@ export interface KeybindingHandlers {
   toggleFullscreen: () => void;
   exitFullscreen: () => void;
   fullscreenActive: () => boolean;
+  cycleSortColumn: () => void;
+  toggleSortDirection: () => void;
 }
 
 export function createKeybindingHandler(handlers: KeybindingHandlers) {
@@ -84,6 +86,15 @@ export function createKeybindingHandler(handlers: KeybindingHandlers) {
       case "-":
       case "_":
         handlers.slowDown();
+        break;
+
+      // Sort controls
+      case "s":
+        if (event.shift) {
+          handlers.toggleSortDirection();
+        } else {
+          handlers.cycleSortColumn();
+        }
         break;
 
       // Focus side toggle

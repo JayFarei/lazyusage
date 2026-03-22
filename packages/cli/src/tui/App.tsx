@@ -50,6 +50,7 @@ export function App(props: AppProps = {}) {
     focusedSide,
     fullscreenTarget, toggleFullscreen, exitFullscreen,
     switchFocusSide,
+    sortState, cycleSortColumn, toggleSortDirection,
   } = usePanelState();
   const [lastUpdated, setLastUpdated] = createSignal<string | null>(null);
   const [helpVisible, setHelpVisible] = createSignal(false);
@@ -142,6 +143,8 @@ export function App(props: AppProps = {}) {
     toggleFullscreen,
     exitFullscreen,
     fullscreenActive: () => fullscreenTarget() !== null,
+    cycleSortColumn,
+    toggleSortDirection,
   });
 
   useKeyboard((event) => {
@@ -256,7 +259,7 @@ export function App(props: AppProps = {}) {
       panels.push("[2]Codex");
       panels.push("[4]CodexStats");
     }
-    return ` ${panels.join("  ")}  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  r=Refresh  p=Pause  ?=Help  q=Quit`;
+    return ` ${panels.join("  ")}  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  s=Sort  S=Dir  r=Refresh  p=Pause  ?=Help  q=Quit`;
   };
 
   return (
@@ -293,6 +296,7 @@ export function App(props: AppProps = {}) {
               error={ledger.error()}
               isActive={activePanel() === "claude" && focusedSide() === "stats"}
               panelNumber={3}
+              sortState={sortState()}
             />
           </box>
         </box>
@@ -325,6 +329,7 @@ export function App(props: AppProps = {}) {
               error={ledger.error()}
               isActive={activePanel() === "codex" && focusedSide() === "stats"}
               panelNumber={4}
+              sortState={sortState()}
             />
           </box>
         </box>
@@ -362,6 +367,7 @@ export function App(props: AppProps = {}) {
           monthly={activePanel() === "claude" ? ledger.claudeMonthly() : ledger.codexMonthly()}
           loading={ledger.loading()}
           error={ledger.error()}
+          sortState={sortState()}
         />
       </Show>
 

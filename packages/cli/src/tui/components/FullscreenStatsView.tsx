@@ -7,6 +7,7 @@ import { useTheme } from "../theme.js";
 import { LedgerContent } from "./LedgerContent.js";
 import type { ContentTab } from "../hooks/useViewMode.js";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import type { SortState } from "./DataTable.js";
 
 const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
 
@@ -24,6 +25,8 @@ interface FullscreenStatsViewProps {
   monthly: ProjectUsage[] | null;
   loading: boolean;
   error: string | null;
+  sortState?: SortState<ProjectUsage>;
+  onSort?: (column: keyof ProjectUsage) => void;
 }
 
 export function FullscreenStatsView(props: FullscreenStatsViewProps) {
@@ -71,7 +74,7 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.daily} service={props.service} title="Today" />
+          <LedgerContent data={props.daily} service={props.service} title="Today" sortState={props.sortState} onSort={props.onSort} />
         </scrollbox>
       </Show>
 
@@ -85,7 +88,7 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.weekly} service={props.service} title="Last 7 Days" />
+          <LedgerContent data={props.weekly} service={props.service} title="Last 7 Days" sortState={props.sortState} onSort={props.onSort} />
         </scrollbox>
       </Show>
 
@@ -99,12 +102,12 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.monthly} service={props.service} title="Last 28 Days" />
+          <LedgerContent data={props.monthly} service={props.service} title="Last 28 Days" sortState={props.sortState} onSort={props.onSort} />
         </scrollbox>
       </Show>
 
       <text
-        content="  [/] switch tab  g/Esc return"
+        content="  [/] switch tab  s=sort column  S=sort dir  g/Esc return"
         fg={theme.surface1}
         height={1}
         paddingLeft={1}

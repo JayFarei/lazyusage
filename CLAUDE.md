@@ -135,4 +135,4 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 - `tmux` - Required for E2E tests only
 
 # currentDate
-Today's date is 2026-02-19.
+Today's date is 2026-03-22.
