@@ -22,6 +22,12 @@ export type {
   HistoryEntry,
   ClaudeCredentials,
   CodexCredentials,
+  Regime,
+  DailyBoundary,
+  DailyDelta,
+  CapacityPrediction,
+  SupervisedMark,
+  PredictionBarSegments,
 } from "./types.js";
 
 export { DataSource, ExitCode } from "./types.js";
@@ -47,6 +53,7 @@ export {
   createTimeMarkers,
   createCapacityBar,
   createPeriodBar,
+  createPredictionBar,
 } from "./utils/bars.js";
 
 export {
@@ -73,11 +80,15 @@ export { ClaudeEphemeralCollector, ClaudePersistentCollector } from "./collector
 export { CodexEphemeralCollector, CodexPersistentCollector } from "./collectors/codex.js";
 
 // Formatters
-export { formatClaudeText, formatCodexText, formatWithAvailability, formatClaudeCapacityText, formatCodexCapacityText, formatCapacityWithAvailability } from "./formatters/text.js";
+export { formatClaudeText, formatCodexText, formatWithAvailability, formatClaudeCapacityText, formatCodexCapacityText, formatCapacityWithAvailability, formatPredictionText, formatPredictionCapacitySuffix } from "./formatters/text.js";
 export { formatJson, formatAllJson, formatCombinedJson, formatCombinedCapacityJson } from "./formatters/json.js";
 
 // Constants
-export { WEEKLY_WINDOW_HOURS, SESSION_WINDOW_HOURS, API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS, TICK_INTERVAL_MS, DATA_SOURCE_LABELS, CODEX_PLAN_TYPE_MAP } from "./constants.js";
+export { WEEKLY_WINDOW_HOURS, SESSION_WINDOW_HOURS, API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS, TICK_INTERVAL_MS, DATA_SOURCE_LABELS, CODEX_PLAN_TYPE_MAP, REGIME_RATES, COLD_START_RATE } from "./constants.js";
+
+// Prediction
+export { computeDailyDeltas } from "./prediction/deltas.js";
+export { predict } from "./prediction/project.js";
 
 // Credentials
 export { ClaudeCredentialStore, CodexCredentialStore, RefreshFailureGate } from "./providers/credentials.js";

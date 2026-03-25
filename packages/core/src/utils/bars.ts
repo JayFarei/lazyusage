@@ -53,3 +53,28 @@ export function createPeriodBar(
   const filled = Math.round((timePct / 100) * barWidth);
   return "\u2593".repeat(filled) + "\u2591".repeat(barWidth - filled);
 }
+
+/**
+ * Create a 3-segment prediction bar.
+ * - used: ▓ (dark) — actual usage so far
+ * - predicted: ▒ (medium) — predicted additional usage by window end
+ * - spare: ░ (light) — predicted spare at window end
+ *
+ * The spare segment = barWidth - filled - predicted (never rounded independently)
+ * to prevent rounding misalignment.
+ */
+export function createPredictionBar(
+  usedPct: number,
+  predictedPct: number,
+  barWidth: number,
+): { used: string; predicted: string; spare: string } {
+  const filled = Math.min(barWidth, Math.round((usedPct / 100) * barWidth));
+  const predictedRaw = Math.round((predictedPct / 100) * barWidth);
+  const predicted = Math.min(predictedRaw, barWidth - filled); // clamp to remaining space
+  const spare = barWidth - filled - predicted; // remainder, always >= 0
+  return {
+    used: "\u2593".repeat(filled),
+    predicted: "\u2592".repeat(predicted),
+    spare: "\u2591".repeat(spare),
+  };
+}

@@ -7,7 +7,7 @@ import { homedir } from "os";
 import { join, dirname } from "path";
 import { mkdirSync, existsSync, chmodSync } from "fs";
 import { parseTimeToDatetime } from "../utils/time.js";
-import type { HistoryEntry, MetricsDict, ServiceName } from "../types.js";
+import type { HistoryEntry, MetricsDict, ServiceName, DailyBoundary, SupervisedMark, Regime } from "../types.js";
 
 export class UsageStore {
   static readonly DEFAULT_DB_PATH = join(
@@ -61,6 +61,13 @@ export class UsageStore {
     this.db.run(
       `CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON usage_snapshots (timestamp)`,
     );
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS capacity_marks (
+        date TEXT PRIMARY KEY,
+        regime TEXT NOT NULL CHECK (regime IN ('L', 'M', 'H', 'B')),
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `);
   }
 
   storeSnapshot(
@@ -198,7 +205,78 @@ export class UsageStore {
       `DELETE FROM usage_snapshots WHERE timestamp < ?`,
       [cutoffIso],
     );
+    const markCutoff = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+    this.db.run(`DELETE FROM capacity_marks WHERE date < ?`, [markCutoff]);
     return result.changes;
+  }
+
+  getDailyBoundaries(
+    service: ServiceName,
+    metricName: string,
+    days: number = 30,
+  ): DailyBoundary[] {
+    const cutoffIso = new Date(Date.now() - days * 86400_000).toISOString();
+    const rows = this.db
+      .query(
+        `SELECT
+          date(timestamp) AS day,
+          MIN(used_pct) AS min_pct,
+          MAX(used_pct) AS max_pct,
+          COUNT(*) AS sample_count,
+          (SELECT s2.used_pct FROM usage_snapshots s2
+           WHERE s2.service = ? AND s2.metric_name = ?
+             AND date(s2.timestamp) = date(s1.timestamp)
+           ORDER BY s2.timestamp ASC LIMIT 1) AS first_pct,
+          (SELECT s2.used_pct FROM usage_snapshots s2
+           WHERE s2.service = ? AND s2.metric_name = ?
+             AND date(s2.timestamp) = date(s1.timestamp)
+           ORDER BY s2.timestamp DESC LIMIT 1) AS last_pct,
+          (SELECT s2.resets_at FROM usage_snapshots s2
+           WHERE s2.service = ? AND s2.metric_name = ?
+             AND date(s2.timestamp) = date(s1.timestamp)
+           ORDER BY s2.timestamp DESC LIMIT 1) AS resets_at
+        FROM usage_snapshots s1
+        WHERE service = ? AND metric_name = ? AND timestamp >= ?
+        GROUP BY date(timestamp)
+        ORDER BY day`,
+      )
+      .all(service, metricName, service, metricName, service, metricName, service, metricName, cutoffIso) as Array<{
+      day: string;
+      sample_count: number;
+      first_pct: number;
+      last_pct: number;
+      resets_at: string | null;
+    }>;
+
+    return rows.map((row) => ({
+      date: row.day,
+      firstUsedPct: row.first_pct,
+      lastUsedPct: row.last_pct,
+      resetsAt: row.resets_at,
+      sampleCount: row.sample_count,
+    }));
+  }
+
+  setCapacityMark(date: string, regime: Regime): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO capacity_marks (date, regime) VALUES (?, ?)`,
+      [date, regime],
+    );
+  }
+
+  getCapacityMarks(): SupervisedMark[] {
+    const rows = this.db
+      .query(`SELECT date, regime FROM capacity_marks ORDER BY date`)
+      .all() as Array<{ date: string; regime: Regime }>;
+    return rows;
+  }
+
+  clearCapacityMark(date: string): void {
+    this.db.run(`DELETE FROM capacity_marks WHERE date = ?`, [date]);
+  }
+
+  clearAllCapacityMarks(): void {
+    this.db.run(`DELETE FROM capacity_marks`);
   }
 
   close(): void {

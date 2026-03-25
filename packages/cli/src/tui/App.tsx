@@ -19,6 +19,7 @@ import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
 import { usePanelState } from "./hooks/useViewMode.js";
 import { useLedgerData } from "./hooks/useLedgerData.js";
 import { createKeybindingHandler } from "./hooks/useKeybindings.js";
+import { usePrediction } from "./hooks/usePrediction.js";
 import {
   createClaudeChain,
   createCodexChain,
@@ -62,6 +63,9 @@ export function App(props: AppProps = {}) {
   const [tick, setTick] = createSignal(0);
 
   const ledger = useLedgerData();
+
+  // Prediction engine: runs on each tick, produces prediction data for weekly bars
+  const { claudePrediction, codexPrediction } = usePrediction(tick, claudeMetrics, codexMetrics);
 
   const visiblePanelCount = () => (showClaude() ? 1 : 0) + (showCodex() ? 1 : 0);
 
@@ -283,6 +287,7 @@ export function App(props: AppProps = {}) {
               panelNumber={1}
               panelCount={visiblePanelCount()}
               tick={tick()}
+              prediction={claudePrediction() ?? undefined}
             />
           </box>
           <box width="60%">
@@ -316,6 +321,7 @@ export function App(props: AppProps = {}) {
               panelNumber={2}
               panelCount={visiblePanelCount()}
               tick={tick()}
+              prediction={codexPrediction() ?? undefined}
             />
           </box>
           <box width="60%">
@@ -354,6 +360,7 @@ export function App(props: AppProps = {}) {
           metricKey={selectedMetricKey()}
           metrics={activePanel() === "claude" ? claudeMetrics() : codexMetrics()}
           tick={tick()}
+          prediction={(activePanel() === "claude" ? claudePrediction() : codexPrediction()) ?? undefined}
         />
       </Show>
 

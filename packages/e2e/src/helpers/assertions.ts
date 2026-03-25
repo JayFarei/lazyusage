@@ -1,7 +1,7 @@
 /**
  * Frame validation assertions for E2E TUI tests.
  */
-import { extractAllMarkers, extractBarWidths, validateEquidistant } from "./markers.js";
+import { extractAllMarkers, extractBarWidths, extractPredictionBars, validateEquidistant } from "./markers.js";
 
 /** Assert the frame contains core structural markers. */
 export function assertLayoutIntact(frame: string): void {
@@ -89,6 +89,49 @@ export function assertNotContains(frame: string, text: string, context?: string)
   if (frame.includes(text)) {
     const ctx = context ? ` (${context})` : "";
     throw new Error(`Frame unexpectedly contains${ctx}: "${text}"`);
+  }
+}
+
+/** Assert prediction bars are present (3-segment bars with ▒). */
+export function assertPredictionBarsPresent(frame: string): void {
+  const predBars = extractPredictionBars(frame);
+  if (predBars.length === 0) {
+    throw new Error("Prediction bars not found: no lines contain ▒ (medium shade) characters");
+  }
+}
+
+/** Assert prediction bars have consistent total widths. */
+export function assertPredictionBarWidthsConsistent(frame: string): void {
+  const predBars = extractPredictionBars(frame);
+  if (predBars.length < 2) return;
+  const first = predBars[0].total;
+  for (const bar of predBars) {
+    if (bar.total !== first) {
+      throw new Error(
+        `Prediction bar width mismatch: line ${bar.lineIndex} has total=${bar.total}, expected ${first}`,
+      );
+    }
+  }
+}
+
+/** Assert prediction bar segments sum correctly (used + predicted + spare = total). */
+export function assertPredictionBarSegmentsValid(frame: string): void {
+  const predBars = extractPredictionBars(frame);
+  for (const bar of predBars) {
+    const sum = bar.used + bar.predicted + bar.spare;
+    if (sum !== bar.total) {
+      throw new Error(
+        `Prediction bar segment mismatch at line ${bar.lineIndex}: ` +
+        `used(${bar.used}) + predicted(${bar.predicted}) + spare(${bar.spare}) = ${sum} != total(${bar.total})`,
+      );
+    }
+  }
+}
+
+/** Assert the frame contains prediction label text (% used │ % spare). */
+export function assertPredictionLabelsPresent(frame: string): void {
+  if (!frame.includes("% used") || (!frame.includes("% spare") && !frame.includes("OVER BUDGET"))) {
+    throw new Error("Prediction labels not found: expected '% used' and '% spare' or 'OVER BUDGET'");
   }
 }
 

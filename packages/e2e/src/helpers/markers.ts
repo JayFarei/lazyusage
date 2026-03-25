@@ -103,3 +103,48 @@ export function extractBarWidths(frame: string): Array<{
     total: number;
   }>;
 }
+
+/**
+ * Count prediction bar characters (▓ U+2593, ▒ U+2592, ░ U+2591) in a line.
+ * A "prediction bar" line contains ▒ (medium shade) which normal bars never use.
+ */
+export function countPredictionBarChars(line: string): {
+  used: number;     // ▓ count
+  predicted: number; // ▒ count
+  spare: number;    // ░ count
+  total: number;
+  isPredictionBar: boolean;
+} {
+  let used = 0, predicted = 0, spare = 0;
+  for (const c of line) {
+    if (c === "\u2593") used++;
+    else if (c === "\u2592") predicted++;
+    else if (c === "\u2591") spare++;
+  }
+  const total = used + predicted + spare;
+  return { used, predicted, spare, total, isPredictionBar: predicted > 0 };
+}
+
+/** Find all lines containing prediction bar chars (▒ medium shade). */
+export function extractPredictionBars(frame: string): Array<{
+  lineIndex: number;
+  used: number;
+  predicted: number;
+  spare: number;
+  total: number;
+}> {
+  const lines = frame.split("\n");
+  return lines
+    .map((line, i) => {
+      const counts = countPredictionBarChars(line);
+      if (!counts.isPredictionBar) return null;
+      return { lineIndex: i, used: counts.used, predicted: counts.predicted, spare: counts.spare, total: counts.total };
+    })
+    .filter(Boolean) as Array<{
+    lineIndex: number;
+    used: number;
+    predicted: number;
+    spare: number;
+    total: number;
+  }>;
+}

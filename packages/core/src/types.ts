@@ -131,3 +131,51 @@ export enum ExitCode {
   PARSE_ERROR = 3,
   TIMEOUT = 4,
 }
+
+/** Regime level for supervised capacity marks */
+export type Regime = "L" | "M" | "H" | "B";
+
+/** Daily usage boundary extracted from snapshots */
+export interface DailyBoundary {
+  date: string;       // YYYY-MM-DD
+  firstUsedPct: number;
+  lastUsedPct: number;
+  resetsAt: string | null; // ISO timestamp from resets_at column
+  sampleCount: number;
+}
+
+/** Processed daily delta with validity flag */
+export interface DailyDelta {
+  date: string;       // YYYY-MM-DD
+  delta: number;      // % of weekly allowance consumed that day
+  valid: boolean;     // false if single-sample or multi-reset day
+}
+
+/** Capacity prediction result */
+export interface CapacityPrediction {
+  service: string;
+  metricName: string;    // "week_all", "week_sonnet", or "weekly"
+  usedSoFar: number;
+  remainingDays: number; // fractional
+  averageRate: number;   // daily consumption rate used for projection
+  projectedTotal: number;
+  predictedSpare: number; // can be negative
+  overBudget: boolean;
+  source: "unsupervised" | "supervised" | "blended";
+  confidence: "low" | "medium" | "high";
+  sampleDays: number;
+  windowEnds: string;    // ISO timestamp
+}
+
+/** Supervised mark for capacity planning */
+export interface SupervisedMark {
+  date: string;   // YYYY-MM-DD
+  regime: Regime;
+}
+
+/** 3-segment prediction bar segments */
+export interface PredictionBarSegments {
+  used: string;       // characters
+  predicted: string;  // characters
+  spare: string;      // characters
+}

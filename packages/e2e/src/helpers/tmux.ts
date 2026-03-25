@@ -64,9 +64,16 @@ export async function createDirectTUISession(
 }
 
 /** Launch the TUI in a tmux session. */
-export async function launchTUI(sessionName: string, args: string[] = []): Promise<void> {
+export async function launchTUI(
+  sessionName: string,
+  args: string[] = [],
+  env?: Record<string, string>,
+): Promise<void> {
   const argStr = args.length > 0 ? " " + args.join(" ") : "";
-  const cmd = `bun --preload=${PRELOAD} ${TUI_SCRIPT} usage${argStr}`;
+  const envPrefix = env
+    ? Object.entries(env).map(([k, v]) => `${k}=${v}`).join(" ") + " "
+    : "";
+  const cmd = `${envPrefix}bun --preload=${PRELOAD} ${TUI_SCRIPT} usage${argStr}`;
   await runTmux(["send-keys", "-t", sessionName, cmd, "Enter"]);
 }
 

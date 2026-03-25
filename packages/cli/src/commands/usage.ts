@@ -12,11 +12,99 @@ import {
   formatCodexCapacityText,
   formatCapacityWithAvailability,
   formatCombinedCapacityJson,
+  formatPredictionText,
   ExitCode,
   setLogLevel,
+  UsageStore,
+  computeDailyDeltas,
+  predict,
+  WEEKLY_WINDOW_HOURS,
   type LogLevel,
+  type CapacityPrediction,
+  type ServiceName,
+  type MetricsDict,
 } from "@lazyusage/core";
 import { detectAvailableServices, validateService, collectMetrics } from "./usage-check.js";
+
+/** Run predictions and return camelCase CapacityPrediction objects keyed by service → metric. */
+function runPredictionsRaw(
+  services: string[],
+  claudeMetrics: MetricsDict | null,
+  codexMetrics: MetricsDict | null,
+): Record<string, Record<string, CapacityPrediction>> {
+  const store = new UsageStore();
+  const predictions: Record<string, Record<string, CapacityPrediction>> = {};
+
+  try {
+    const metricMap: Record<string, { metrics: MetricsDict | null; keys: string[] }> = {
+      claude: { metrics: claudeMetrics, keys: ["week_all", "week_sonnet"] },
+      codex: { metrics: codexMetrics, keys: ["weekly"] },
+    };
+
+    for (const svc of services) {
+      const info = metricMap[svc];
+      if (!info?.metrics) continue;
+
+      const svcPredictions: Record<string, CapacityPrediction> = {};
+      for (const metricName of info.keys) {
+        const metricData = info.metrics[metricName];
+        if (!metricData || typeof metricData !== "object" || !("used_pct" in metricData)) continue;
+
+        const boundaries = store.getDailyBoundaries(svc as ServiceName, metricName, 30);
+        const deltas = computeDailyDeltas(boundaries);
+
+        const lastBoundary = boundaries[boundaries.length - 1];
+        const windowEnds = lastBoundary?.resetsAt ?? new Date(Date.now() + WEEKLY_WINDOW_HOURS * 3600_000).toISOString();
+        const remainingDays = Math.max(0, (new Date(windowEnds).getTime() - Date.now()) / (24 * 3600_000));
+        const marks = store.getCapacityMarks();
+
+        svcPredictions[metricName] = predict(
+          deltas,
+          (metricData as { used_pct: number }).used_pct,
+          remainingDays,
+          windowEnds,
+          svc,
+          metricName,
+          marks,
+        );
+      }
+
+      if (Object.keys(svcPredictions).length > 0) {
+        predictions[svc] = svcPredictions;
+      }
+    }
+  } finally {
+    store.close();
+  }
+
+  return predictions;
+}
+
+/** Convert camelCase predictions to snake_case for JSON output. */
+function predictionsToJson(
+  raw: Record<string, Record<string, CapacityPrediction>>,
+): Record<string, Record<string, unknown>> {
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const [svc, metrics] of Object.entries(raw)) {
+    const svcResult: Record<string, unknown> = {};
+    for (const [metric, pred] of Object.entries(metrics)) {
+      svcResult[metric] = {
+        predicted_spare: pred.predictedSpare,
+        over_budget: pred.overBudget,
+        projected_total: pred.projectedTotal,
+        average_rate: pred.averageRate,
+        remaining_days: pred.remainingDays,
+        used_so_far: pred.usedSoFar,
+        source: pred.source,
+        confidence: pred.confidence,
+        sample_days: pred.sampleDays,
+        window_ends: pred.windowEnds,
+      };
+    }
+    result[svc] = svcResult;
+  }
+  return result;
+}
 
 const GROUPED_HELP = `
 Human Options:
@@ -28,6 +116,7 @@ Agent Options:
   --json              JSON output instead of TUI
   --json-only         JSON output with errors as JSON on stdout (machine-safe)
   --capacity          Filter output to capacity_remaining only (use with --text or --json)
+  --predict           Show predicted spare capacity at window end
   --debug             Show debug information
   --verbose           Enable verbose output (same as --log-level debug)
   --log-level <level> Log level: error, warning, info, debug, trace
@@ -65,6 +154,7 @@ export const usageCommand = new Command("usage")
   .option("--debug", "Show debug information")
   .option("--verbose", "Enable verbose output (same as --log-level debug)")
   .option("--log-level <level>", "Log level: error, warning, info, debug, trace")
+  .option("--predict", "Show predicted spare capacity at window end")
   .option("--serve", "Start HTTP server (polling + streaming endpoints)")
   .option("--port <number>", "Server port (default: 8080, requires --serve)", "8080")
   .option("--host <address>", "Server bind address (default: 127.0.0.1, use 0.0.0.0 for all interfaces)", "127.0.0.1")
@@ -93,6 +183,7 @@ export const usageCommand = new Command("usage")
       debug?: boolean;
       verbose?: boolean;
       logLevel?: string;
+      predict?: boolean;
       serve?: boolean;
       port?: string;
       host?: string;
@@ -160,6 +251,10 @@ export const usageCommand = new Command("usage")
       console.error("Error: --serve and --capacity are mutually exclusive.");
       process.exit(ExitCode.FAILURE);
     }
+    if (opts.predict && opts.serve) {
+      console.error("Error: --predict and --serve are mutually exclusive.");
+      process.exit(ExitCode.FAILURE);
+    }
     if (opts.port !== "8080" && !opts.serve) {
       console.error("Error: --port requires --serve.");
       process.exit(ExitCode.FAILURE);
@@ -195,7 +290,9 @@ export const usageCommand = new Command("usage")
     // --capacity --json: capacity JSON snapshot
     if (opts.capacity && useJson) {
       const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+      const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+      const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
+      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
       return;
     }
 
@@ -218,9 +315,37 @@ export const usageCommand = new Command("usage")
 
       console.log(output);
 
+      if (opts.predict) {
+        const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+        for (const [, preds] of Object.entries(rawPreds)) {
+          for (const [, pred] of Object.entries(preds)) {
+            console.log(formatPredictionText(pred));
+          }
+        }
+      }
+
       if (debug) {
         const elapsed = (performance.now() - startTime) / 1000;
         console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+      }
+      return;
+    }
+
+    // --predict standalone: text prediction output
+    if (opts.predict && !useJson && !opts.capacity && !opts.text) {
+      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+      const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+
+      const lines: string[] = [];
+      for (const [svc, preds] of Object.entries(rawPreds)) {
+        for (const [metric, pred] of Object.entries(preds)) {
+          lines.push(`${svc} ${metric}: ${formatPredictionText(pred)}`);
+        }
+      }
+      if (lines.length === 0) {
+        console.log("No prediction data available (no weekly metrics found).");
+      } else {
+        console.log(lines.join("\n"));
       }
       return;
     }
@@ -254,7 +379,9 @@ export const usageCommand = new Command("usage")
     if (useJson && !opts.live) {
       // Single JSON snapshot
       const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+      const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+      const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
+      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
       return;
     }
 

@@ -7,12 +7,14 @@ import { useTerminalDimensions } from "@opentui/solid";
 import { useTheme } from "../theme.js";
 import {
   createCapacityBar,
+  createPredictionBar,
   createTimeMarkers,
   createPeriodBar,
   calculateTimeProgress,
   calculateBarWidth,
   type MetricsDict,
   type MetricData,
+  type CapacityPrediction,
 } from "@lazyusage/core";
 import { LABEL_MAP, WINDOW_HOURS, METRIC_KEYS } from "./ServicePanel.js";
 
@@ -24,6 +26,7 @@ interface FullscreenMetricViewProps {
   metricKey: string;
   metrics: MetricsDict | null;
   tick?: number;
+  prediction?: Record<string, CapacityPrediction>;
 }
 
 export function FullscreenMetricView(props: FullscreenMetricViewProps) {
@@ -92,11 +95,38 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
                 bold={true}
                 height={1}
               />
-              <text
-                content={`  ${createCapacityBar(entry.data.used_pct, w)} \u25c6 ${Math.round(entry.data.used_pct)}%`}
-                fg={theme.text}
-                height={1}
-              />
+              {(() => {
+                const pred = props.prediction?.[entry.key];
+                if (pred && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                  const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
+                  const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
+                  const spareTxt = pred.overBudget
+                    ? `OVER BUDGET ${Math.round(pred.predictedSpare)}%`
+                    : `${Math.round(pred.predictedSpare)}% spare`;
+                  const dimPred = pred.confidence === "low";
+                  const sparePrefix = pred.confidence === "low" ? "~" : "";
+                  return (
+                    <box flexDirection="row" height={1}>
+                      <text content={"  "} />
+                      <text content={segments.used} fg={theme.text} />
+                      <text content={segments.predicted} fg={theme.yellow} dim={dimPred} />
+                      <text content={segments.spare} fg={theme.cyan} />
+                      <text
+                        content={` ${Math.round(entry.data.used_pct)}% used \u2502 ${sparePrefix}${spareTxt}`}
+                        fg={pred.overBudget ? theme.red : theme.subtext}
+                        bold={pred.overBudget}
+                      />
+                    </box>
+                  );
+                }
+                return (
+                  <text
+                    content={`  ${createCapacityBar(entry.data.used_pct, w)} \u25c6 ${Math.round(entry.data.used_pct)}%`}
+                    fg={theme.text}
+                    height={1}
+                  />
+                );
+              })()}
               <text
                 content={`  ${createTimeMarkers(divisions, w)}`}
                 fg={theme.surface1}

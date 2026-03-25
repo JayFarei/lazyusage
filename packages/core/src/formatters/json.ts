@@ -63,6 +63,7 @@ export function formatCombinedCapacityJson(
   availableServices: string[],
   sources?: Record<string, string>,
   serviceInfo?: ServiceInfoMap,
+  predictions?: Record<string, Record<string, unknown>>,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -80,6 +81,9 @@ export function formatCombinedCapacityJson(
       (claudeService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
     }
   }
+  if (predictions?.claude) {
+    (claudeService as Record<string, unknown>).prediction = predictions.claude;
+  }
   servicesList.push(claudeService);
 
   const codexService = buildServiceEnvelope("codex", availableServices, codexMetrics, sources, serviceInfo);
@@ -89,6 +93,9 @@ export function formatCombinedCapacityJson(
       const metric = data as { used_pct: number; resets: string };
       (codexService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
     }
+  }
+  if (predictions?.codex) {
+    (codexService as Record<string, unknown>).prediction = predictions.codex;
   }
   servicesList.push(codexService);
 
@@ -155,6 +162,7 @@ export function formatCombinedJson(
   availableServices: string[],
   sources?: Record<string, string>,
   serviceInfo?: ServiceInfoMap,
+  predictions?: Record<string, Record<string, unknown>>,
 ): string {
   const output: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -173,6 +181,9 @@ export function formatCombinedJson(
       (claudeService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
     }
   }
+  if (predictions?.claude) {
+    (claudeService as Record<string, unknown>).prediction = predictions.claude;
+  }
   servicesList.push(claudeService);
 
   // Codex service
@@ -183,6 +194,9 @@ export function formatCombinedJson(
       const metric = data as { used_pct: number; remaining_pct: number; resets: string };
       (codexService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
     }
+  }
+  if (predictions?.codex) {
+    (codexService as Record<string, unknown>).prediction = predictions.codex;
   }
   servicesList.push(codexService);
 

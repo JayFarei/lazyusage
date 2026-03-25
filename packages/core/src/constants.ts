@@ -34,3 +34,11 @@ export const CODEX_PLAN_TYPE_MAP: Record<string, string> = {
   business: "Business",
   enterprise: "Enterprise",
 };
+
+/** Fixed daily rates for each regime level (v1) */
+export const REGIME_RATES: Record<string, number> = {
+  L: 3, M: 9, H: 15, B: 25,
+};
+
+/** Cold-start daily consumption rate when no history is available */
+export const COLD_START_RATE = 15;

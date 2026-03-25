@@ -136,3 +136,34 @@ export function formatWithAvailability(
 
   return lines.join("\n");
 }
+
+// ── Prediction formatters ────────────────────────────────────────────────────
+
+/** Format a prediction result as human-readable text */
+export function formatPredictionText(prediction: {
+  predictedSpare: number;
+  confidence: string;
+  sampleDays: number;
+  overBudget: boolean;
+}): string {
+  const { predictedSpare, confidence, sampleDays, overBudget } = prediction;
+  const spare = Math.round(predictedSpare);
+  if (overBudget) {
+    return `Predicted spare at window end: OVER BUDGET ${spare}% (${confidence} confidence, ${sampleDays} days history)`;
+  }
+  const sign = spare > 0 ? "+" : "";
+  return `Predicted spare at window end: ${sign}${spare}% (${confidence} confidence, ${sampleDays} days history)`;
+}
+
+/** Format prediction as a compact capacity-style suffix */
+export function formatPredictionCapacitySuffix(prediction: {
+  predictedSpare: number;
+  overBudget: boolean;
+}): string {
+  if (prediction.overBudget) {
+    return `Predicted: OVER BUDGET ${Math.round(prediction.predictedSpare)}%`;
+  }
+  const spare = Math.round(prediction.predictedSpare);
+  const sign = spare > 0 ? "+" : "";
+  return `Predicted: ${sign}${spare}% spare`;
+}

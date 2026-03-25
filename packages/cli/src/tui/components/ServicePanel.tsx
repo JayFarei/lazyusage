@@ -7,6 +7,7 @@ import { useTerminalDimensions } from "@opentui/solid";
 import { useTheme } from "../theme.js";
 import {
   createCapacityBar,
+  createPredictionBar,
   createTimeMarkers,
   createPeriodBar,
   calculateTimeProgress,
@@ -15,6 +16,7 @@ import {
   formatTimeRemaining,
   type MetricsDict,
   type MetricData,
+  type CapacityPrediction,
 } from "@lazyusage/core";
 
 export const LABEL_MAP: Record<string, string> = {
@@ -49,6 +51,7 @@ interface ServicePanelProps {
   panelCount?: number;
   /** Shared 30s tick from App, replaces per-panel setInterval */
   tick?: number;
+  prediction?: Record<string, CapacityPrediction>;
 }
 
 const BAR_OVERHEAD = 12;
@@ -155,7 +158,11 @@ export function ServicePanel(props: ServicePanelProps) {
             const labelText = () => {
               const collapsed = mode() === "focus" && !isSelected();
               if (collapsed) {
-                return `${marker()}${entry.label}  \u25c6 ${usedPct()}%  \u23f1 ${timePctR()}%`;
+                const pred = props.prediction?.[entry.key];
+                const predSuffix = pred
+                  ? (pred.overBudget ? " \u2192 OVER BUDGET" : ` \u2192 ${Math.round(pred.predictedSpare)}% spare`)
+                  : "";
+                return `${marker()}${entry.label}  \u25c6 ${usedPct()}%  \u23f1 ${timePctR()}%${predSuffix}`;
               }
               return `${marker()}${entry.label}`;
             };
@@ -173,11 +180,38 @@ export function ServicePanel(props: ServicePanelProps) {
                 />
                 {/* Capacity bar */}
                 <Show when={showCapBar()}>
-                  <text
-                    content={`  ${capBar()} \u25c6 ${usedPct()}%`}
-                    fg={theme.text}
-                    height={1}
-                  />
+                  {(() => {
+                    const pred = props.prediction?.[entry.key];
+                    if (pred && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                      const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
+                      const segments = createPredictionBar(entry.data.used_pct, predictedPct, barWidth());
+                      const spareTxt = pred.overBudget
+                        ? `OVER BUDGET ${Math.round(pred.predictedSpare)}%`
+                        : `${Math.round(pred.predictedSpare)}% spare`;
+                      const dimPred = pred.confidence === "low";
+                      const sparePrefix = pred.confidence === "low" ? "~" : "";
+                      return (
+                        <box flexDirection="row" height={1}>
+                          <text content={"  "} />
+                          <text content={segments.used} fg={theme.text} />
+                          <text content={segments.predicted} fg={theme.yellow} dim={dimPred} />
+                          <text content={segments.spare} fg={theme.cyan} />
+                          <text
+                            content={` ${usedPct()}% used \u2502 ${sparePrefix}${spareTxt}`}
+                            fg={pred.overBudget ? theme.red : theme.subtext}
+                            bold={pred.overBudget}
+                          />
+                        </box>
+                      );
+                    }
+                    return (
+                      <text
+                        content={`  ${capBar()} \u25c6 ${usedPct()}%`}
+                        fg={theme.text}
+                        height={1}
+                      />
+                    );
+                  })()}
                 </Show>
                 {/* Time markers */}
                 <Show when={showMarkers()}>
