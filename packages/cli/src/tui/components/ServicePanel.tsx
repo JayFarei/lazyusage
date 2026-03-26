@@ -159,7 +159,8 @@ export function ServicePanel(props: ServicePanelProps) {
               const collapsed = mode() === "focus" && !isSelected();
               if (collapsed) {
                 const pred = props.prediction?.[entry.key];
-                const predSuffix = pred
+                const predMeaningful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
+                const predSuffix = predMeaningful
                   ? (pred.overBudget ? " \u2192 OVER BUDGET" : ` \u2192 ${Math.round(pred.predictedSpare)}% spare`)
                   : "";
                 return `${marker()}${entry.label}  \u25c6 ${usedPct()}%  \u23f1 ${timePctR()}%${predSuffix}`;
@@ -182,7 +183,11 @@ export function ServicePanel(props: ServicePanelProps) {
                 <Show when={showCapBar()}>
                   {(() => {
                     const pred = props.prediction?.[entry.key];
-                    if (pred && entry.data.used_pct >= 0 &&
+                    // Show prediction bar for weekly metrics, but only when the prediction
+                    // is meaningful. Skip when window just reset (< 5% used, > 5 days left),
+                    // historic rates don't reflect the new window yet.
+                    const predUseful = pred && pred.usedSoFar >= 5 || (pred && pred.remainingDays <= 5);
+                    if (pred && predUseful &&
                         (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
                       const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                       const segments = createPredictionBar(entry.data.used_pct, predictedPct, barWidth());

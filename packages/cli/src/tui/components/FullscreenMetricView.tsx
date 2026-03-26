@@ -97,7 +97,8 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
               />
               {(() => {
                 const pred = props.prediction?.[entry.key];
-                if (pred && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                const predUseful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
+                if (pred && predUseful && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
                   const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                   const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
                   const spareTxt = pred.overBudget

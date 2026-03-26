@@ -100,19 +100,7 @@ export function predict(
     }
   }
 
-  let projectedTotal = usedSoFar + projectedAdditional;
-
-  // Sanity clamp: projectedTotal cannot exceed 100 for display purposes,
-  // but we preserve the raw value in predictedSpare for OVER BUDGET signaling.
-  // Also: if usedSoFar is near 0 and remainingDays > 5 (fresh window after reset),
-  // cap projectedTotal at a reasonable maximum. Historic rates from old windows
-  // can overpredict when the new window just started.
-  if (usedSoFar < 5 && remainingDays > 5 && projectedTotal > 100) {
-    // Scale down: in a fresh window, project at most 100%
-    // The prediction will self-correct as the window progresses and real data arrives
-    projectedTotal = Math.min(100, usedSoFar + averageRate * Math.min(remainingDays, 7));
-  }
-
+  const projectedTotal = usedSoFar + projectedAdditional;
   const predictedSpare = 100 - projectedTotal;
   const overBudget = projectedTotal > 100;
 
