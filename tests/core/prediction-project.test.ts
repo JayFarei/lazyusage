@@ -113,6 +113,18 @@ describe("predict", () => {
     expect(high.confidence).toBe("high");
   });
 
+  test("fresh window: 0% used with 6+ days remaining does not over-budget", () => {
+    // After a window reset, usedSoFar is 0 and remainingDays is ~7
+    // Old window's average rate (e.g. 15%/day) would project 105%, but this is wrong
+    const deltas: DailyDelta[] = Array.from({ length: 14 }, (_, i) =>
+      baseDelta(`2026-03-${String(10 + i).padStart(2, "0")}`, 15),
+    );
+    const result = predict(deltas, 0, 6.67, "2026-04-02T00:25:00Z", "codex", "weekly");
+    // Should NOT be over budget when 0% used
+    expect(result.overBudget).toBe(false);
+    expect(result.predictedSpare).toBeGreaterThanOrEqual(0);
+  });
+
   test("rounding: values are rounded to 1 decimal", () => {
     const deltas: DailyDelta[] = [baseDelta("2026-03-20", 7.333)];
     const result = predict(deltas, 47, 2.3, "2026-03-27T16:00:00Z", "claude", "week_all");

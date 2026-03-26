@@ -182,7 +182,8 @@ export function ServicePanel(props: ServicePanelProps) {
                 <Show when={showCapBar()}>
                   {(() => {
                     const pred = props.prediction?.[entry.key];
-                    if (pred && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                    if (pred && entry.data.used_pct >= 0 &&
+                        (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
                       const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                       const segments = createPredictionBar(entry.data.used_pct, predictedPct, barWidth());
                       const spareTxt = pred.overBudget

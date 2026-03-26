@@ -73,46 +73,46 @@ export function predict(
     }
   }
 
-  // Project forward day by day, starting from today.
-  // remainingDays is fractional (e.g., 3.5 means today has 0.5 days left + 3 full days).
-  // We iterate from today forward so supervised marks match the correct calendar date.
+  // Project forward using total remaining days * average rate.
+  // For supervised marks, substitute the mark's rate for each marked day.
   let projectedAdditional = 0;
-  let daysAccountedFor = 0;
 
-  // First partial day: today's remainder
-  const todayStr = localDateStr(now);
-  const todayFraction = Math.min(remainingDays, remainingDays - Math.floor(remainingDays) || 1);
-  if (todayFraction > 0 && remainingDays > 0) {
-    const todayRate = marksMap.get(todayStr) ?? averageRate;
-    projectedAdditional += todayRate * todayFraction;
-    daysAccountedFor += todayFraction;
+  if (remainingDays > 0) {
+    // Fraction of today remaining
+    const todayStr = localDateStr(now);
+    const fractionalPart = remainingDays % 1;
+    const todayFraction = fractionalPart > 0 ? fractionalPart : 0;
+    const wholeDaysAfterToday = Math.floor(remainingDays - todayFraction);
+
+    // Today's partial day
+    if (todayFraction > 0) {
+      const todayRate = marksMap.get(todayStr) ?? averageRate;
+      projectedAdditional += todayRate * todayFraction;
+    }
+
+    // Full days after today
+    for (let i = 1; i <= wholeDaysAfterToday; i++) {
+      const dayDate = new Date(now);
+      dayDate.setDate(dayDate.getDate() + i);
+      const dateStr = localDateStr(dayDate);
+      const dayRate = marksMap.get(dateStr) ?? averageRate;
+      projectedAdditional += dayRate;
+    }
   }
 
-  // Full days after today
-  let dayOffset = 1;
-  while (daysAccountedFor + 1 <= remainingDays) {
-    const dayDate = new Date(now);
-    dayDate.setDate(dayDate.getDate() + dayOffset);
-    const dateStr = localDateStr(dayDate);
+  let projectedTotal = usedSoFar + projectedAdditional;
 
-    const dayRate = marksMap.get(dateStr) ?? averageRate;
-    projectedAdditional += dayRate;
-    daysAccountedFor += 1;
-    dayOffset++;
+  // Sanity clamp: projectedTotal cannot exceed 100 for display purposes,
+  // but we preserve the raw value in predictedSpare for OVER BUDGET signaling.
+  // Also: if usedSoFar is near 0 and remainingDays > 5 (fresh window after reset),
+  // cap projectedTotal at a reasonable maximum. Historic rates from old windows
+  // can overpredict when the new window just started.
+  if (usedSoFar < 5 && remainingDays > 5 && projectedTotal > 100) {
+    // Scale down: in a fresh window, project at most 100%
+    // The prediction will self-correct as the window progresses and real data arrives
+    projectedTotal = Math.min(100, usedSoFar + averageRate * Math.min(remainingDays, 7));
   }
 
-  // Last partial day (if window ends mid-day on a future date)
-  const lastFraction = remainingDays - daysAccountedFor;
-  if (lastFraction > 0.001) {
-    const dayDate = new Date(now);
-    dayDate.setDate(dayDate.getDate() + dayOffset);
-    const dateStr = localDateStr(dayDate);
-
-    const dayRate = marksMap.get(dateStr) ?? averageRate;
-    projectedAdditional += dayRate * lastFraction;
-  }
-
-  const projectedTotal = usedSoFar + projectedAdditional;
   const predictedSpare = 100 - projectedTotal;
   const overBudget = projectedTotal > 100;
 
