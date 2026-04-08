@@ -75,6 +75,8 @@ export function mockProjectUsage(
     pctOfTotal?: number;
     inputTokens?: number;
     outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
   }> = [],
 ): ProjectUsage[] {
   if (projects.length === 0) {
@@ -85,6 +87,8 @@ export function mockProjectUsage(
         pctOfTotal: 60.0,
         inputTokens: 30000,
         outputTokens: 15000,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
       },
       {
         project: "other-project",
@@ -92,6 +96,8 @@ export function mockProjectUsage(
         pctOfTotal: 26.7,
         inputTokens: 15000,
         outputTokens: 5000,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
       },
       {
         project: "small-script",
@@ -99,6 +105,8 @@ export function mockProjectUsage(
         pctOfTotal: 13.3,
         inputTokens: 7000,
         outputTokens: 3000,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
       },
     ];
   }
@@ -109,6 +117,8 @@ export function mockProjectUsage(
     pctOfTotal: p.pctOfTotal ?? (p.totalTokens / total) * 100,
     inputTokens: p.inputTokens ?? Math.floor(p.totalTokens * 0.7),
     outputTokens: p.outputTokens ?? Math.floor(p.totalTokens * 0.3),
+    cacheReadTokens: p.cacheReadTokens ?? 0,
+    cacheCreationTokens: p.cacheCreationTokens ?? 0,
   }));
 }
 

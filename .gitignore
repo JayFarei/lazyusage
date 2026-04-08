@@ -26,3 +26,5 @@ __pycache__/
 
 # Scratch / temp files
 *.html
+.opentraces/staging/
+.opentraces/config.json

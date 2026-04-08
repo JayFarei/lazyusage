@@ -84,10 +84,26 @@ export function ServicePanel(props: ServicePanelProps) {
   });
 
   const dims = useTerminalDimensions();
+  const panelCols = () => Math.floor(dims().width * 0.4) - 4;
   const barWidth = () => {
-    const cols = dims().width;
-    const panelCols = Math.floor(cols * 0.4) - 4;
-    return Math.max(MIN_LOCAL_BAR, calculateBarWidth(panelCols, BAR_OVERHEAD));
+    const cols = panelCols();
+    // Use non-prediction overhead (prefix "  " + " ◆ 14%" suffix ~= BAR_OVERHEAD)
+    // Prediction suffix is handled separately by truncating to fit remaining space
+    const maxBar = cols - BAR_OVERHEAD;
+    if (maxBar < MIN_LOCAL_BAR) return Math.max(8, maxBar);
+    return Math.min(maxBar, calculateBarWidth(cols, BAR_OVERHEAD));
+  };
+  /**
+   * Responsive text tier based on available panel width.
+   * - "full": plenty of room for decorators ("◆", "⏱", " used │ ")
+   * - "compact": tighter spacing, shorter labels
+   * - "minimal": bare minimum, just percentages
+   */
+  const textTier = (): "full" | "compact" | "minimal" => {
+    const cols = panelCols();
+    if (cols >= 38) return "full";
+    if (cols >= 26) return "compact";
+    return "minimal";
   };
 
   const panelHeight = () => {
@@ -160,10 +176,22 @@ export function ServicePanel(props: ServicePanelProps) {
               if (collapsed) {
                 const pred = props.prediction?.[entry.key];
                 const predMeaningful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
-                const predSuffix = predMeaningful
-                  ? (pred.overBudget ? " \u2192 OVER BUDGET" : ` \u2192 ${Math.round(pred.predictedSpare)}% spare`)
-                  : "";
-                return `${marker()}${entry.label}  \u25c6 ${usedPct()}%  \u23f1 ${timePctR()}%${predSuffix}`;
+                const tier = textTier();
+                let predSuffix = "";
+                if (predMeaningful) {
+                  if (tier === "minimal") {
+                    predSuffix = pred.overBudget ? " OVER" : "";
+                  } else if (tier === "compact") {
+                    predSuffix = pred.overBudget ? " \u2192OVER" : ` \u2192${Math.round(pred.predictedSpare)}%`;
+                  } else {
+                    predSuffix = pred.overBudget ? " \u2192 OVER" : ` \u2192 ${Math.round(pred.predictedSpare)}% spare`;
+                  }
+                }
+                if (tier === "minimal") {
+                  return `${marker()}${entry.label} ${usedPct()}%${predSuffix}`;
+                }
+                const sep = tier === "full" ? "  " : " ";
+                return `${marker()}${entry.label}${sep}\u25c6 ${usedPct()}%${sep}\u23f1 ${timePctR()}%${predSuffix}`;
               }
               return `${marker()}${entry.label}`;
             };
@@ -189,24 +217,18 @@ export function ServicePanel(props: ServicePanelProps) {
                     const predUseful = pred && pred.usedSoFar >= 5 || (pred && pred.remainingDays <= 5);
                     if (pred && predUseful &&
                         (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
-                      const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
-                      const segments = createPredictionBar(entry.data.used_pct, predictedPct, barWidth());
-                      const spareTxt = pred.overBudget
-                        ? `OVER BUDGET ${Math.round(pred.predictedSpare)}%`
-                        : `${Math.round(pred.predictedSpare)}% spare`;
                       const dimPred = pred.confidence === "low";
-                      const sparePrefix = pred.confidence === "low" ? "~" : "";
+                      const w = barWidth();
+                      const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
+                      const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
+                      // Prediction summary goes on its own line below both bars
                       return (
                         <box flexDirection="row" height={1}>
                           <text content={"  "} />
                           <text content={segments.used} fg={theme.text} />
                           <text content={segments.predicted} fg={theme.yellow} dim={dimPred} />
                           <text content={segments.spare} fg={theme.cyan} />
-                          <text
-                            content={` ${usedPct()}% used \u2502 ${sparePrefix}${spareTxt}`}
-                            fg={pred.overBudget ? theme.red : theme.subtext}
-                            bold={pred.overBudget}
-                          />
+                          <text content={` \u25c6 ${usedPct()}%`} fg={theme.subtext} />
                         </box>
                       );
                     }
@@ -237,6 +259,27 @@ export function ServicePanel(props: ServicePanelProps) {
                     height={1}
                   />
                 </Show>
+                {/* Prediction summary below both bars */}
+                {(() => {
+                  if (!(mode() === "full" || isSelected())) return null;
+                  const pred = props.prediction?.[entry.key];
+                  const predUseful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
+                  if (!pred || !predUseful) return null;
+                  if (entry.key !== "week_all" && entry.key !== "week_sonnet" && entry.key !== "weekly") return null;
+                  const sparePrefix = pred.confidence === "low" ? "~" : "";
+                  const spareVal = `${sparePrefix}${Math.round(pred.predictedSpare)}%`;
+                  const summary = pred.overBudget
+                    ? `  \u26a1 OVER ${spareVal}`
+                    : `  \u26a1 ${spareVal} spare`;
+                  return (
+                    <text
+                      content={summary}
+                      fg={pred.overBudget ? theme.red : theme.subtext}
+                      bold={pred.overBudget}
+                      height={1}
+                    />
+                  );
+                })()}
                 {/* Reset time with countdown */}
                 <Show when={showResetTime()}>
                   <text
@@ -244,7 +287,7 @@ export function ServicePanel(props: ServicePanelProps) {
                       void props.tick;
                       const resetDate = parseTimeToDatetime(entry.data.resets);
                       const remaining = formatTimeRemaining(new Date(), resetDate, windowHrs);
-                      return `    Resets: ${entry.data.resets} (${remaining})`;
+                      return `  Resets: ${entry.data.resets} (${remaining})`;
                     })()}
                     fg={theme.subtext}
                     height={1}

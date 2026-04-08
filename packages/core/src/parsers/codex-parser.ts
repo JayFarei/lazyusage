@@ -107,6 +107,8 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
         date,
         inputTokens,
         outputTokens,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
         totalTokens: inputTokens + outputTokens,
       },
     ];

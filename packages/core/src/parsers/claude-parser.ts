@@ -74,11 +74,11 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
       if (!date) continue;
 
       const cwd = event.cwd ?? "";
-      const inputTokens =
-        (usage.input_tokens ?? 0) +
-        (usage.cache_read_input_tokens ?? 0) +
-        (usage.cache_creation_input_tokens ?? 0);
+      const inputTokens = usage.input_tokens ?? 0;
+      const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+      const cacheCreationTokens = usage.cache_creation_input_tokens ?? 0;
       const outputTokens = usage.output_tokens ?? 0;
+      const totalTokens = inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens;
 
       fileResults.push({
         project: resolveProjectName(cwd),
@@ -87,7 +87,9 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
         date,
         inputTokens,
         outputTokens,
-        totalTokens: inputTokens + outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+        totalTokens,
       });
     }
   } catch {

@@ -62,7 +62,7 @@ describe("parseClaudeSessions - valid files", () => {
     }
   });
 
-  test("includes cache tokens in inputTokens", async () => {
+  test("separates fresh input, cache read, and cache creation tokens", async () => {
     const tmpDir = await makeTempDir();
     try {
       await writeJsonl(tmpDir, "session.jsonl", [
@@ -75,8 +75,10 @@ describe("parseClaudeSessions - valid files", () => {
       ]);
       const results = await parseClaudeSessions(undefined, tmpDir);
       expect(results).toHaveLength(1);
-      expect(results[0].inputTokens).toBe(1500); // 1000 + 200 + 300
-      expect(results[0].totalTokens).toBe(2000);
+      expect(results[0].inputTokens).toBe(1000);        // fresh input only
+      expect(results[0].cacheReadTokens).toBe(200);
+      expect(results[0].cacheCreationTokens).toBe(300);
+      expect(results[0].totalTokens).toBe(2000);        // 1000 + 200 + 300 + 500
     } finally {
       await rm(tmpDir, { recursive: true });
     }

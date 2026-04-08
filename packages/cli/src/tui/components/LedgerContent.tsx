@@ -8,7 +8,7 @@ import { useTheme } from "../theme.js";
 import { DataTable, type Column, type SortState } from "./DataTable.js";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
 
-export type LedgerSortColumn = "project" | "inputTokens" | "outputTokens" | "totalTokens" | "pctOfTotal";
+export type LedgerSortColumn = "project" | "inputTokens" | "outputTokens" | "cacheReadTokens" | "totalTokens" | "pctOfTotal";
 
 export interface LedgerContentProps {
   data: ProjectUsage[] | null;
@@ -33,7 +33,7 @@ const COLUMNS: Column<ProjectUsage>[] = [
   {
     key: "project",
     label: "Project",
-    width: "30%",
+    width: "28%",
     format: (val) => {
       const s = String(val);
       return s.length > 20 ? s.slice(0, 18) + ".." : s;
@@ -42,25 +42,35 @@ const COLUMNS: Column<ProjectUsage>[] = [
   {
     key: "inputTokens",
     label: "Input",
-    width: "18%",
+    width: "15%",
     format: (val) => fmtCompact(val as number),
   },
   {
     key: "outputTokens",
     label: "Output",
-    width: "18%",
+    width: "15%",
     format: (val) => fmtCompact(val as number),
+  },
+  {
+    key: "cacheReadTokens",
+    label: "Cache%",
+    width: "15%",
+    format: (_val, row) => {
+      const cacheTokens = row.cacheReadTokens + row.cacheCreationTokens;
+      const pct = row.totalTokens > 0 ? (cacheTokens / row.totalTokens) * 100 : 0;
+      return pct.toFixed(1) + "%";
+    },
   },
   {
     key: "totalTokens",
     label: "Total",
-    width: "18%",
+    width: "15%",
     format: (val) => fmtCompact(val as number),
   },
   {
     key: "pctOfTotal",
     label: "%",
-    width: "16%",
+    width: "12%",
     format: (val) => (val as number).toFixed(1) + "%",
   },
 ];
@@ -77,14 +87,20 @@ export function LedgerContent(props: LedgerContentProps) {
       (acc, p) => ({
         input: acc.input + p.inputTokens,
         output: acc.output + p.outputTokens,
+        cacheRead: acc.cacheRead + p.cacheReadTokens,
+        cacheCreation: acc.cacheCreation + p.cacheCreationTokens,
         total: acc.total + p.totalTokens,
       }),
-      { input: 0, output: 0, total: 0 },
+      { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, total: 0 },
     );
+    const cachePct = totals.total > 0
+      ? ((totals.cacheRead + totals.cacheCreation) / totals.total * 100).toFixed(1) + "%"
+      : "0%";
     return {
       project: "Total",
       inputTokens: fmtCompact(totals.input),
       outputTokens: fmtCompact(totals.output),
+      cacheReadTokens: cachePct,
       totalTokens: fmtCompact(totals.total),
       pctOfTotal: "",
     } as Partial<Record<keyof ProjectUsage, string>>;

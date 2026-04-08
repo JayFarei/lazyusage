@@ -30,6 +30,8 @@ function makeSession(overrides: Partial<SessionTokens> = {}): SessionTokens {
     date: todayStr(),
     inputTokens: 1000,
     outputTokens: 500,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
     totalTokens: 1500,
     ...overrides,
   };

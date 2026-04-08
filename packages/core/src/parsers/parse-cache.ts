@@ -19,6 +19,9 @@ const CACHE_DB_PATH =
   process.env.LAZYUSAGE_PARSE_CACHE_PATH ??
   join(homedir(), ".cache", "lazyusage", "parse-cache.db");
 
+// Bump this when SessionTokens shape changes to force a full re-parse.
+const SCHEMA_VERSION = 2;
+
 let _db: Database | null = null;
 
 function getDb(): Database {
@@ -31,10 +34,22 @@ function getDb(): Database {
       mtime_ms    INTEGER NOT NULL,
       sessions_json TEXT  NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_mtime ON parse_cache (mtime_ms);
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous  = NORMAL;
   `);
+
+  // Clear all cached entries if the schema version has changed.
+  const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | null;
+  if (!row || parseInt(row.value, 10) !== SCHEMA_VERSION) {
+    db.run("DELETE FROM parse_cache");
+    db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)]);
+  }
+
   _db = db;
   return db;
 }

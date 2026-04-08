@@ -22,18 +22,28 @@ function daysAgoStr(days: number): string {
 }
 
 function groupByProject(sessions: SessionTokens[]): ProjectUsage[] {
-  const map = new Map<string, { inputTokens: number; outputTokens: number; totalTokens: number }>();
+  const map = new Map<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    totalTokens: number;
+  }>();
 
   for (const s of sessions) {
     const existing = map.get(s.project);
     if (existing) {
       existing.inputTokens += s.inputTokens;
       existing.outputTokens += s.outputTokens;
+      existing.cacheReadTokens += s.cacheReadTokens;
+      existing.cacheCreationTokens += s.cacheCreationTokens;
       existing.totalTokens += s.totalTokens;
     } else {
       map.set(s.project, {
         inputTokens: s.inputTokens,
         outputTokens: s.outputTokens,
+        cacheReadTokens: s.cacheReadTokens,
+        cacheCreationTokens: s.cacheCreationTokens,
         totalTokens: s.totalTokens,
       });
     }
@@ -49,6 +59,8 @@ function groupByProject(sessions: SessionTokens[]): ProjectUsage[] {
       pctOfTotal: grandTotal > 0 ? (data.totalTokens / grandTotal) * 100 : 0,
       inputTokens: data.inputTokens,
       outputTokens: data.outputTokens,
+      cacheReadTokens: data.cacheReadTokens,
+      cacheCreationTokens: data.cacheCreationTokens,
     });
   }
 
