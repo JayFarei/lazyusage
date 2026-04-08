@@ -101,23 +101,18 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
                 if (pred && predUseful && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
                   const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                   const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
+                  const barStr = segments.used + segments.predicted + segments.spare;
                   const spareTxt = pred.overBudget
                     ? `OVER BUDGET ${Math.round(pred.predictedSpare)}%`
                     : `${Math.round(pred.predictedSpare)}% spare`;
-                  const dimPred = pred.confidence === "low";
                   const sparePrefix = pred.confidence === "low" ? "~" : "";
                   return (
-                    <box flexDirection="row" height={1}>
-                      <text content={"  "} />
-                      <text content={segments.used} fg={theme.text} />
-                      <text content={segments.predicted} fg={theme.yellow} dim={dimPred} />
-                      <text content={segments.spare} fg={theme.cyan} />
-                      <text
-                        content={` ${Math.round(entry.data.used_pct)}% used \u2502 ${sparePrefix}${spareTxt}`}
-                        fg={pred.overBudget ? theme.red : theme.subtext}
-                        bold={pred.overBudget}
-                      />
-                    </box>
+                    <text
+                      content={`  ${barStr} ${Math.round(entry.data.used_pct)}% used \u2502 ${sparePrefix}${spareTxt}`}
+                      fg={pred.overBudget ? theme.red : theme.text}
+                      bold={pred.overBudget}
+                      height={1}
+                    />
                   );
                 }
                 return (

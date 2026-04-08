@@ -17,13 +17,14 @@ async function writeJsonl(dir: string, name: string, lines: unknown[]): Promise<
 }
 
 /** Build a session_meta first line */
-function sessionMeta(opts: { cwd?: string; timestamp?: string } = {}): object {
+function sessionMeta(opts: { cwd?: string; timestamp?: string; sessionId?: string } = {}): object {
   return {
     type: "session_meta",
     timestamp: opts.timestamp ?? "2026-02-17T10:00:00.000Z",
     payload: {
       cwd: opts.cwd ?? "/home/user/my-codex-project",
       timestamp: opts.timestamp ?? "2026-02-17T10:00:00.000Z",
+      ...(opts.sessionId ? { session_id: opts.sessionId } : {}),
     },
   };
 }
@@ -245,6 +246,69 @@ describe("parseCodexSessions - error handling", () => {
         tokenCountEvent({ inputTokens: 2000 }),
       ]);
       const results = await parseCodexSessions(undefined, tmpDir);
+      expect(results).toHaveLength(2);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+});
+
+describe("parseCodexSessions - session deduplication", () => {
+  test("duplicate session_id across files is deduplicated", async () => {
+    const tmpDir = await makeTempDir();
+    try {
+      // Same session_id in two different files (e.g., sessions/ and archived_sessions/)
+      await writeJsonl(tmpDir, "active.jsonl", [
+        sessionMeta({ cwd: "/project-a", sessionId: "dup-session-1" }),
+        tokenCountEvent({ inputTokens: 1000, outputTokens: 500 }),
+      ]);
+      await writeJsonl(tmpDir, "archived.jsonl", [
+        sessionMeta({ cwd: "/project-a", sessionId: "dup-session-1" }),
+        tokenCountEvent({ inputTokens: 1000, outputTokens: 500 }),
+      ]);
+
+      const results = await parseCodexSessions(undefined, tmpDir);
+      // Should be 1, not 2
+      expect(results).toHaveLength(1);
+      expect(results[0].inputTokens).toBe(1000);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  test("different session_ids are all kept", async () => {
+    const tmpDir = await makeTempDir();
+    try {
+      await writeJsonl(tmpDir, "s1.jsonl", [
+        sessionMeta({ cwd: "/project-a", sessionId: "session-1" }),
+        tokenCountEvent({ inputTokens: 1000 }),
+      ]);
+      await writeJsonl(tmpDir, "s2.jsonl", [
+        sessionMeta({ cwd: "/project-b", sessionId: "session-2" }),
+        tokenCountEvent({ inputTokens: 2000 }),
+      ]);
+
+      const results = await parseCodexSessions(undefined, tmpDir);
+      expect(results).toHaveLength(2);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  test("sessions without session_id are always kept", async () => {
+    const tmpDir = await makeTempDir();
+    try {
+      await writeJsonl(tmpDir, "s1.jsonl", [
+        sessionMeta({ cwd: "/project-a" }),
+        tokenCountEvent({ inputTokens: 1000 }),
+      ]);
+      await writeJsonl(tmpDir, "s2.jsonl", [
+        sessionMeta({ cwd: "/project-b" }),
+        tokenCountEvent({ inputTokens: 2000 }),
+      ]);
+
+      const results = await parseCodexSessions(undefined, tmpDir);
+      // No session_id, so no dedup possible
       expect(results).toHaveLength(2);
     } finally {
       await rm(tmpDir, { recursive: true });

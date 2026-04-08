@@ -16,13 +16,16 @@ import { join } from "path";
 import { statSync } from "fs";
 import type { SessionTokens } from "./types.js";
 import { resolveProjectName } from "../utils/project.js";
-import { loadCacheSince, putCacheBatch, evictOlderThan } from "./parse-cache.js";
+import { loadCacheSince, putCacheBatch, evictStale } from "./parse-cache.js";
 
 interface ClaudeEvent {
   type?: string;
   isSidechain?: boolean;
   cwd?: string;
   timestamp?: string;
+  sessionId?: string;
+  uuid?: string;
+  requestId?: string;
   message?: {
     model?: string;
     usage?: {
@@ -32,6 +35,14 @@ interface ClaudeEvent {
       cache_creation_input_tokens?: number;
     };
   };
+}
+
+/** Extended session data used for cross-file deduplication before emitting final SessionTokens. */
+interface ParsedEvent extends SessionTokens {
+  /** Canonical dedup key: sessionId:uuid:requestId */
+  dedupKey: string;
+  /** Whether this event came from a subagent file (path contains /subagents/) */
+  isSubagent: boolean;
 }
 
 function dateFromTimestamp(ts: string): string {
@@ -46,6 +57,7 @@ function dateFromTimestamp(ts: string): string {
 /** Parse a single file. Returns ALL sessions with no date filter so results
  *  can be cached and reused across different sinceDate windows. */
 async function parseFile(filePath: string): Promise<SessionTokens[]> {
+  const isSubagent = filePath.includes("/subagents/");
   const fileResults: SessionTokens[] = [];
   try {
     const text = await Bun.file(filePath).text();
@@ -53,6 +65,9 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
 
     for (const line of lines) {
       if (!line.trim()) continue;
+
+      // ASCII pre-filter: skip lines that can't be assistant events with usage
+      if (!line.includes('"assistant"') || !line.includes('"usage"')) continue;
 
       let event: ClaudeEvent;
       try {
@@ -80,6 +95,11 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
       const outputTokens = usage.output_tokens ?? 0;
       const totalTokens = inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens;
 
+      // Build dedup key from event identity fields (sessionId:uuid:requestId)
+      const dedupKey = (event.sessionId && event.uuid && event.requestId)
+        ? `${event.sessionId}:${event.uuid}:${event.requestId}`
+        : "";
+
       fileResults.push({
         project: resolveProjectName(cwd),
         cwd,
@@ -90,12 +110,49 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
         cacheReadTokens,
         cacheCreationTokens,
         totalTokens,
-      });
+        ...(dedupKey ? { dedupKey, isSubagent } : {}),
+      } as SessionTokens);
     }
   } catch {
     // Skip files that can't be read
   }
   return fileResults;
+}
+
+/**
+ * Deduplicate events across files. When the same event (same sessionId:uuid:requestId)
+ * appears in both a parent session file and a subagent file, prefer the subagent copy.
+ * This prevents ~2x token inflation from subagent JSONL mirroring.
+ */
+function deduplicateEvents(sessions: SessionTokens[]): SessionTokens[] {
+  const keyed = new Map<string, SessionTokens>();
+  const unkeyedResults: SessionTokens[] = [];
+
+  for (const s of sessions) {
+    const parsed = s as SessionTokens & { dedupKey?: string; isSubagent?: boolean };
+    if (!parsed.dedupKey) {
+      unkeyedResults.push(s);
+      continue;
+    }
+    const existing = keyed.get(parsed.dedupKey) as (SessionTokens & { isSubagent?: boolean }) | undefined;
+    if (!existing) {
+      keyed.set(parsed.dedupKey, s);
+    } else {
+      // Prefer subagent over parent
+      if (parsed.isSubagent && !existing.isSubagent) {
+        keyed.set(parsed.dedupKey, s);
+      }
+    }
+  }
+
+  // Strip internal dedup fields before returning
+  const dedupedResults = [...keyed.values(), ...unkeyedResults];
+  for (const s of dedupedResults) {
+    const ext = s as SessionTokens & { dedupKey?: string; isSubagent?: boolean };
+    delete ext.dedupKey;
+    delete ext.isSubagent;
+  }
+  return dedupedResults;
 }
 
 export async function parseClaudeSessions(
@@ -163,8 +220,10 @@ export async function parseClaudeSessions(
     putCacheBatch(newEntries);
   }
 
-  // Evict stale entries occasionally (keep cache bounded)
-  if (sinceDateMs) evictOlderThan(sinceDateMs);
+  // Evict entries for files that no longer exist on disk + enforce max entries cap
+  evictStale(allFiles);
 
-  return results;
+  // Cross-file deduplication: remove duplicate events that appear in both
+  // parent and subagent session files (prevents ~2x token inflation)
+  return deduplicateEvents(results);
 }

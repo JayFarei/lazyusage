@@ -109,7 +109,49 @@ export function putCacheBatch(
 
 /**
  * Remove entries older than cutoffMs. Call occasionally to bound cache size.
+ * @deprecated Use evictStale() instead, which avoids over-evicting entries
+ * needed by wider time windows (e.g., weekly view after daily view).
  */
 export function evictOlderThan(cutoffMs: number): void {
   getDb().run("DELETE FROM parse_cache WHERE mtime_ms < ?", [cutoffMs]);
+}
+
+/** Maximum number of cache entries to retain. */
+const MAX_CACHE_ENTRIES = 10_000;
+
+/**
+ * Remove cache entries for files that no longer exist on disk,
+ * then enforce a max-entries cap (oldest mtime first) as a safety bound.
+ * This avoids the problem where date-based eviction nukes entries still
+ * needed for wider time windows (e.g., weekly view after a daily query).
+ */
+export function evictStale(existingFiles: string[]): void {
+  const db = getDb();
+  const existingSet = new Set(existingFiles);
+
+  // Get all cached file paths
+  const rows = db
+    .prepare("SELECT file_path FROM parse_cache")
+    .all() as Array<{ file_path: string }>;
+
+  const toDelete = rows
+    .map((r) => r.file_path)
+    .filter((p) => !existingSet.has(p));
+
+  if (toDelete.length > 0) {
+    const stmt = db.prepare("DELETE FROM parse_cache WHERE file_path = ?");
+    db.transaction(() => {
+      for (const p of toDelete) stmt.run(p);
+    })();
+  }
+
+  // Enforce max entries cap
+  const countRow = db.prepare("SELECT COUNT(*) as cnt FROM parse_cache").get() as { cnt: number };
+  if (countRow.cnt > MAX_CACHE_ENTRIES) {
+    const excess = countRow.cnt - MAX_CACHE_ENTRIES;
+    db.run(
+      "DELETE FROM parse_cache WHERE file_path IN (SELECT file_path FROM parse_cache ORDER BY mtime_ms ASC LIMIT ?)",
+      [excess]
+    );
+  }
 }

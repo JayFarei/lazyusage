@@ -25,12 +25,18 @@ function assistantEvent(opts: {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   isSidechain?: boolean;
+  sessionId?: string;
+  uuid?: string;
+  requestId?: string;
 }): object {
   return {
     type: "assistant",
     isSidechain: opts.isSidechain ?? false,
     cwd: opts.cwd ?? "/home/user/my-project",
     timestamp: opts.timestamp ?? "2026-02-17T10:00:00.000Z",
+    sessionId: opts.sessionId,
+    uuid: opts.uuid,
+    requestId: opts.requestId,
     message: {
       model: "claude-sonnet-4-6",
       usage: {
@@ -214,6 +220,105 @@ describe("parseClaudeSessions - error handling", () => {
     try {
       await writeJsonl(tmpDir, "session1.jsonl", [assistantEvent({ inputTokens: 1000 })]);
       await writeJsonl(tmpDir, "session2.jsonl", [assistantEvent({ inputTokens: 2000 })]);
+      const results = await parseClaudeSessions(undefined, tmpDir);
+      expect(results).toHaveLength(2);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+});
+
+describe("parseClaudeSessions - cross-file deduplication", () => {
+  test("duplicate events across parent and subagent files are deduplicated", async () => {
+    const tmpDir = await makeTempDir();
+    const { mkdirSync } = await import("fs");
+    try {
+      // Same event appears in parent file and subagent file
+      const sharedEvent = assistantEvent({
+        inputTokens: 1000,
+        outputTokens: 500,
+        sessionId: "sess-1",
+        uuid: "msg-1",
+        requestId: "req-1",
+      });
+
+      // Parent file
+      await writeJsonl(tmpDir, "parent.jsonl", [sharedEvent]);
+
+      // Subagent file (same event mirrored)
+      mkdirSync(join(tmpDir, "subagents"), { recursive: true });
+      await writeJsonl(join(tmpDir, "subagents"), "child.jsonl", [sharedEvent]);
+
+      const results = await parseClaudeSessions(undefined, tmpDir);
+      // Should be 1, not 2 (deduplicated)
+      expect(results).toHaveLength(1);
+      expect(results[0].inputTokens).toBe(1000);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  test("dedup prefers subagent file over parent file", async () => {
+    const tmpDir = await makeTempDir();
+    const { mkdirSync } = await import("fs");
+    try {
+      const parentEvent = assistantEvent({
+        inputTokens: 1000,
+        outputTokens: 500,
+        sessionId: "sess-1",
+        uuid: "msg-1",
+        requestId: "req-1",
+        cwd: "/parent/project",
+      });
+      const subagentEvent = assistantEvent({
+        inputTokens: 1000,
+        outputTokens: 500,
+        sessionId: "sess-1",
+        uuid: "msg-1",
+        requestId: "req-1",
+        cwd: "/subagent/project",
+      });
+
+      await writeJsonl(tmpDir, "parent.jsonl", [parentEvent]);
+      mkdirSync(join(tmpDir, "subagents"), { recursive: true });
+      await writeJsonl(join(tmpDir, "subagents"), "child.jsonl", [subagentEvent]);
+
+      const results = await parseClaudeSessions(undefined, tmpDir);
+      expect(results).toHaveLength(1);
+      // Should have the subagent's cwd, not parent's
+      expect(results[0].cwd).toBe("/subagent/project");
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  test("events without dedup keys are always kept", async () => {
+    const tmpDir = await makeTempDir();
+    try {
+      // Events without sessionId/uuid/requestId cannot be deduplicated
+      await writeJsonl(tmpDir, "a.jsonl", [
+        assistantEvent({ inputTokens: 1000 }),
+      ]);
+      await writeJsonl(tmpDir, "b.jsonl", [
+        assistantEvent({ inputTokens: 2000 }),
+      ]);
+
+      const results = await parseClaudeSessions(undefined, tmpDir);
+      // Both kept since no dedup keys
+      expect(results).toHaveLength(2);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  test("distinct events with different dedup keys are all kept", async () => {
+    const tmpDir = await makeTempDir();
+    try {
+      await writeJsonl(tmpDir, "session.jsonl", [
+        assistantEvent({ inputTokens: 1000, sessionId: "s1", uuid: "m1", requestId: "r1" }),
+        assistantEvent({ inputTokens: 2000, sessionId: "s1", uuid: "m2", requestId: "r2" }),
+      ]);
+
       const results = await parseClaudeSessions(undefined, tmpDir);
       expect(results).toHaveLength(2);
     } finally {

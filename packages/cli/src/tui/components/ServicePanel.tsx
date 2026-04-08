@@ -217,19 +217,17 @@ export function ServicePanel(props: ServicePanelProps) {
                     const predUseful = pred && pred.usedSoFar >= 5 || (pred && pred.remainingDays <= 5);
                     if (pred && predUseful &&
                         (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
-                      const dimPred = pred.confidence === "low";
                       const w = barWidth();
                       const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                       const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
-                      // Prediction summary goes on its own line below both bars
+                      // Single string avoids flex-row alignment issues at narrow widths
+                      const barStr = segments.used + segments.predicted + segments.spare;
                       return (
-                        <box flexDirection="row" height={1}>
-                          <text content={"  "} />
-                          <text content={segments.used} fg={theme.text} />
-                          <text content={segments.predicted} fg={theme.yellow} dim={dimPred} />
-                          <text content={segments.spare} fg={theme.cyan} />
-                          <text content={` \u25c6 ${usedPct()}%`} fg={theme.subtext} />
-                        </box>
+                        <text
+                          content={`  ${barStr} \u25c6 ${usedPct()}%`}
+                          fg={theme.text}
+                          height={1}
+                        />
                       );
                     }
                     return (
@@ -259,7 +257,24 @@ export function ServicePanel(props: ServicePanelProps) {
                     height={1}
                   />
                 </Show>
-                {/* Prediction summary below both bars */}
+                {/* Spacer above reset for visual breathing room */}
+                <Show when={showResetTime()}>
+                  <text content="" height={1} />
+                </Show>
+                {/* Reset time with countdown */}
+                <Show when={showResetTime()}>
+                  <text
+                    content={(() => {
+                      void props.tick;
+                      const resetDate = parseTimeToDatetime(entry.data.resets);
+                      const remaining = formatTimeRemaining(new Date(), resetDate, windowHrs);
+                      return `  Resets: ${entry.data.resets} (${remaining})`;
+                    })()}
+                    fg={theme.subtext}
+                    height={1}
+                  />
+                </Show>
+                {/* Prediction summary (over/spare) below reset time */}
                 {(() => {
                   if (!(mode() === "full" || isSelected())) return null;
                   const pred = props.prediction?.[entry.key];
@@ -280,19 +295,6 @@ export function ServicePanel(props: ServicePanelProps) {
                     />
                   );
                 })()}
-                {/* Reset time with countdown */}
-                <Show when={showResetTime()}>
-                  <text
-                    content={(() => {
-                      void props.tick;
-                      const resetDate = parseTimeToDatetime(entry.data.resets);
-                      const remaining = formatTimeRemaining(new Date(), resetDate, windowHrs);
-                      return `  Resets: ${entry.data.resets} (${remaining})`;
-                    })()}
-                    fg={theme.subtext}
-                    height={1}
-                  />
-                </Show>
                 {/* Spacer between metrics */}
                 <Show when={showSpacer()}>
                   <text content="" height={1} />
