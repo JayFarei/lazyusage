@@ -138,4 +138,50 @@ describe("createDaemonCollector", () => {
       "[claude] collection failed: claude CLI unavailable",
     ]);
   });
+
+  test("starts an immediate recurring collection loop and stops it cleanly", async () => {
+    const claudeChain = new MockChain(
+      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
+    );
+    const scheduledIntervals: number[] = [];
+    const clearedHandles: unknown[] = [];
+    let scheduledTick: (() => Promise<void>) | null = null;
+    const timerHandle = { id: "collector-loop" };
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+      },
+      store,
+      logger: {
+        warn: () => {},
+      },
+      now: () => new Date("2026-04-09T12:10:00.000Z"),
+      intervalSeconds: 60,
+      setInterval: (callback, intervalMs) => {
+        scheduledIntervals.push(intervalMs);
+        scheduledTick = callback;
+        return timerHandle;
+      },
+      clearInterval: (handle) => {
+        clearedHandles.push(handle);
+      },
+    });
+
+    await collector.start();
+
+    expect(claudeChain.refreshCalls).toBe(1);
+    expect(scheduledIntervals).toEqual([60_000]);
+    expect(scheduledTick).not.toBeNull();
+
+    await scheduledTick?.();
+    expect(claudeChain.refreshCalls).toBe(2);
+
+    await collector.stop();
+
+    expect(clearedHandles).toEqual([timerHandle]);
+
+    await scheduledTick?.();
+    expect(claudeChain.refreshCalls).toBe(2);
+  });
 });

@@ -9,7 +9,11 @@ export interface DaemonCollectorChain {
 
 export interface DaemonCollector {
   collectOnce(): Promise<void>;
+  start(): Promise<void>;
+  stop(): Promise<void>;
 }
+
+type DaemonCollectorTimer = ReturnType<typeof globalThis.setInterval>;
 
 export interface DaemonCollectorOptions {
   services: Partial<Record<ServiceName, DaemonCollectorChain>>;
@@ -17,6 +21,12 @@ export interface DaemonCollectorOptions {
   logger: Pick<DaemonLogger, "warn">;
   dedup?: Pick<DedupTracker, "shouldStoreMetrics">;
   now?: () => Date;
+  intervalSeconds?: number;
+  setInterval?: (
+    callback: () => Promise<void>,
+    intervalMs: number,
+  ) => DaemonCollectorTimer;
+  clearInterval?: (timer: DaemonCollectorTimer) => void;
 }
 
 function isSuccessfulResult(result: FetchResult): result is FetchResult & { metrics: MetricsDict } {
@@ -33,8 +43,48 @@ export function createDaemonCollector(
 ): DaemonCollector {
   const dedup = options.dedup ?? new DedupTracker();
   const now = options.now ?? (() => new Date());
+  const intervalSeconds = options.intervalSeconds ?? 60;
+  const setIntervalFn = options.setInterval ?? ((callback, intervalMs) =>
+    globalThis.setInterval(() => {
+      void callback();
+    }, intervalMs));
+  const clearIntervalFn = options.clearInterval ?? ((timer) =>
+    globalThis.clearInterval(timer));
+  let timer: DaemonCollectorTimer | null = null;
+  let running = false;
 
-  return {
+  const runCycle = async (): Promise<void> => {
+    if (!running) {
+      return;
+    }
+
+    try {
+      await collector.collectOnce();
+    } catch (error) {
+      options.logger.warn(`[collector] cycle failed: ${formatError(error)}`);
+    }
+  };
+
+  const collector: DaemonCollector = {
+    async start(): Promise<void> {
+      if (running) {
+        return;
+      }
+
+      running = true;
+      await runCycle();
+      timer = setIntervalFn(runCycle, intervalSeconds * 1000);
+    },
+
+    async stop(): Promise<void> {
+      running = false;
+
+      if (timer !== null) {
+        clearIntervalFn(timer);
+        timer = null;
+      }
+    },
+
     async collectOnce(): Promise<void> {
       for (const [service, chain] of Object.entries(options.services) as Array<
         [ServiceName, DaemonCollectorChain | undefined]
@@ -66,4 +116,6 @@ export function createDaemonCollector(
       }
     },
   };
+
+  return collector;
 }
