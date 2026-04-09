@@ -409,6 +409,40 @@ describe("createDaemonCommand", () => {
       "Uninstalled daemon service from /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
     ]);
   });
+
+  test("registers a daemon uninstall subcommand and disables the systemd user service on Linux", async () => {
+    const serviceManagerCommands: string[][] = [];
+    const removedPaths: string[] = [];
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      platform: "linux",
+      homeDir: "/home/tester",
+      runServiceManagerCommand: (command) => {
+        serviceManagerCommands.push(command);
+      },
+      removeServiceFile: (path) => {
+        removedPaths.push(path);
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "uninstall"]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("uninstall");
+    expect(serviceManagerCommands).toEqual([
+      ["systemctl", "--user", "disable", "--now", "lazyusage-daemon.service"],
+      ["systemctl", "--user", "daemon-reload"],
+    ]);
+    expect(removedPaths).toEqual([
+      "/home/tester/.config/systemd/user/lazyusage-daemon.service",
+    ]);
+    expect(output).toEqual([
+      "Uninstalled daemon service from /home/tester/.config/systemd/user/lazyusage-daemon.service.",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {

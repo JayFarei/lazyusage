@@ -333,10 +333,17 @@ function getInstallServiceManagerCommands(
 }
 
 function getUninstallServiceManagerCommands(
-  platform: "darwin",
+  platform: DaemonInstallPlatform,
   serviceFilePath: string,
 ): string[][] {
-  return [["launchctl", "unload", serviceFilePath]];
+  if (platform === "darwin") {
+    return [["launchctl", "unload", serviceFilePath]];
+  }
+
+  return [
+    ["systemctl", "--user", "disable", "--now", DAEMON_SYSTEMD_UNIT_NAME],
+    ["systemctl", "--user", "daemon-reload"],
+  ];
 }
 
 export function createDaemonCommand(
@@ -609,7 +616,7 @@ export function createDaemonCommand(
     .command("uninstall")
     .description("Uninstall the collector daemon background service")
     .action(async () => {
-      if (platform !== "darwin") {
+      if (platform !== "darwin" && platform !== "linux") {
         throw new Error(`Daemon uninstall is not supported on ${platform}.`);
       }
 
