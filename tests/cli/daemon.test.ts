@@ -274,6 +274,43 @@ describe("createDaemonCommand", () => {
       "2026-04-09T11:59:00.000Z [WARN] slow refresh\n2026-04-09T12:00:00.000Z [ERROR] collector failed",
     ]);
   });
+
+  test("registers a daemon logs subcommand and follows appended log output", async () => {
+    const output: string[] = [];
+    const followCalls: string[] = [];
+
+    const command = createDaemonCommand({
+      readLogFile: () =>
+        [
+          "2026-04-09T11:59:00.000Z [WARN] slow refresh",
+          "2026-04-09T12:00:00.000Z [INFO] collector recovered",
+        ].join("\n"),
+      followLogFile: async (path, onChunk) => {
+        followCalls.push(path);
+        onChunk("2026-04-09T12:01:00.000Z [ERROR] collector failed\n");
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync([
+      "node",
+      "daemon",
+      "logs",
+      "--lines",
+      "1",
+      "--follow",
+    ]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("logs");
+    expect(followCalls).toHaveLength(1);
+    expect(followCalls[0]).toContain("daemon.log");
+    expect(output).toEqual([
+      "2026-04-09T12:00:00.000Z [INFO] collector recovered",
+      "2026-04-09T12:01:00.000Z [ERROR] collector failed",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {

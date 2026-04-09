@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, watch } from "fs";
 import {
   DATA_SOURCE_LABELS,
   DEFAULT_DAEMON_PID_PATH,
@@ -35,6 +35,10 @@ export interface DaemonCommandOptions {
   logFilePath?: string;
   readPidFile?: (path: string) => string;
   readLogFile?: (path: string) => string;
+  followLogFile?: (
+    path: string,
+    onChunk: (chunk: string) => void,
+  ) => Promise<void> | void;
   signalProcess?: (pid: number, signal: "SIGTERM") => void;
   isProcessRunning?: (pid: number) => boolean;
   waitForProcessExit?: (pid: number) => Promise<void>;
@@ -189,6 +193,10 @@ function tailLogContent(contents: string, lineCount: number): string {
   return lines.slice(-lineCount).join("\n");
 }
 
+function trimTrailingLineBreaks(contents: string): string {
+  return contents.replace(/(?:\r?\n)+$/u, "");
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
@@ -206,6 +214,33 @@ export function createDaemonCommand(
   const readLogFile =
     options.readLogFile ??
     ((path: string): string => readFileSync(path, "utf-8"));
+  const followLogFile =
+    options.followLogFile ??
+    ((path: string, onChunk: (chunk: string) => void): Promise<void> =>
+      new Promise((resolve, reject) => {
+        let previousContents = readLogFile(path);
+        const watcher = watch(path, () => {
+          try {
+            const nextContents = readLogFile(path);
+            const chunk = nextContents.startsWith(previousContents)
+              ? nextContents.slice(previousContents.length)
+              : nextContents;
+            previousContents = nextContents;
+
+            if (chunk.length > 0) {
+              onChunk(chunk);
+            }
+          } catch (error) {
+            watcher.close();
+            reject(error);
+          }
+        });
+
+        watcher.on("error", (error) => {
+          watcher.close();
+          reject(error);
+        });
+      }));
   const signalProcess =
     options.signalProcess ??
     ((pid: number, signal: "SIGTERM"): void => {
@@ -343,10 +378,27 @@ export function createDaemonCommand(
     .command("logs")
     .description("Show recent daemon log output")
     .option("--lines <count>", "Number of log lines to show")
-    .action((input: { lines?: string }) => {
+    .option("--follow", "Follow appended log output")
+    .action(async (input: { lines?: string; follow?: boolean }) => {
       const lineCount = parseLineCount(input.lines) ?? 10;
       const contents = readLogFile(logFilePath);
-      writeStdout(tailLogContent(contents, lineCount));
+      const output = tailLogContent(contents, lineCount);
+
+      if (!input.follow) {
+        writeStdout(output);
+        return;
+      }
+
+      if (output.length > 0) {
+        writeStdout(output);
+      }
+
+      await followLogFile(logFilePath, (chunk) => {
+        const trimmed = trimTrailingLineBreaks(chunk);
+        if (trimmed.length > 0) {
+          writeStdout(trimmed);
+        }
+      });
     });
 
   return command;
