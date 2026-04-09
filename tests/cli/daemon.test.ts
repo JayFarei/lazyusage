@@ -372,6 +372,43 @@ describe("createDaemonCommand", () => {
       "Installed daemon service at /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
     ]);
   });
+
+  test("registers a daemon uninstall subcommand and unloads the launchd service on macOS", async () => {
+    const serviceManagerCommands: string[][] = [];
+    const removedPaths: string[] = [];
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      platform: "darwin",
+      homeDir: "/Users/tester",
+      runServiceManagerCommand: (command) => {
+        serviceManagerCommands.push(command);
+      },
+      removeServiceFile: (path) => {
+        removedPaths.push(path);
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "uninstall"]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("uninstall");
+    expect(serviceManagerCommands).toEqual([
+      [
+        "launchctl",
+        "unload",
+        "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
+      ],
+    ]);
+    expect(removedPaths).toEqual([
+      "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
+    ]);
+    expect(output).toEqual([
+      "Uninstalled daemon service from /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {

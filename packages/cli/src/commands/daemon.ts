@@ -1,5 +1,12 @@
 import { Command } from "commander";
-import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  watch,
+  writeFileSync,
+} from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
 import {
@@ -58,6 +65,7 @@ export interface DaemonCommandOptions {
   runtimeExecutablePath?: string;
   cliEntrypointPath?: string;
   writeServiceFile?: (path: string, contents: string) => void;
+  removeServiceFile?: (path: string) => void;
   runServiceManagerCommand?: (command: string[]) => Promise<void> | void;
 }
 
@@ -324,6 +332,13 @@ function getInstallServiceManagerCommands(
   ];
 }
 
+function getUninstallServiceManagerCommands(
+  platform: "darwin",
+  serviceFilePath: string,
+): string[][] {
+  return [["launchctl", "unload", serviceFilePath]];
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
@@ -396,6 +411,11 @@ export function createDaemonCommand(
     ((path: string, contents: string): void => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, contents, "utf-8");
+    });
+  const removeServiceFile =
+    options.removeServiceFile ??
+    ((path: string): void => {
+      rmSync(path, { force: true });
     });
   const runServiceManagerCommand =
     options.runServiceManagerCommand ??
@@ -583,6 +603,25 @@ export function createDaemonCommand(
         await runServiceManagerCommand(serviceManagerCommand);
       }
       writeStdout(`Installed daemon service at ${serviceFilePath}.`);
+    });
+
+  command
+    .command("uninstall")
+    .description("Uninstall the collector daemon background service")
+    .action(async () => {
+      if (platform !== "darwin") {
+        throw new Error(`Daemon uninstall is not supported on ${platform}.`);
+      }
+
+      const serviceFilePath = getServiceDefinitionPath(platform, homeDirPath);
+      for (const serviceManagerCommand of getUninstallServiceManagerCommands(
+        platform,
+        serviceFilePath,
+      )) {
+        await runServiceManagerCommand(serviceManagerCommand);
+      }
+      removeServiceFile(serviceFilePath);
+      writeStdout(`Uninstalled daemon service from ${serviceFilePath}.`);
     });
 
   return command;
