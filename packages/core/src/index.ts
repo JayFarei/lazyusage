@@ -95,6 +95,12 @@ export {
   type DaemonCollectorChain,
   type DaemonCollectorOptions,
 } from "./daemon/collector.js";
+export {
+  DEFAULT_DAEMON_PID_PATH,
+  createDaemonLifecycle,
+  type DaemonLifecycle,
+  type DaemonLifecycleOptions,
+} from "./daemon/lifecycle.js";
 
 // Providers
 export { createClaudeChain, createCodexChain } from "./providers/factory.js";
