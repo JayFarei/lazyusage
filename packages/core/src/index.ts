@@ -83,6 +83,12 @@ export {
   type DaemonConfigOverrides,
   type DaemonLogLevel,
 } from "./daemon/config.js";
+export {
+  DEFAULT_DAEMON_LOG_PATH,
+  createDaemonLogger,
+  type DaemonLogger,
+  type DaemonLoggerOptions,
+} from "./daemon/logger.js";
 
 // Providers
 export { createClaudeChain, createCodexChain } from "./providers/factory.js";
