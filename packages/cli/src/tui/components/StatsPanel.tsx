@@ -9,12 +9,15 @@ import type { ContentTab } from "../hooks/useViewMode.js";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
 import type { SortState } from "./DataTable.js";
 
+type StatsTab = ContentTab | "graph";
+
 export interface StatsPanelProps {
-  contentTab: ContentTab;
+  contentTab: StatsTab;
   service: "claude" | "codex";
   daily: ProjectUsage[] | null;
   weekly: ProjectUsage[] | null;
   monthly: ProjectUsage[] | null;
+  graphAvailable?: boolean;
   loading: boolean;
   error?: string | null;
   isActive?: boolean;
@@ -23,18 +26,22 @@ export interface StatsPanelProps {
   onSort?: (column: keyof ProjectUsage) => void;
 }
 
-const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
+const DEFAULT_TABS: ContentTab[] = ["daily", "weekly", "monthly"];
 
-const TAB_LABELS: Record<ContentTab, string> = {
+const TAB_LABELS: Record<StatsTab, string> = {
   daily: "Daily",
   weekly: "Weekly",
   monthly: "Monthly",
+  graph: "Graph",
 };
 
 export function StatsPanel(props: StatsPanelProps) {
   const theme = useTheme();
+  const tabs = (): StatsTab[] =>
+    props.graphAvailable ? [...DEFAULT_TABS, "graph"] : DEFAULT_TABS;
+
   const tabHeader = () =>
-    TABS.map((tab) => {
+    tabs().map((tab) => {
       const isActive = tab === props.contentTab;
       const label = TAB_LABELS[tab];
       return isActive ? `\u2501 ${label} \u2501` : `  ${label}  `;
