@@ -63,6 +63,9 @@ interface AppDeps {
   clearIntervalFn: typeof clearInterval;
 }
 
+type StatsTab = "daily" | "weekly" | "monthly" | "graph";
+const LEDGER_TABS = ["daily", "weekly", "monthly"] as const;
+
 export function App(props: AppProps = {}) {
   const deps: AppDeps = {
     createDaemonDetection:
@@ -91,10 +94,10 @@ export function App(props: AppProps = {}) {
   const {
     activePanel, setActivePanel,
     focusStatsPanel,
-    contentTab,
+    contentTab, setContentTab,
     selectedMetricIndex,
     selectedMetricKey,
-    navigateMetric, cycleTab,
+    navigateMetric,
     focusedSide,
     fullscreenTarget, toggleFullscreen, exitFullscreen,
     switchFocusSide,
@@ -102,6 +105,7 @@ export function App(props: AppProps = {}) {
   } = usePanelState();
   const [lastUpdated, setLastUpdated] = createSignal<string | null>(null);
   const [helpVisible, setHelpVisible] = createSignal(false);
+  const [graphTabPanel, setGraphTabPanel] = createSignal<"claude" | "codex" | null>(null);
   const [currentTime, setCurrentTime] = createSignal(
     new Date().toLocaleTimeString()
   );
@@ -219,6 +223,35 @@ export function App(props: AppProps = {}) {
 
   const isServiceVisible = (panel: "claude" | "codex") =>
     panel === "claude" ? showClaude() : showCodex();
+  const graphAvailableFor = (service: "claude" | "codex") =>
+    daemonDetection.daemonBackedServices()[service];
+
+  const displayedStatsTab = (service: "claude" | "codex"): StatsTab =>
+    graphTabPanel() === service && graphAvailableFor(service)
+      ? "graph"
+      : contentTab();
+
+  const cycleStatsTab = (direction: "left" | "right") => {
+    const service = activePanel();
+    const tabs: StatsTab[] = graphAvailableFor(service)
+      ? [...LEDGER_TABS, "graph"]
+      : [...LEDGER_TABS];
+    const current = displayedStatsTab(service);
+    const currentIndex = tabs.indexOf(current);
+    const nextTab = direction === "right"
+      ? tabs[(currentIndex + 1) % tabs.length]
+      : tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+
+    if (nextTab === "graph") {
+      setGraphTabPanel(service);
+      return;
+    }
+
+    setContentTab(nextTab);
+    setGraphTabPanel((currentPanel) =>
+      currentPanel === service ? null : currentPanel
+    );
+  };
 
   const setActivePanelIfVisible = (panel: "claude" | "codex") => {
     if (!isServiceVisible(panel)) return;
@@ -235,7 +268,7 @@ export function App(props: AppProps = {}) {
     setActivePanel: setActivePanelIfVisible,
     focusStatsPanel: focusStatsIfVisible,
     navigateMetric,
-    cycleTab,
+    cycleTab: cycleStatsTab,
     togglePause: autoRefresh.togglePause,
     triggerRefresh: () => {
       if (ledger.loading()) return;
@@ -392,9 +425,6 @@ export function App(props: AppProps = {}) {
     return ` ${panels.join("  ")}  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  s=Sort  S=Dir  r=Refresh  p=Pause  ?=Help  q=Quit`;
   };
 
-  const graphAvailableFor = (service: "claude" | "codex") =>
-    daemonDetection.daemonBackedServices()[service];
-
   return (
     <box
       flexDirection="column"
@@ -421,7 +451,7 @@ export function App(props: AppProps = {}) {
           </box>
           <box width="60%">
             <StatsPanel
-              contentTab={contentTab()}
+              contentTab={displayedStatsTab("claude")}
               service="claude"
               daily={ledger.claudeDaily()}
               weekly={ledger.claudeWeekly()}
@@ -456,7 +486,7 @@ export function App(props: AppProps = {}) {
           </box>
           <box width="60%">
             <StatsPanel
-              contentTab={contentTab()}
+              contentTab={displayedStatsTab("codex")}
               service="codex"
               daily={ledger.codexDaily()}
               weekly={ledger.codexWeekly()}

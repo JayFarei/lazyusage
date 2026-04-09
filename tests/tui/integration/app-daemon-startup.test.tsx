@@ -8,6 +8,95 @@ import {
 } from "../helpers.js";
 
 describe("App daemon startup", () => {
+  test("cycles daemon-backed stats tabs through Graph and back to Daily", async () => {
+    const { captureCharFrame, mockInput, renderOnce, renderer } =
+      await renderComponent(
+        () => (
+          <App
+            service="claude"
+            deps={{
+              createDaemonDetection: () => ({
+                daemonHealthy: () => true,
+                daemonBackedServices: () => ({
+                  claude: true,
+                  codex: false,
+                }),
+                daemonMetrics: () => ({
+                  claude: mockClaudeMetrics(),
+                }),
+                detect: mock(() => {}),
+              }),
+              createUsageStore: () => ({
+                cleanupOldSnapshots: mock(() => {}),
+                storeSnapshot: mock(() => {}),
+                close: mock(() => {}),
+              }),
+              createDedupTracker: () => ({
+                shouldStoreMetrics: () => true,
+              }),
+              createClaudeChain: mock(() => {
+                throw new Error(
+                  "Claude chain should not be created when daemon-backed",
+                );
+              }) as any,
+              createCodexChain: mock(() => {
+                throw new Error(
+                  "Codex chain should not be created in Claude-only mode",
+                );
+              }) as any,
+              createLedgerData: () => ({
+                claudeDaily: () => null,
+                claudeWeekly: () => null,
+                claudeMonthly: () => null,
+                codexDaily: () => null,
+                codexWeekly: () => null,
+                codexMonthly: () => null,
+                loading: () => false,
+                error: () => null,
+                refresh: mock(async () => {}),
+                killAll: mock(() => {}),
+              }),
+              createAutoRefresh: () => ({
+                enabled: () => true,
+                interval: () => 10,
+                togglePause: mock(() => {}),
+                speedUp: mock(() => {}),
+                slowDown: mock(() => {}),
+                startTimer: mock(() => {}),
+              }),
+              createPrediction: () => ({
+                claudePrediction: () => null,
+                codexPrediction: () => null,
+              }),
+              setIntervalFn: (() => 0) as typeof setInterval,
+              clearIntervalFn: (() => {}) as typeof clearInterval,
+            }}
+          />
+        ),
+        { width: 140, height: 40 },
+      );
+
+    await Bun.sleep(10);
+    await renderOnce();
+
+    mockInput.pressKey("tab");
+    mockInput.pressKey("]");
+    mockInput.pressKey("]");
+    mockInput.pressKey("]");
+    await Bun.sleep(10);
+    await renderOnce();
+
+    expect(captureCharFrame()).toContain("\u2501 Graph \u2501");
+
+    mockInput.pressKey("]");
+    await Bun.sleep(10);
+    await renderOnce();
+
+    expect(captureCharFrame()).toContain("\u2501 Daily \u2501");
+
+    renderer.destroy();
+  });
+
   test("shows the Graph tab only for daemon-backed services", async () => {
     const { captureCharFrame, renderOnce, renderer } = await renderComponent(
       () => (
