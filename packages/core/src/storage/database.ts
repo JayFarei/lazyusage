@@ -9,6 +9,27 @@ import { mkdirSync, existsSync, chmodSync } from "fs";
 import { parseTimeToDatetime } from "../utils/time.js";
 import type { HistoryEntry, MetricsDict, ServiceName, DailyBoundary, SupervisedMark, Regime } from "../types.js";
 
+type DaemonService = ServiceName | "_daemon";
+
+interface DaemonStatusRow {
+  service: DaemonService;
+  lastCollectedAt: string | null;
+  lastSource: string | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+  pid: number | null;
+  startedAt: string | null;
+  updatedAt: string;
+}
+
+interface DaemonHeartbeatInput {
+  collectedAt?: string | null;
+  source?: string | null;
+  error?: string | null;
+  pid?: number | null;
+  startedAt?: string | null;
+}
+
 export class UsageStore {
   static readonly DEFAULT_DB_PATH = join(
     homedir(),
@@ -66,6 +87,18 @@ export class UsageStore {
         date TEXT PRIMARY KEY,
         regime TEXT NOT NULL CHECK (regime IN ('L', 'M', 'H', 'B')),
         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `);
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS daemon_status (
+        service TEXT PRIMARY KEY,
+        last_collected_at TEXT,
+        last_source TEXT,
+        last_error TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        pid INTEGER,
+        started_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
     `);
   }
@@ -277,6 +310,106 @@ export class UsageStore {
 
   clearAllCapacityMarks(): void {
     this.db.run(`DELETE FROM capacity_marks`);
+  }
+
+  recordDaemonHeartbeat(service: DaemonService, input: DaemonHeartbeatInput): void {
+    const existing = this.getDaemonStatus(service);
+    const nowIso = new Date().toISOString();
+    const hasError = typeof input.error === "string" && input.error.length > 0;
+
+    const next: DaemonStatusRow = {
+      service,
+      lastCollectedAt: hasError
+        ? existing?.lastCollectedAt ?? null
+        : input.collectedAt ?? nowIso,
+      lastSource: input.source ?? existing?.lastSource ?? null,
+      lastError: hasError ? input.error! : null,
+      consecutiveFailures: hasError
+        ? (existing?.consecutiveFailures ?? 0) + 1
+        : 0,
+      pid: input.pid ?? existing?.pid ?? null,
+      startedAt: input.startedAt ?? existing?.startedAt ?? null,
+      updatedAt: nowIso,
+    };
+
+    this.db.run(
+      `INSERT INTO daemon_status
+        (service, last_collected_at, last_source, last_error, consecutive_failures, pid, started_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(service) DO UPDATE SET
+         last_collected_at = excluded.last_collected_at,
+         last_source = excluded.last_source,
+         last_error = excluded.last_error,
+         consecutive_failures = excluded.consecutive_failures,
+         pid = excluded.pid,
+         started_at = excluded.started_at,
+         updated_at = excluded.updated_at`,
+      [
+        next.service,
+        next.lastCollectedAt,
+        next.lastSource,
+        next.lastError,
+        next.consecutiveFailures,
+        next.pid,
+        next.startedAt,
+        next.updatedAt,
+      ],
+    );
+  }
+
+  getDaemonStatus(service: DaemonService): DaemonStatusRow | null {
+    const row = this.db
+      .query(
+        `SELECT
+          service,
+          last_collected_at,
+          last_source,
+          last_error,
+          consecutive_failures,
+          pid,
+          started_at,
+          updated_at
+         FROM daemon_status
+         WHERE service = ?`,
+      )
+      .get(service) as
+      | {
+          service: DaemonService;
+          last_collected_at: string | null;
+          last_source: string | null;
+          last_error: string | null;
+          consecutive_failures: number;
+          pid: number | null;
+          started_at: string | null;
+          updated_at: string;
+        }
+      | null;
+
+    if (!row) return null;
+
+    return {
+      service: row.service,
+      lastCollectedAt: row.last_collected_at,
+      lastSource: row.last_source,
+      lastError: row.last_error,
+      consecutiveFailures: row.consecutive_failures,
+      pid: row.pid,
+      startedAt: row.started_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  isDaemonHeartbeatFresh(
+    service: DaemonService,
+    maxAgeMs: number = 120_000,
+  ): boolean {
+    const status = this.getDaemonStatus(service);
+    if (!status?.lastCollectedAt) return false;
+
+    const collectedAtMs = Date.parse(status.lastCollectedAt);
+    if (Number.isNaN(collectedAtMs)) return false;
+
+    return Date.now() - collectedAtMs <= maxAgeMs;
   }
 
   close(): void {
