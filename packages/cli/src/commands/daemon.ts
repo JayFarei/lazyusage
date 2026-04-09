@@ -58,6 +58,7 @@ export interface DaemonCommandOptions {
   runtimeExecutablePath?: string;
   cliEntrypointPath?: string;
   writeServiceFile?: (path: string, contents: string) => void;
+  runServiceManagerCommand?: (command: string[]) => Promise<void> | void;
 }
 
 function isServiceName(value: string): value is ServiceName {
@@ -309,6 +310,20 @@ WantedBy=default.target
 `;
 }
 
+function getInstallServiceManagerCommands(
+  platform: DaemonInstallPlatform,
+  serviceFilePath: string,
+): string[][] {
+  if (platform === "darwin") {
+    return [["launchctl", "load", serviceFilePath]];
+  }
+
+  return [
+    ["systemctl", "--user", "daemon-reload"],
+    ["systemctl", "--user", "enable", "--now", DAEMON_SYSTEMD_UNIT_NAME],
+  ];
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
@@ -381,6 +396,23 @@ export function createDaemonCommand(
     ((path: string, contents: string): void => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, contents, "utf-8");
+    });
+  const runServiceManagerCommand =
+    options.runServiceManagerCommand ??
+    ((command: string[]): void => {
+      const result = Bun.spawnSync(command, {
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+
+      if (result.exitCode !== 0) {
+        const stderr = result.stderr.toString().trim();
+        throw new Error(
+          stderr.length > 0
+            ? stderr
+            : `Service manager command failed: ${command.join(" ")}`,
+        );
+      }
     });
   const waitForProcessExit =
     options.waitForProcessExit ??
@@ -527,7 +559,7 @@ export function createDaemonCommand(
   command
     .command("install")
     .description("Install the collector daemon as a background service")
-    .action(() => {
+    .action(async () => {
       if (platform !== "darwin" && platform !== "linux") {
         throw new Error(`Daemon install is not supported on ${platform}.`);
       }
@@ -544,6 +576,12 @@ export function createDaemonCommand(
         : renderSystemdUnit(commandArgs, process.cwd());
 
       writeServiceFile(serviceFilePath, serviceContents);
+      for (const serviceManagerCommand of getInstallServiceManagerCommands(
+        platform,
+        serviceFilePath,
+      )) {
+        await runServiceManagerCommand(serviceManagerCommand);
+      }
       writeStdout(`Installed daemon service at ${serviceFilePath}.`);
     });
 

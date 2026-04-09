@@ -314,6 +314,7 @@ describe("createDaemonCommand", () => {
 
   test("registers a daemon install subcommand and writes a launchd plist on macOS", async () => {
     const writes: Array<{ path: string; contents: string }> = [];
+    const serviceManagerCommands: string[][] = [];
     const output: string[] = [];
 
     const command = createDaemonCommand({
@@ -330,6 +331,9 @@ describe("createDaemonCommand", () => {
       }),
       writeServiceFile: (path, contents) => {
         writes.push({ path, contents });
+      },
+      runServiceManagerCommand: (command) => {
+        serviceManagerCommands.push(command);
       },
       writeStdout: (message) => {
         output.push(message);
@@ -357,6 +361,13 @@ describe("createDaemonCommand", () => {
     expect(writes[0]?.contents).toContain("<string>debug</string>");
     expect(writes[0]?.contents).toContain("<key>RunAtLoad</key>");
     expect(writes[0]?.contents).toContain("<key>KeepAlive</key>");
+    expect(serviceManagerCommands).toEqual([
+      [
+        "launchctl",
+        "load",
+        "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
+      ],
+    ]);
     expect(output).toEqual([
       "Installed daemon service at /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
     ]);
