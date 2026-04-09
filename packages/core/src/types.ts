@@ -6,6 +6,7 @@
 /** Source of usage data */
 export enum DataSource {
   API = "api",
+  WEB = "web",
   PTY = "pty",
   CACHE = "cache",
   FALLBACK = "fallback",

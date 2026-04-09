@@ -20,6 +20,7 @@
     "test:e2e": "bun test packages/e2e/src/tests/ --timeout 120000",
     "test:visual": "bun test packages/e2e/src/tests/visual-equivalency.test.ts --timeout 120000",
     "test:soak": "bun test packages/e2e/src/tests/soak.test.ts --timeout 660000",
+    "test:soak-chain": "bun scripts/soak-chain.ts",
     "capture-golden": "bun run packages/e2e/scripts/capture-golden.ts",
     "typecheck": "bunx tsc --noEmit",
     "lint": "biome check .",

@@ -6,6 +6,7 @@
 import { ClaudeAPIProvider } from "./api-claude.js";
 import { CodexAPIProvider } from "./api-codex.js";
 import { CodexSessionProvider } from "./session-codex.js";
+import { ClaudeWebProvider } from "./web-claude.js";
 import { FallbackChain, PersistentFallbackChain } from "./chain.js";
 import {
   ClaudePTYProvider,
@@ -20,10 +21,12 @@ export function createClaudeChain(persistent: boolean = false): FallbackChain | 
   if (persistent) {
     const credStore = new ClaudeCredentialStore();
     const apiProvider = new ClaudeAPIProvider(credStore);
+    const webProvider = new ClaudeWebProvider();
     const ptyProvider = new ClaudePersistentPTYProvider();
-    return new PersistentFallbackChain("claude", apiProvider, ptyProvider, credStore);
+    // Order: OAuth API -> Web API (browser cookies) -> PTY
+    return new PersistentFallbackChain("claude", [apiProvider, webProvider, ptyProvider], credStore);
   }
-  const providers = [new ClaudeAPIProvider(), new ClaudePTYProvider()];
+  const providers = [new ClaudeAPIProvider(), new ClaudeWebProvider(), new ClaudePTYProvider()];
   return new FallbackChain("claude", providers);
 }
 
@@ -32,8 +35,10 @@ export function createCodexChain(persistent: boolean = false): FallbackChain | P
   if (persistent) {
     const credStore = new CodexCredentialStore();
     const apiProvider = new CodexAPIProvider();
+    const sessionProvider = new CodexSessionProvider();
     const ptyProvider = new CodexPersistentPTYProvider();
-    return new PersistentFallbackChain("codex", apiProvider, ptyProvider, credStore);
+    // Order: API -> Session files -> PTY
+    return new PersistentFallbackChain("codex", [apiProvider, sessionProvider, ptyProvider], credStore);
   }
   // API -> Session files (fallback when token expires) -> PTY
   const providers = [new CodexAPIProvider(), new CodexSessionProvider(), new CodexPTYProvider()];

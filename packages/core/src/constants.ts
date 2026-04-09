@@ -13,12 +13,16 @@ export const API_TIMEOUT_MS = 10_000;
  * The Anthropic usage API allows ~1 request per 3-4 minutes. */
 export const RATE_LIMIT_DEFAULT_SECONDS = 240;
 
+/** Default retry-after for Codex usage API (shorter window than Claude) */
+export const CODEX_RATE_LIMIT_DEFAULT_SECONDS = 60;
+
 /** TUI tick interval in milliseconds (30 seconds) */
 export const TICK_INTERVAL_MS = 30_000;
 
 /** Human-readable labels for DataSource enum values */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
   api: "API",
+  web: "Web",
   pty: "Terminal",
   cache: "Cached",
   fallback: "Offline",

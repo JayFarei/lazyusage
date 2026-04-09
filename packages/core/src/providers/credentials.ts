@@ -227,7 +227,7 @@ export class ClaudeCredentialStore {
     // Try Keychain
     try {
       const proc = Bun.spawnSync([
-        "security", "add-generic-password",
+        "/usr/bin/security", "add-generic-password",
         "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
         "-a", ClaudeCredentialStore.KEYCHAIN_SERVICE,
         "-w", payload,
@@ -241,10 +241,12 @@ export class ClaudeCredentialStore {
     chmodSync(ClaudeCredentialStore.CREDENTIALS_FILE, 0o600);
   }
 
+  private static readonly KEYCHAIN_TIMEOUT_MS = 2000;
+
   private _getFromKeychain(): ClaudeCredentials | null {
     try {
       const proc = Bun.spawnSync([
-        "security", "find-generic-password",
+        "/usr/bin/security", "find-generic-password",
         "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
         "-w",
       ]);
@@ -258,6 +260,53 @@ export class ClaudeCredentialStore {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Async Keychain read with timeout.
+   * Prevents blocking when macOS shows a Keychain authorization prompt.
+   * Kills the security process if it doesn't respond within the timeout.
+   */
+  async _getFromKeychainAsync(): Promise<ClaudeCredentials | null> {
+    try {
+      const proc = Bun.spawn([
+        "/usr/bin/security", "find-generic-password",
+        "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
+        "-w",
+      ], { stdout: "pipe", stderr: "ignore" });
+
+      const timeout = Bun.sleep(ClaudeCredentialStore.KEYCHAIN_TIMEOUT_MS).then(() => {
+        proc.kill();
+        return null as string | null;
+      });
+
+      const read = (async () => {
+        const code = await proc.exited;
+        if (code !== 0) return null;
+        return await new Response(proc.stdout).text();
+      })();
+
+      const output = await Promise.race([read, timeout]);
+      if (!output) return null;
+
+      const data = JSON.parse(output.trim());
+      return this._parseCredentials(data);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Background Keychain refresh. Call after construction or on TTL expiry.
+   * Populates the in-memory cache without blocking the caller.
+   */
+  refreshKeychainInBackground(): void {
+    this._getFromKeychainAsync().then((creds) => {
+      if (creds !== null) {
+        this._credentials = creds;
+        this._lastReadAt = Date.now();
+      }
+    }).catch(() => {});
   }
 
   private _getFromFile(): ClaudeCredentials | null {

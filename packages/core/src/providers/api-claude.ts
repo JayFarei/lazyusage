@@ -77,9 +77,12 @@ export class ClaudeAPIProvider implements UsageProvider {
 
   /**
    * Track when the rate limit window expires so we skip requests that will 429.
-   * The usage endpoint allows ~1 req per 3-4 min.
+   * The Anthropic usage API sends Retry-After: 0 on 429, so we use exponential
+   * backoff: 4min → 8min → 16min (capped at 20min).
    */
   private static _rateLimitedUntil = 0;
+  private static _consecutive429s = 0;
+  private static readonly MAX_BACKOFF_SECONDS = 1200; // 20 minutes
 
   /** Check if the usage API is currently rate-limited.
    * Also applies to PTY since `/usage` uses the same API under the hood. */
@@ -110,8 +113,20 @@ export class ClaudeAPIProvider implements UsageProvider {
     });
 
     if (response.status === 429) {
-      const retryAfter = parseInt(response.headers.get("retry-after") ?? String(RATE_LIMIT_DEFAULT_SECONDS), 10);
-      ClaudeAPIProvider._rateLimitedUntil = Date.now() + retryAfter * 1000;
+      ClaudeAPIProvider._consecutive429s++;
+      const rawHeader = response.headers.get("retry-after");
+      const parsed = parseInt(rawHeader ?? "", 10);
+      // Exponential backoff when header is missing/zero (API sends Retry-After: 0).
+      // Base = 240s, doubles per consecutive 429, capped at 20 min.
+      const backoff = parsed > 0
+        ? parsed
+        : Math.min(
+            RATE_LIMIT_DEFAULT_SECONDS * Math.pow(2, ClaudeAPIProvider._consecutive429s - 1),
+            ClaudeAPIProvider.MAX_BACKOFF_SECONDS,
+          );
+      ClaudeAPIProvider._rateLimitedUntil = Date.now() + backoff * 1000;
+    } else if (response.ok) {
+      ClaudeAPIProvider._consecutive429s = 0;
     }
 
     return response;

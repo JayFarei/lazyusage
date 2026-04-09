@@ -61,6 +61,11 @@ export {
   PersistentSession,
 } from "./utils/tmux.js";
 
+export {
+  DirectSession,
+  PersistentDirectSession,
+} from "./utils/pty.js";
+
 // Parsers
 export { parseClaudeOutput } from "./parsers/claude.js";
 export { parseCodexOutput } from "./parsers/codex.js";
@@ -72,8 +77,8 @@ export { DedupTracker } from "./storage/dedup.js";
 
 // Providers
 export { createClaudeChain, createCodexChain } from "./providers/factory.js";
-export { FallbackChain, PersistentFallbackChain, SourcePlanner } from "./providers/chain.js";
-export type { SourcePlan } from "./providers/chain.js";
+export { FallbackChain, PersistentFallbackChain, SourcePlanner, setChainDiagnosticListener } from "./providers/chain.js";
+export type { SourcePlan, ChainDiagnosticEvent, ChainDiagnosticListener } from "./providers/chain.js";
 
 // Collectors
 export { ClaudeEphemeralCollector, ClaudePersistentCollector } from "./collectors/claude.js";
@@ -92,6 +97,14 @@ export { predict } from "./prediction/project.js";
 
 // Credentials
 export { ClaudeCredentialStore, CodexCredentialStore, RefreshFailureGate } from "./providers/credentials.js";
+
+// Providers
+export { ClaudeAPIProvider } from "./providers/api-claude.js";
+export { CodexAPIProvider } from "./providers/api-codex.js";
+export { ClaudeWebProvider } from "./providers/web-claude.js";
+
+// Cookie extraction
+export { getClaudeSessionCookie, invalidateClaudeSessionCookie } from "./utils/cookies.js";
 
 // Status page polling
 export { pollStatusPage, pollAllStatusPages, statusToWarningMessage, type StatusPageResult } from "./providers/status-page.js";

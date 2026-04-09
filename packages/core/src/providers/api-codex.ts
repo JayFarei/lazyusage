@@ -7,7 +7,7 @@ import { DataSource } from "../types.js";
 import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 import { CodexCredentialStore } from "./credentials.js";
 import { formatResetFromIso } from "../utils/time.js";
-import { API_TIMEOUT_MS, CODEX_PLAN_TYPE_MAP } from "../constants.js";
+import { API_TIMEOUT_MS, CODEX_PLAN_TYPE_MAP, CODEX_RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
 
 export class CodexAPIProvider implements UsageProvider {
   static readonly API_URL = "https://chatgpt.com/backend-api/wham/usage";
@@ -16,6 +16,16 @@ export class CodexAPIProvider implements UsageProvider {
   sourceType = DataSource.API;
 
   private _credentialsStore = new CodexCredentialStore();
+
+  /**
+   * Track when the rate limit window expires so we skip requests that will 429.
+   */
+  private static _rateLimitedUntil = 0;
+
+  /** Check if the usage API is currently rate-limited. */
+  static isRateLimited(): boolean {
+    return Date.now() < CodexAPIProvider._rateLimitedUntil;
+  }
 
   isAvailable(): boolean {
     return this._credentialsStore.isAvailable();
@@ -36,14 +46,7 @@ export class CodexAPIProvider implements UsageProvider {
     }
 
     try {
-      const response = await globalThis.fetch(CodexAPIProvider.API_URL, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${creds.accessToken}`,
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(API_TIMEOUT_MS),
-      });
+      const response = await this._fetchWithRetry(creds.accessToken);
 
       if (!response.ok) {
         return {
@@ -74,6 +77,34 @@ export class CodexAPIProvider implements UsageProvider {
         stale: false,
       };
     }
+  }
+
+  private async _fetchWithRetry(accessToken: string): Promise<Response> {
+    // Skip if we know we're still rate-limited
+    if (Date.now() < CodexAPIProvider._rateLimitedUntil) {
+      const secsLeft = Math.ceil((CodexAPIProvider._rateLimitedUntil - Date.now()) / 1000);
+      return new Response(
+        JSON.stringify({ error: { message: "Rate limited (cached)", type: "rate_limit_error" } }),
+        { status: 429, statusText: `Too Many Requests (retry in ${secsLeft}s)` },
+      );
+    }
+
+    const response = await globalThis.fetch(CodexAPIProvider.API_URL, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+
+    if (response.status === 429) {
+      const parsed = parseInt(response.headers.get("retry-after") ?? "", 10);
+      const retryAfter = parsed > 0 ? parsed : CODEX_RATE_LIMIT_DEFAULT_SECONDS;
+      CodexAPIProvider._rateLimitedUntil = Date.now() + retryAfter * 1000;
+    }
+
+    return response;
   }
 
   private _parseApiResponse(data: Record<string, unknown>): MetricsDict {
