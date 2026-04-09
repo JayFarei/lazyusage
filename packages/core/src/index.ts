@@ -89,6 +89,12 @@ export {
   type DaemonLogger,
   type DaemonLoggerOptions,
 } from "./daemon/logger.js";
+export {
+  createDaemonCollector,
+  type DaemonCollector,
+  type DaemonCollectorChain,
+  type DaemonCollectorOptions,
+} from "./daemon/collector.js";
 
 // Providers
 export { createClaudeChain, createCodexChain } from "./providers/factory.js";
