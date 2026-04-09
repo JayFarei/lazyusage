@@ -152,6 +152,35 @@ describe("createDaemonCommand", () => {
     ]);
     expect(backgroundCalls).toBe(0);
   });
+
+  test("registers a daemon stop subcommand and stops the daemon via its pid file", async () => {
+    const signalCalls: Array<{ pid: number; signal: "SIGTERM" }> = [];
+    const waitCalls: number[] = [];
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      readPidFile: (path) => {
+        expect(path).toContain("daemon.pid");
+        return "4321\n";
+      },
+      signalProcess: (pid, signal) => {
+        signalCalls.push({ pid, signal });
+      },
+      waitForProcessExit: async (pid) => {
+        waitCalls.push(pid);
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "stop"]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("stop");
+    expect(signalCalls).toEqual([{ pid: 4321, signal: "SIGTERM" }]);
+    expect(waitCalls).toEqual([4321]);
+    expect(output).toEqual(["Stopped daemon 4321."]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {
