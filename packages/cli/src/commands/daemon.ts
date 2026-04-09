@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import { existsSync, readFileSync } from "fs";
 import {
+  DATA_SOURCE_LABELS,
   DEFAULT_DAEMON_PID_PATH,
+  UsageStore,
   loadDaemonConfig,
   type DaemonConfig,
   type DaemonConfigOverrides,
@@ -16,6 +18,13 @@ export interface DaemonStartOptions {
   logLevel?: string;
 }
 
+type DaemonStatusStore = Pick<
+  UsageStore,
+  "getDaemonStatus" | "isDaemonHeartbeatFresh" | "close"
+>;
+
+type DaemonStatusRow = NonNullable<ReturnType<UsageStore["getDaemonStatus"]>>;
+
 export interface DaemonCommandOptions {
   onStart?: (options: DaemonStartOptions) => Promise<void> | void;
   loadConfig?: (overrides: DaemonConfigOverrides) => DaemonConfig;
@@ -29,6 +38,8 @@ export interface DaemonCommandOptions {
   writeStdout?: (message: string) => void;
   stopTimeoutMs?: number;
   stopPollIntervalMs?: number;
+  createStore?: () => DaemonStatusStore;
+  now?: () => number;
 }
 
 function isServiceName(value: string): value is ServiceName {
@@ -88,6 +99,74 @@ function parsePid(pidContents: string): number {
   return pid;
 }
 
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const minutes = totalMinutes % 60;
+    return minutes === 0 ? `${totalHours}h` : `${totalHours}h ${minutes}m`;
+  }
+
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
+}
+
+function formatAge(timestamp: string | null, nowMs: number): string | null {
+  if (!timestamp) {
+    return null;
+  }
+
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return formatDuration(nowMs - parsed);
+}
+
+function formatServiceSummary(
+  service: ServiceName,
+  status: DaemonStatusRow | null,
+  fresh: boolean,
+  nowMs: number,
+): string {
+  const label = service[0].toUpperCase() + service.slice(1);
+
+  if (!status?.lastCollectedAt) {
+    return `${label}: no heartbeat`;
+  }
+
+  const age = formatAge(status.lastCollectedAt, nowMs);
+  const source = status.lastSource
+    ? (DATA_SOURCE_LABELS[status.lastSource] ?? status.lastSource)
+    : null;
+  const summary = `${fresh ? "healthy" : "stale"}${age ? ` ${age} ago` : ""}${source ? ` via ${source}` : ""}`;
+  const details: string[] = [];
+
+  if (status.consecutiveFailures > 0) {
+    details.push(
+      `${status.consecutiveFailures} failure${status.consecutiveFailures === 1 ? "" : "s"}`,
+    );
+  }
+
+  if (status.lastError) {
+    details.push(`last error: ${status.lastError}`);
+  }
+
+  return `${label}: ${summary}${details.length > 0 ? ` (${details.join(", ")})` : ""}`;
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
@@ -117,6 +196,8 @@ export function createDaemonCommand(
       }
     });
   const writeStdout = options.writeStdout ?? ((message: string) => console.log(message));
+  const createStore = options.createStore ?? (() => new UsageStore());
+  const now = options.now ?? (() => Date.now());
   const waitForProcessExit =
     options.waitForProcessExit ??
     (async (pid: number): Promise<void> => {
@@ -187,6 +268,49 @@ export function createDaemonCommand(
       signalProcess(pid, "SIGTERM");
       await waitForProcessExit(pid);
       writeStdout(`Stopped daemon ${pid}.`);
+    });
+
+  command
+    .command("status")
+    .description("Show collector daemon status")
+    .action(() => {
+      let pid: number | null = null;
+
+      try {
+        pid = parsePid(readPidFile(pidFilePath));
+      } catch {
+        writeStdout("Daemon: stopped");
+        return;
+      }
+
+      if (!isProcessRunning(pid)) {
+        writeStdout(`Daemon: stopped (stale pid ${pid})`);
+        return;
+      }
+
+      const store = createStore();
+
+      try {
+        const daemonStatus = store.getDaemonStatus("_daemon");
+        const nowMs = now();
+        const uptime = formatAge(daemonStatus?.startedAt ?? null, nowMs);
+        const daemonSummary = uptime
+          ? `Daemon: running (pid ${pid}, uptime ${uptime})`
+          : `Daemon: running (pid ${pid})`;
+
+        const services: ServiceName[] = ["claude", "codex"];
+        const serviceSummaries = services.map((service) =>
+          formatServiceSummary(
+            service,
+            store.getDaemonStatus(service),
+            store.isDaemonHeartbeatFresh(service),
+            nowMs,
+          ));
+
+        writeStdout([daemonSummary, ...serviceSummaries].join(" | "));
+      } finally {
+        store.close();
+      }
     });
 
   return command;

@@ -181,6 +181,68 @@ describe("createDaemonCommand", () => {
     expect(waitCalls).toEqual([4321]);
     expect(output).toEqual(["Stopped daemon 4321."]);
   });
+
+  test("registers a daemon status subcommand and prints a heartbeat summary", async () => {
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      readPidFile: () => "4321\n",
+      isProcessRunning: (pid) => pid === 4321,
+      createStore: () => ({
+        getDaemonStatus: (service: string) => {
+          if (service === "_daemon") {
+            return {
+              service: "_daemon",
+              lastCollectedAt: null,
+              lastSource: null,
+              lastError: null,
+              consecutiveFailures: 0,
+              pid: 4321,
+              startedAt: "2026-04-09T11:58:00.000Z",
+              updatedAt: "2026-04-09T12:00:00.000Z",
+            };
+          }
+
+          if (service === "claude") {
+            return {
+              service: "claude",
+              lastCollectedAt: "2026-04-09T11:59:30.000Z",
+              lastSource: "api",
+              lastError: null,
+              consecutiveFailures: 0,
+              pid: null,
+              startedAt: null,
+              updatedAt: "2026-04-09T12:00:00.000Z",
+            };
+          }
+
+          return {
+            service: "codex",
+            lastCollectedAt: "2026-04-09T11:55:00.000Z",
+            lastSource: "pty",
+            lastError: "rate limited",
+            consecutiveFailures: 2,
+            pid: null,
+            startedAt: null,
+            updatedAt: "2026-04-09T12:00:00.000Z",
+          };
+        },
+        isDaemonHeartbeatFresh: (service: string) => service === "claude",
+        close: () => {},
+      }),
+      now: () => new Date("2026-04-09T12:00:00.000Z").getTime(),
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "status"]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("status");
+    expect(output).toEqual([
+      "Daemon: running (pid 4321, uptime 2m) | Claude: healthy 30s ago via API | Codex: stale 5m ago via Terminal (2 failures, last error: rate limited)",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {
