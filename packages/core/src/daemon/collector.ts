@@ -5,6 +5,7 @@ import type { DaemonLogger } from "./logger.js";
 
 export interface DaemonCollectorChain {
   refresh(): Promise<FetchResult>;
+  stop?(): Promise<void>;
 }
 
 export interface DaemonCollectorStandby {
@@ -97,6 +98,22 @@ export function createDaemonCollector(
     lastStandbyRecycleAt = currentTime;
   };
 
+  const stopServiceChains = async (): Promise<void> => {
+    for (const [service, chain] of Object.entries(options.services) as Array<
+      [ServiceName, DaemonCollectorChain | undefined]
+    >) {
+      if (!chain?.stop) continue;
+
+      try {
+        await chain.stop();
+      } catch (error) {
+        options.logger.warn(
+          `[${service}] shutdown failed: ${formatError(error)}`,
+        );
+      }
+    }
+  };
+
   const runCycle = async (): Promise<void> => {
     if (!running) {
       return;
@@ -130,6 +147,7 @@ export function createDaemonCollector(
         timer = null;
       }
 
+      await stopServiceChains();
       await runStandbyAction("winddown", "stop");
       lastStandbyRecycleAt = null;
     },

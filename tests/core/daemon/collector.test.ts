@@ -43,6 +43,24 @@ class MockChain {
   }
 }
 
+class MockStoppableChain extends MockChain {
+  constructor(
+    result: FetchResult | Error,
+    private readonly stopError?: Error,
+  ) {
+    super(result);
+  }
+
+  stopCalls = 0;
+
+  async stop(): Promise<void> {
+    this.stopCalls += 1;
+    if (this.stopError) {
+      throw this.stopError;
+    }
+  }
+}
+
 class MockStandby {
   lifecycleCalls: string[] = [];
 
@@ -248,5 +266,38 @@ describe("createDaemonCollector", () => {
       "windup",
       "winddown",
     ]);
+  });
+
+  test("stops service chains during shutdown and logs cleanup failures without aborting", async () => {
+    const claudeChain = new MockStoppableChain(
+      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
+    );
+    const codexChain = new MockStoppableChain(
+      makeSuccessResult(CODEX_METRICS, DataSource.PTY),
+      new Error("codex PTY cleanup failed"),
+    );
+    const warnings: string[] = [];
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+        codex: codexChain,
+      },
+      store,
+      logger: {
+        warn: (message) => warnings.push(message),
+      },
+      setInterval: () => ({ id: "collector-loop" }),
+      clearInterval: () => {},
+    });
+
+    await collector.start();
+    await collector.stop();
+
+    expect(claudeChain.stopCalls).toBe(1);
+    expect(codexChain.stopCalls).toBe(1);
+    expect(warnings).toContain(
+      "[codex] shutdown failed: codex PTY cleanup failed",
+    );
   });
 });
