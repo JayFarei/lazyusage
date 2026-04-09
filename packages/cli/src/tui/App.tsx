@@ -19,6 +19,10 @@ import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
 import { usePanelState } from "./hooks/useViewMode.js";
 import { useLedgerData } from "./hooks/useLedgerData.js";
 import { createKeybindingHandler } from "./hooks/useKeybindings.js";
+import {
+  useDaemonDetection,
+  type DaemonDetectionHook,
+} from "./hooks/useDaemonDetection.js";
 import { usePrediction } from "./hooks/usePrediction.js";
 import {
   createClaudeChain,
@@ -33,9 +37,52 @@ import {
 export interface AppProps {
   /** Optional service filter: "claude" | "codex" | "all" | undefined = show both */
   service?: "claude" | "codex" | "all";
+  deps?: Partial<AppDeps>;
+}
+
+type AppChain = Pick<PersistentFallbackChain, "start" | "refresh" | "stop">;
+type AppStore = Pick<
+  UsageStore,
+  "cleanupOldSnapshots" | "storeSnapshot" | "close"
+>;
+type AppDedupTracker = Pick<DedupTracker, "shouldStoreMetrics">;
+type AppLedgerData = ReturnType<typeof useLedgerData>;
+type AppAutoRefresh = ReturnType<typeof useAutoRefresh>;
+type AppPrediction = ReturnType<typeof usePrediction>;
+
+interface AppDeps {
+  createDaemonDetection: () => DaemonDetectionHook;
+  createLedgerData: typeof useLedgerData;
+  createAutoRefresh: typeof useAutoRefresh;
+  createPrediction: typeof usePrediction;
+  createUsageStore: () => AppStore;
+  createDedupTracker: () => AppDedupTracker;
+  createClaudeChain: (persistent: boolean) => AppChain;
+  createCodexChain: (persistent: boolean) => AppChain;
+  setIntervalFn: typeof setInterval;
+  clearIntervalFn: typeof clearInterval;
 }
 
 export function App(props: AppProps = {}) {
+  const deps: AppDeps = {
+    createDaemonDetection:
+      props.deps?.createDaemonDetection ?? (() => useDaemonDetection()),
+    createLedgerData: props.deps?.createLedgerData ?? useLedgerData,
+    createAutoRefresh: props.deps?.createAutoRefresh ?? useAutoRefresh,
+    createPrediction: props.deps?.createPrediction ?? usePrediction,
+    createUsageStore: props.deps?.createUsageStore ?? (() => new UsageStore()),
+    createDedupTracker:
+      props.deps?.createDedupTracker ?? (() => new DedupTracker()),
+    createClaudeChain:
+      props.deps?.createClaudeChain ??
+      ((persistent: boolean) => createClaudeChain(persistent) as AppChain),
+    createCodexChain:
+      props.deps?.createCodexChain ??
+      ((persistent: boolean) => createCodexChain(persistent) as AppChain),
+    setIntervalFn: props.deps?.setIntervalFn ?? setInterval,
+    clearIntervalFn: props.deps?.clearIntervalFn ?? clearInterval,
+  };
+
   const showClaude = () => !props.service || props.service === "all" || props.service === "claude";
   const showCodex = () => !props.service || props.service === "all" || props.service === "codex";
   const theme = useTheme();
@@ -62,20 +109,22 @@ export function App(props: AppProps = {}) {
   // Shared 30s tick for time-progress bars (replaces two per-panel setIntervals)
   const [tick, setTick] = createSignal(0);
 
-  const ledger = useLedgerData();
+  const ledger: AppLedgerData = deps.createLedgerData();
+  const daemonDetection = deps.createDaemonDetection();
 
   // Prediction engine: runs on each tick, produces prediction data for weekly bars
-  const { claudePrediction, codexPrediction } = usePrediction(tick, claudeMetrics, codexMetrics);
+  const { claudePrediction, codexPrediction }: AppPrediction =
+    deps.createPrediction(tick, claudeMetrics, codexMetrics);
 
   const visiblePanelCount = () => (showClaude() ? 1 : 0) + (showCodex() ? 1 : 0);
 
   // Provider chains
-  let claudeChain: PersistentFallbackChain | null = null;
-  let codexChain: PersistentFallbackChain | null = null;
+  let claudeChain: AppChain | null = null;
+  let codexChain: AppChain | null = null;
 
   // Storage
-  let store: UsageStore | null = null;
-  const dedup = new DedupTracker();
+  let store: AppStore | null = null;
+  const dedup = deps.createDedupTracker();
 
   async function refreshAll() {
     const timestamp = new Date().toLocaleTimeString();
@@ -90,7 +139,7 @@ export function App(props: AppProps = {}) {
         .filter(([chain]) => chain !== null)
         .map(async ([chain, service]) => {
           try {
-            const result = await (chain as PersistentFallbackChain).refresh();
+            const result = await chain.refresh();
             const metrics = result.metrics as MetricsDict | null;
             const error = result.error;
             const source = result.source;
@@ -108,7 +157,7 @@ export function App(props: AppProps = {}) {
     ]);
   }
 
-  const autoRefresh = useAutoRefresh(refreshAll, 10);
+  const autoRefresh: AppAutoRefresh = deps.createAutoRefresh(refreshAll, 10);
 
   const isServiceVisible = (panel: "claude" | "codex") =>
     panel === "claude" ? showClaude() : showCodex();
@@ -181,18 +230,38 @@ export function App(props: AppProps = {}) {
     loadCachedData();
 
     try {
-      store = new UsageStore();
+      store = deps.createUsageStore();
       // Clean up rows older than 30 days to prevent unbounded table growth
       try { store.cleanupOldSnapshots(); } catch {}
     } catch {
       // Database not critical
     }
 
-    if (showClaude()) {
-      claudeChain = createClaudeChain(true) as PersistentFallbackChain;
+    daemonDetection.detect();
+    const daemonBackedServices = daemonDetection.daemonBackedServices();
+    const daemonMetrics = daemonDetection.daemonMetrics();
+
+    for (const [service, visible] of [
+      ["claude", showClaude()],
+      ["codex", showCodex()],
+    ] as const) {
+      if (!visible || !daemonBackedServices[service]) {
+        continue;
+      }
+
+      const metrics = daemonMetrics[service];
+      if (!metrics) {
+        continue;
+      }
+
+      updateMetrics(service, metrics, null, "daemon");
     }
-    if (showCodex()) {
-      codexChain = createCodexChain(true) as PersistentFallbackChain;
+
+    if (showClaude() && !daemonBackedServices.claude) {
+      claudeChain = deps.createClaudeChain(true);
+    }
+    if (showCodex() && !daemonBackedServices.codex) {
+      codexChain = deps.createCodexChain(true);
     }
 
     if (!showClaude() && showCodex()) {
@@ -208,7 +277,7 @@ export function App(props: AppProps = {}) {
         .filter(([chain]) => chain !== null)
         .map(async ([chain, service]) => {
           try {
-            const result = await (chain as PersistentFallbackChain).start();
+            const result = await chain.start();
             const metrics = result.metrics as MetricsDict | null;
             updateMetrics(service, metrics, result.error, result.source);
             checkWarning(service, result);
@@ -240,16 +309,16 @@ export function App(props: AppProps = {}) {
   let tickTimer: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
-    clockTimer = setInterval(() => {
+    clockTimer = deps.setIntervalFn(() => {
       setCurrentTime(new Date().toLocaleTimeString());
     }, 1000);
-    tickTimer = setInterval(() => setTick((t) => t + 1), 30_000);
+    tickTimer = deps.setIntervalFn(() => setTick((t) => t + 1), 30_000);
     startup();
   });
 
   onCleanup(() => {
-    if (clockTimer) clearInterval(clockTimer);
-    if (tickTimer) clearInterval(tickTimer);
+    if (clockTimer) deps.clearIntervalFn(clockTimer);
+    if (tickTimer) deps.clearIntervalFn(tickTimer);
     cleanup();
   });
 
