@@ -35,7 +35,8 @@ export interface DaemonLifecycle {
 
 export interface DaemonLifecycleOptions {
   collector: Pick<DaemonCollector, "start" | "stop">;
-  store: Pick<UsageStore, "close">;
+  store: Pick<UsageStore, "close"> &
+    Partial<Pick<UsageStore, "recordDaemonHeartbeat">>;
   logger: Pick<DaemonLogger, "warn">;
   pidFilePath?: string;
   pid?: number;
@@ -126,6 +127,7 @@ export function createDaemonLifecycle(
         return;
       }
 
+      const startedAt = new Date().toISOString();
       mkdirSync(dirname(pidFilePath), { recursive: true });
       writeFileSync(pidFilePath, `${pid}\n`, "utf-8");
 
@@ -137,6 +139,10 @@ export function createDaemonLifecycle(
 
       try {
         await options.collector.start();
+        options.store.recordDaemonHeartbeat?.("_daemon", {
+          pid,
+          startedAt,
+        });
         started = true;
       } catch (error) {
         unregisterSignals();

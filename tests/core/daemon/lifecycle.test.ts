@@ -19,9 +19,26 @@ class MockCollector {
 
 class MockStore {
   closeCalls = 0;
+  heartbeatCalls: Array<{
+    service: "_daemon";
+    input: {
+      pid?: number | null;
+      startedAt?: string | null;
+    };
+  }> = [];
 
   close(): void {
     this.closeCalls += 1;
+  }
+
+  recordDaemonHeartbeat(
+    service: "_daemon",
+    input: {
+      pid?: number | null;
+      startedAt?: string | null;
+    },
+  ): void {
+    this.heartbeatCalls.push({ service, input });
   }
 }
 
@@ -70,6 +87,27 @@ describe("createDaemonLifecycle", () => {
     expect(existsSync(pidFilePath)).toBe(true);
     expect(readFileSync(pidFilePath, "utf-8")).toBe("4321\n");
     expect(registeredSignals).toEqual(["SIGINT", "SIGTERM"]);
+  });
+
+  test("records daemon process metadata when foreground startup succeeds", async () => {
+    const collector = new MockCollector();
+    const store = new MockStore();
+
+    const lifecycle = createDaemonLifecycle({
+      collector,
+      store,
+      logger: { warn: () => {} },
+      pidFilePath,
+      pid: 4321,
+    });
+
+    await lifecycle.startForeground();
+
+    expect(store.heartbeatCalls).toHaveLength(1);
+    expect(store.heartbeatCalls[0]?.service).toBe("_daemon");
+    expect(store.heartbeatCalls[0]?.input.pid).toBe(4321);
+    expect(store.heartbeatCalls[0]?.input.startedAt).toBeString();
+    expect(Date.parse(store.heartbeatCalls[0]?.input.startedAt ?? "")).not.toBeNaN();
   });
 
   test("shuts down cleanly when a registered signal fires", async () => {
