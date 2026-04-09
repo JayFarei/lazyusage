@@ -28,3 +28,5 @@ __pycache__/
 *.html
 .opentraces/staging/
 .opentraces/config.json
+.soak-chain-2026-04-09T12-20-58.jsonl
+.tmux-session
