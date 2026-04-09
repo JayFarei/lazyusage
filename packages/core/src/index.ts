@@ -75,6 +75,15 @@ export { UsageStore } from "./storage/database.js";
 export { buildPaceData, type PacePoint, type PaceData } from "./storage/pace.js";
 export { DedupTracker } from "./storage/dedup.js";
 
+// Daemon
+export {
+  DEFAULT_DAEMON_CONFIG_PATH,
+  loadDaemonConfig,
+  type DaemonConfig,
+  type DaemonConfigOverrides,
+  type DaemonLogLevel,
+} from "./daemon/config.js";
+
 // Providers
 export { createClaudeChain, createCodexChain } from "./providers/factory.js";
 export { FallbackChain, PersistentFallbackChain, SourcePlanner, setChainDiagnosticListener } from "./providers/chain.js";
