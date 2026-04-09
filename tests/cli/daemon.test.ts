@@ -41,3 +41,30 @@ describe("createDaemonCommand", () => {
     ]);
   });
 });
+
+describe("CLI entrypoint daemon integration", () => {
+  test("passes daemon help through to the daemon command group", async () => {
+    const entrypointPath = new URL(
+      "../../packages/cli/src/index.ts",
+      import.meta.url,
+    ).pathname;
+    const subprocess = Bun.spawn({
+      cmd: [Bun.argv[0], entrypointPath, "daemon", "--help"],
+      cwd: new URL("../../", import.meta.url).pathname,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: globalThis.process.env,
+    });
+
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(subprocess.stdout).text(),
+      new Response(subprocess.stderr).text(),
+      subprocess.exited,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+    expect(stdout).toContain("Manage the always-on collector daemon");
+    expect(stdout).toContain("start");
+  });
+});
