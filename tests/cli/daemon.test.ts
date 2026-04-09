@@ -243,6 +243,37 @@ describe("createDaemonCommand", () => {
       "Daemon: running (pid 4321, uptime 2m) | Claude: healthy 30s ago via API | Codex: stale 5m ago via Terminal (2 failures, last error: rate limited)",
     ]);
   });
+
+  test("registers a daemon logs subcommand and tails the requested number of log lines", async () => {
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      readLogFile: (path) => {
+        expect(path).toContain("daemon.log");
+        return [
+          "2026-04-09T11:58:00.000Z [INFO] boot",
+          "2026-04-09T11:59:00.000Z [WARN] slow refresh",
+          "2026-04-09T12:00:00.000Z [ERROR] collector failed",
+        ].join("\n");
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync([
+      "node",
+      "daemon",
+      "logs",
+      "--lines",
+      "2",
+    ]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("logs");
+    expect(output).toEqual([
+      "2026-04-09T11:59:00.000Z [WARN] slow refresh\n2026-04-09T12:00:00.000Z [ERROR] collector failed",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import {
   DATA_SOURCE_LABELS,
   DEFAULT_DAEMON_PID_PATH,
+  DEFAULT_DAEMON_LOG_PATH,
   UsageStore,
   loadDaemonConfig,
   type DaemonConfig,
@@ -31,7 +32,9 @@ export interface DaemonCommandOptions {
   startForeground?: (config: DaemonConfig) => Promise<void> | void;
   startBackground?: (config: DaemonConfig) => Promise<number> | number;
   pidFilePath?: string;
+  logFilePath?: string;
   readPidFile?: (path: string) => string;
+  readLogFile?: (path: string) => string;
   signalProcess?: (pid: number, signal: "SIGTERM") => void;
   isProcessRunning?: (pid: number) => boolean;
   waitForProcessExit?: (pid: number) => Promise<void>;
@@ -66,6 +69,15 @@ function parseInterval(input?: string): number | undefined {
 
   const interval = Number.parseInt(input, 10);
   return Number.isFinite(interval) ? interval : undefined;
+}
+
+function parseLineCount(input?: string): number | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const count = Number.parseInt(input, 10);
+  return Number.isInteger(count) && count > 0 ? count : undefined;
 }
 
 function parseLogLevelOverride(input?: string): DaemonLogLevel | undefined {
@@ -167,10 +179,21 @@ function formatServiceSummary(
   return `${label}: ${summary}${details.length > 0 ? ` (${details.join(", ")})` : ""}`;
 }
 
+function tailLogContent(contents: string, lineCount: number): string {
+  const lines = contents.split(/\r?\n/);
+
+  if (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  return lines.slice(-lineCount).join("\n");
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
   const pidFilePath = options.pidFilePath ?? DEFAULT_DAEMON_PID_PATH;
+  const logFilePath = options.logFilePath ?? DEFAULT_DAEMON_LOG_PATH;
   const readPidFile =
     options.readPidFile ??
     ((path: string): string => {
@@ -180,6 +203,9 @@ export function createDaemonCommand(
 
       return readFileSync(path, "utf-8");
     });
+  const readLogFile =
+    options.readLogFile ??
+    ((path: string): string => readFileSync(path, "utf-8"));
   const signalProcess =
     options.signalProcess ??
     ((pid: number, signal: "SIGTERM"): void => {
@@ -311,6 +337,16 @@ export function createDaemonCommand(
       } finally {
         store.close();
       }
+    });
+
+  command
+    .command("logs")
+    .description("Show recent daemon log output")
+    .option("--lines <count>", "Number of log lines to show")
+    .action((input: { lines?: string }) => {
+      const lineCount = parseLineCount(input.lines) ?? 10;
+      const contents = readLogFile(logFilePath);
+      writeStdout(tailLogContent(contents, lineCount));
     });
 
   return command;
