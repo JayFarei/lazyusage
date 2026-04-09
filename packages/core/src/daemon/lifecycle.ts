@@ -16,7 +16,19 @@ export const DEFAULT_DAEMON_PID_PATH = join(
 type DaemonSignal = "SIGINT" | "SIGTERM";
 type DaemonSignalHandler = () => Promise<void>;
 
+export interface DaemonBackgroundLaunchOptions {
+  command: string[];
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+}
+
+interface DaemonBackgroundProcess {
+  pid: number;
+  unref?: () => void;
+}
+
 export interface DaemonLifecycle {
+  startBackground(options: DaemonBackgroundLaunchOptions): Promise<number>;
   startForeground(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -29,6 +41,9 @@ export interface DaemonLifecycleOptions {
   pid?: number;
   onSignal?: (signal: DaemonSignal, handler: DaemonSignalHandler) => void;
   offSignal?: (signal: DaemonSignal, handler: DaemonSignalHandler) => void;
+  spawnBackground?: (
+    options: DaemonBackgroundLaunchOptions,
+  ) => DaemonBackgroundProcess;
 }
 
 const SHUTDOWN_SIGNALS: DaemonSignal[] = ["SIGINT", "SIGTERM"];
@@ -48,6 +63,17 @@ export function createDaemonLifecycle(
     ((signal: DaemonSignal, handler: DaemonSignalHandler) => {
       process.off(signal, handler);
     });
+  const spawnBackground =
+    options.spawnBackground ??
+    ((input: DaemonBackgroundLaunchOptions): DaemonBackgroundProcess =>
+      Bun.spawn(input.command, {
+        cwd: input.cwd,
+        env: input.env,
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+        detached: true,
+      }));
 
   let started = false;
   let shuttingDown = false;
@@ -87,6 +113,14 @@ export function createDaemonLifecycle(
   };
 
   return {
+    async startBackground(
+      input: DaemonBackgroundLaunchOptions,
+    ): Promise<number> {
+      const child = spawnBackground(input);
+      child.unref?.();
+      return child.pid;
+    },
+
     async startForeground(): Promise<void> {
       if (started) {
         return;

@@ -25,6 +25,16 @@ class MockStore {
   }
 }
 
+class MockBackgroundProcess {
+  constructor(readonly pid: number) {}
+
+  unrefCalls = 0;
+
+  unref(): void {
+    this.unrefCalls += 1;
+  }
+}
+
 describe("createDaemonLifecycle", () => {
   let tempDir: string;
   let pidFilePath: string;
@@ -88,5 +98,49 @@ describe("createDaemonLifecycle", () => {
     expect(store.closeCalls).toBe(1);
     expect(existsSync(pidFilePath)).toBe(false);
     expect(signalHandlers.size).toBe(0);
+  });
+
+  test("spawns a detached background daemon process and returns its pid", async () => {
+    const collector = new MockCollector();
+    const store = new MockStore();
+    const child = new MockBackgroundProcess(9876);
+    let spawnInput:
+      | {
+          command: string[];
+          cwd?: string;
+          env?: Record<string, string | undefined>;
+        }
+      | null = null;
+
+    const lifecycle = createDaemonLifecycle({
+      collector,
+      store,
+      logger: { warn: () => {} },
+      pidFilePath,
+      spawnBackground: (input) => {
+        spawnInput = input;
+        return child;
+      },
+    });
+
+    const pid = await lifecycle.startBackground({
+      command: ["bun", "run", "lazyusage", "daemon", "start", "--foreground"],
+      cwd: tempDir,
+      env: {
+        LAZYUSAGE_DB_PATH: join(tempDir, "usage.db"),
+      },
+    });
+
+    expect(pid).toBe(9876);
+    expect(collector.startCalls).toBe(0);
+    expect(existsSync(pidFilePath)).toBe(false);
+    expect(spawnInput).toEqual({
+      command: ["bun", "run", "lazyusage", "daemon", "start", "--foreground"],
+      cwd: tempDir,
+      env: {
+        LAZYUSAGE_DB_PATH: join(tempDir, "usage.db"),
+      },
+    });
+    expect(child.unrefCalls).toBe(1);
   });
 });
