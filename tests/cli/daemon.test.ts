@@ -40,6 +40,118 @@ describe("createDaemonCommand", () => {
       },
     ]);
   });
+
+  test("loads daemon config and starts the daemon in background mode by default", async () => {
+    const loadConfigCalls: Array<{
+      interval?: number;
+      services?: string[];
+      logLevel?: string;
+    }> = [];
+    const startedConfigs: Array<{
+      interval: number;
+      services: string[];
+      logLevel: string;
+      ptyRecycleHours: number;
+      configPath: string;
+    }> = [];
+
+    const command = createDaemonCommand({
+      loadConfig: (overrides) => {
+        loadConfigCalls.push(overrides);
+        return {
+          interval: 60,
+          services: ["claude", "codex"],
+          logLevel: "info",
+          ptyRecycleHours: 4,
+          configPath: "/tmp/daemon.toml",
+        };
+      },
+      startBackground: async (config) => {
+        startedConfigs.push(config);
+        return 9876;
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "start"]);
+
+    expect(loadConfigCalls).toEqual([{}]);
+    expect(startedConfigs).toEqual([
+      {
+        interval: 60,
+        services: ["claude", "codex"],
+        logLevel: "info",
+        ptyRecycleHours: 4,
+        configPath: "/tmp/daemon.toml",
+      },
+    ]);
+  });
+
+  test("merges CLI start overrides into daemon config and routes foreground startup", async () => {
+    const loadConfigCalls: Array<{
+      interval?: number;
+      services?: string[];
+      logLevel?: string;
+    }> = [];
+    const foregroundConfigs: Array<{
+      interval: number;
+      services: string[];
+      logLevel: string;
+      ptyRecycleHours: number;
+      configPath: string;
+    }> = [];
+    let backgroundCalls = 0;
+
+    const command = createDaemonCommand({
+      loadConfig: (overrides) => {
+        loadConfigCalls.push(overrides);
+        return {
+          interval: 120,
+          services: ["claude"],
+          logLevel: "debug",
+          ptyRecycleHours: 6,
+          configPath: "/tmp/custom-daemon.toml",
+        };
+      },
+      startForeground: async (config) => {
+        foregroundConfigs.push(config);
+      },
+      startBackground: async () => {
+        backgroundCalls += 1;
+        return 9876;
+      },
+    }).exitOverride();
+
+    await command.parseAsync([
+      "node",
+      "daemon",
+      "start",
+      "--interval",
+      "120",
+      "--services",
+      "claude",
+      "--foreground",
+      "--log-level",
+      "debug",
+    ]);
+
+    expect(loadConfigCalls).toEqual([
+      {
+        interval: 120,
+        services: ["claude"],
+        logLevel: "debug",
+      },
+    ]);
+    expect(foregroundConfigs).toEqual([
+      {
+        interval: 120,
+        services: ["claude"],
+        logLevel: "debug",
+        ptyRecycleHours: 6,
+        configPath: "/tmp/custom-daemon.toml",
+      },
+    ]);
+    expect(backgroundCalls).toBe(0);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {
