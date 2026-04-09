@@ -123,4 +123,114 @@ describe("App daemon startup", () => {
 
     renderer.destroy();
   });
+
+  test("pressing r performs a one-shot fetch for a daemon-backed service", async () => {
+    const daemonMetrics = mockClaudeMetrics({
+      sessionPct: 12,
+      weekAllPct: 23,
+      weekSonnetPct: 34,
+      subscriptionType: "max",
+    });
+    const refreshedMetrics = mockClaudeMetrics({
+      sessionPct: 78,
+      weekAllPct: 88,
+      weekSonnetPct: 91,
+      subscriptionType: "max",
+    });
+
+    const temporaryChainStart = mock(async () => ({
+      metrics: refreshedMetrics,
+      source: DataSource.API,
+      timestamp: Date.now(),
+      error: null,
+      stale: false,
+    }));
+    const temporaryChainStop = mock(async () => {});
+    const createClaudeChain = mock(() => ({
+      start: temporaryChainStart,
+      refresh: mock(async () => {
+        throw new Error("one-shot daemon refresh should use a fresh chain start");
+      }),
+      stop: temporaryChainStop,
+    }));
+
+    const { captureCharFrame, mockInput, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          service="claude"
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => true,
+              daemonBackedServices: () => ({
+                claude: true,
+                codex: false,
+              }),
+              daemonMetrics: () => ({
+                claude: daemonMetrics,
+              }),
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createDedupTracker: () => ({
+              shouldStoreMetrics: () => true,
+            }),
+            createClaudeChain: createClaudeChain as any,
+            createCodexChain: mock(() => {
+              throw new Error("Codex chain should not be created in Claude-only mode");
+            }) as any,
+            createLedgerData: () => ({
+              claudeDaily: () => null,
+              claudeWeekly: () => null,
+              claudeMonthly: () => null,
+              codexDaily: () => null,
+              codexWeekly: () => null,
+              codexMonthly: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({
+              claudePrediction: () => null,
+              codexPrediction: () => null,
+            }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 140, height: 40 },
+    );
+
+    await Bun.sleep(10);
+    await renderOnce();
+
+    expect(createClaudeChain).not.toHaveBeenCalled();
+    expect(captureCharFrame()).toContain("Source: Claude: daemon");
+    expect(captureCharFrame()).toContain("◆ 23%");
+
+    mockInput.pressKey("r");
+    await Bun.sleep(10);
+    await renderOnce();
+
+    expect(createClaudeChain).toHaveBeenCalledTimes(1);
+    expect(temporaryChainStart).toHaveBeenCalledTimes(1);
+    expect(temporaryChainStop).toHaveBeenCalledTimes(1);
+    expect(captureCharFrame()).toContain("Source: Claude: API");
+    expect(captureCharFrame()).toContain("◆ 88%");
+
+    renderer.destroy();
+  });
 });

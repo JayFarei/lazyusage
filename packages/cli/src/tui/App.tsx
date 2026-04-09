@@ -126,34 +126,92 @@ export function App(props: AppProps = {}) {
   let store: AppStore | null = null;
   const dedup = deps.createDedupTracker();
 
-  async function refreshAll() {
-    const timestamp = new Date().toLocaleTimeString();
-    setLastUpdated(timestamp);
+  async function applyFetchResult(
+    service: "claude" | "codex",
+    result: Awaited<ReturnType<AppChain["refresh"]>>,
+  ) {
+    const metrics = result.metrics as MetricsDict | null;
+    const error = result.error;
+    const source = result.source;
+    updateMetrics(service, metrics, error, source);
+    checkWarning(service, result);
 
-    // Refresh both chains and ledger concurrently
+    if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
+      store.storeSnapshot(service, metrics, source);
+    }
+  }
+
+  function handleRefreshError(service: "claude" | "codex", err: unknown) {
+    updateMetrics(service, null, String(err), DataSource.FALLBACK);
+  }
+
+  async function refreshTrackedChain(
+    service: "claude" | "codex",
+    chain: AppChain,
+  ) {
+    try {
+      const result = await chain.refresh();
+      await applyFetchResult(service, result);
+    } catch (err) {
+      handleRefreshError(service, err);
+    }
+  }
+
+  async function refreshDaemonBackedService(
+    service: "claude" | "codex",
+    createChain: (persistent: boolean) => AppChain,
+  ) {
+    const temporaryChain = createChain(true);
+
+    try {
+      const result = await temporaryChain.start();
+      await applyFetchResult(service, result);
+    } catch (err) {
+      handleRefreshError(service, err);
+    } finally {
+      await temporaryChain.stop().catch(() => {});
+    }
+  }
+
+  async function refreshAll() {
+    setLastUpdated(new Date().toLocaleTimeString());
+
     await Promise.all([
       ...([
         [claudeChain, "claude"],
         [codexChain, "codex"],
       ] as const)
         .filter(([chain]) => chain !== null)
-        .map(async ([chain, service]) => {
-          try {
-            const result = await chain.refresh();
-            const metrics = result.metrics as MetricsDict | null;
-            const error = result.error;
-            const source = result.source;
-            updateMetrics(service, metrics, error, source);
-            checkWarning(service, result);
-
-            if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
-              store.storeSnapshot(service, metrics, source);
-            }
-          } catch (err) {
-            updateMetrics(service, null, String(err), DataSource.FALLBACK);
-          }
-        }),
+        .map(([chain, service]) => refreshTrackedChain(service, chain)),
       ledger.refresh(),
+    ]);
+  }
+
+  async function refreshOnDemand() {
+    setLastUpdated(new Date().toLocaleTimeString());
+
+    const daemonBackedServices = daemonDetection.daemonBackedServices();
+
+    await Promise.all([
+      ...(showClaude()
+        ? [
+            claudeChain
+              ? refreshTrackedChain("claude", claudeChain)
+              : daemonBackedServices.claude
+                ? refreshDaemonBackedService("claude", deps.createClaudeChain)
+                : Promise.resolve(),
+          ]
+        : []),
+      ...(showCodex()
+        ? [
+            codexChain
+              ? refreshTrackedChain("codex", codexChain)
+              : daemonBackedServices.codex
+                ? refreshDaemonBackedService("codex", deps.createCodexChain)
+                : Promise.resolve(),
+          ]
+        : []),
+      ledger.refresh(true),
     ]);
   }
 
@@ -181,8 +239,7 @@ export function App(props: AppProps = {}) {
     togglePause: autoRefresh.togglePause,
     triggerRefresh: () => {
       if (ledger.loading()) return;
-      refreshAll();
-      ledger.refresh(true);
+      refreshOnDemand();
     },
     speedUp: autoRefresh.speedUp,
     slowDown: autoRefresh.slowDown,
