@@ -392,6 +392,9 @@ export function App(props: AppProps = {}) {
     return ` ${panels.join("  ")}  j/k=Navigate  Tab=Focus  g=Fullscreen  [/]=Stats Tab  s=Sort  S=Dir  r=Refresh  p=Pause  ?=Help  q=Quit`;
   };
 
+  const graphAvailableFor = (service: "claude" | "codex") =>
+    daemonDetection.daemonBackedServices()[service];
+
   return (
     <box
       flexDirection="column"
@@ -423,6 +426,7 @@ export function App(props: AppProps = {}) {
               daily={ledger.claudeDaily()}
               weekly={ledger.claudeWeekly()}
               monthly={ledger.claudeMonthly()}
+              graphAvailable={graphAvailableFor("claude")}
               loading={ledger.loading()}
               error={ledger.error()}
               isActive={activePanel() === "claude" && focusedSide() === "stats"}
@@ -457,6 +461,7 @@ export function App(props: AppProps = {}) {
               daily={ledger.codexDaily()}
               weekly={ledger.codexWeekly()}
               monthly={ledger.codexMonthly()}
+              graphAvailable={graphAvailableFor("codex")}
               loading={ledger.loading()}
               error={ledger.error()}
               isActive={activePanel() === "codex" && focusedSide() === "stats"}

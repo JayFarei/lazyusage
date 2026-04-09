@@ -8,6 +8,91 @@ import {
 } from "../helpers.js";
 
 describe("App daemon startup", () => {
+  test("shows the Graph tab only for daemon-backed services", async () => {
+    const { captureCharFrame, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => true,
+              daemonBackedServices: () => ({
+                claude: true,
+                codex: false,
+              }),
+              daemonMetrics: () => ({
+                claude: mockClaudeMetrics(),
+              }),
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createDedupTracker: () => ({
+              shouldStoreMetrics: () => true,
+            }),
+            createClaudeChain: mock(() => {
+              throw new Error("Claude chain should not be created when daemon-backed");
+            }) as any,
+            createCodexChain: mock(() => ({
+              start: mock(async () => ({
+                metrics: mockCodexMetrics(),
+                source: DataSource.API,
+                timestamp: Date.now(),
+                error: null,
+                stale: false,
+              })),
+              refresh: mock(async () => ({
+                metrics: mockCodexMetrics(),
+                source: DataSource.API,
+                timestamp: Date.now(),
+                error: null,
+                stale: false,
+              })),
+              stop: mock(async () => {}),
+            })) as any,
+            createLedgerData: () => ({
+              claudeDaily: () => null,
+              claudeWeekly: () => null,
+              claudeMonthly: () => null,
+              codexDaily: () => null,
+              codexWeekly: () => null,
+              codexMonthly: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({
+              claudePrediction: () => null,
+              codexPrediction: () => null,
+            }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 140, height: 40 },
+    );
+
+    await Bun.sleep(10);
+    await renderOnce();
+
+    const graphMatches = captureCharFrame().match(/Graph/g) ?? [];
+    expect(graphMatches).toHaveLength(1);
+
+    renderer.destroy();
+  });
+
   test("hydrates daemon-backed services and skips local chain startup for them", async () => {
     const claudeDaemonMetrics = mockClaudeMetrics({
       sessionPct: 12,
