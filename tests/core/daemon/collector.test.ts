@@ -43,6 +43,18 @@ class MockChain {
   }
 }
 
+class MockStandby {
+  lifecycleCalls: string[] = [];
+
+  async windup(): Promise<void> {
+    this.lifecycleCalls.push("windup");
+  }
+
+  async winddown(): Promise<void> {
+    this.lifecycleCalls.push("winddown");
+  }
+}
+
 describe("createDaemonCollector", () => {
   let store: UsageStore;
 
@@ -183,5 +195,58 @@ describe("createDaemonCollector", () => {
 
     await scheduledTick?.();
     expect(claudeChain.refreshCalls).toBe(2);
+  });
+
+  test("warms standby PTYs on start, recycles them on schedule, and winds them down on stop", async () => {
+    const claudeChain = new MockChain(
+      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
+    );
+    const claudeStandby = new MockStandby();
+    let currentTime = new Date("2026-04-09T08:00:00.000Z").getTime();
+    let scheduledTick: (() => Promise<void>) | null = null;
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+      },
+      standbys: {
+        claude: claudeStandby,
+      },
+      store,
+      logger: {
+        warn: () => {},
+      },
+      now: () => new Date(currentTime),
+      ptyRecycleHours: 4,
+      setInterval: (callback) => {
+        scheduledTick = callback;
+        return { id: "collector-loop" };
+      },
+      clearInterval: () => {},
+    });
+
+    await collector.start();
+
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
+
+    currentTime += 3 * 60 * 60 * 1000;
+    await scheduledTick?.();
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
+
+    currentTime += 61 * 60 * 1000;
+    await scheduledTick?.();
+    expect(claudeStandby.lifecycleCalls).toEqual([
+      "windup",
+      "winddown",
+      "windup",
+    ]);
+
+    await collector.stop();
+    expect(claudeStandby.lifecycleCalls).toEqual([
+      "windup",
+      "winddown",
+      "windup",
+      "winddown",
+    ]);
   });
 });

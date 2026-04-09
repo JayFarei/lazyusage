@@ -7,6 +7,11 @@ export interface DaemonCollectorChain {
   refresh(): Promise<FetchResult>;
 }
 
+export interface DaemonCollectorStandby {
+  windup(): Promise<void>;
+  winddown(): Promise<void>;
+}
+
 export interface DaemonCollector {
   collectOnce(): Promise<void>;
   start(): Promise<void>;
@@ -17,11 +22,13 @@ type DaemonCollectorTimer = ReturnType<typeof globalThis.setInterval>;
 
 export interface DaemonCollectorOptions {
   services: Partial<Record<ServiceName, DaemonCollectorChain>>;
+  standbys?: Partial<Record<ServiceName, DaemonCollectorStandby>>;
   store: Pick<UsageStore, "storeSnapshot" | "recordDaemonHeartbeat">;
   logger: Pick<DaemonLogger, "warn">;
   dedup?: Pick<DedupTracker, "shouldStoreMetrics">;
   now?: () => Date;
   intervalSeconds?: number;
+  ptyRecycleHours?: number;
   setInterval?: (
     callback: () => Promise<void>,
     intervalMs: number,
@@ -44,6 +51,8 @@ export function createDaemonCollector(
   const dedup = options.dedup ?? new DedupTracker();
   const now = options.now ?? (() => new Date());
   const intervalSeconds = options.intervalSeconds ?? 60;
+  const standbys = options.standbys ?? {};
+  const ptyRecycleMs = (options.ptyRecycleHours ?? 4) * 60 * 60 * 1000;
   const setIntervalFn = options.setInterval ?? ((callback, intervalMs) =>
     globalThis.setInterval(() => {
       void callback();
@@ -52,6 +61,41 @@ export function createDaemonCollector(
     globalThis.clearInterval(timer));
   let timer: DaemonCollectorTimer | null = null;
   let running = false;
+  let lastStandbyRecycleAt: number | null = null;
+
+  const runStandbyAction = async (
+    action: "windup" | "winddown",
+    phase: "start" | "recycle" | "stop",
+  ): Promise<void> => {
+    for (const [service, standby] of Object.entries(standbys) as Array<
+      [ServiceName, DaemonCollectorStandby | undefined]
+    >) {
+      if (!standby) continue;
+
+      try {
+        await standby[action]();
+      } catch (error) {
+        options.logger.warn(
+          `[${service}] standby ${phase} failed: ${formatError(error)}`,
+        );
+      }
+    }
+  };
+
+  const recycleStandbysIfDue = async (): Promise<void> => {
+    if (lastStandbyRecycleAt === null || ptyRecycleMs <= 0) {
+      return;
+    }
+
+    const currentTime = now().getTime();
+    if (currentTime - lastStandbyRecycleAt < ptyRecycleMs) {
+      return;
+    }
+
+    await runStandbyAction("winddown", "recycle");
+    await runStandbyAction("windup", "recycle");
+    lastStandbyRecycleAt = currentTime;
+  };
 
   const runCycle = async (): Promise<void> => {
     if (!running) {
@@ -72,6 +116,8 @@ export function createDaemonCollector(
       }
 
       running = true;
+      await runStandbyAction("windup", "start");
+      lastStandbyRecycleAt = now().getTime();
       await runCycle();
       timer = setIntervalFn(runCycle, intervalSeconds * 1000);
     },
@@ -83,9 +129,14 @@ export function createDaemonCollector(
         clearIntervalFn(timer);
         timer = null;
       }
+
+      await runStandbyAction("winddown", "stop");
+      lastStandbyRecycleAt = null;
     },
 
     async collectOnce(): Promise<void> {
+      await recycleStandbysIfDue();
+
       for (const [service, chain] of Object.entries(options.services) as Array<
         [ServiceName, DaemonCollectorChain | undefined]
       >) {
