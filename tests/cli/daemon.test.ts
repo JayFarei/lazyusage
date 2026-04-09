@@ -311,6 +311,56 @@ describe("createDaemonCommand", () => {
       "2026-04-09T12:01:00.000Z [ERROR] collector failed",
     ]);
   });
+
+  test("registers a daemon install subcommand and writes a launchd plist on macOS", async () => {
+    const writes: Array<{ path: string; contents: string }> = [];
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      platform: "darwin",
+      homeDir: "/Users/tester",
+      runtimeExecutablePath: "/opt/homebrew/bin/bun",
+      cliEntrypointPath: "/tmp/lazyusage-cli.js",
+      loadConfig: () => ({
+        interval: 120,
+        services: ["claude"],
+        logLevel: "debug",
+        ptyRecycleHours: 4,
+        configPath: "/Users/tester/.config/lazyusage/daemon.toml",
+      }),
+      writeServiceFile: (path, contents) => {
+        writes.push({ path, contents });
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "install"]);
+
+    expect(command.commands.map((subcommand) => subcommand.name())).toContain("install");
+    expect(writes).toEqual([
+      {
+        path: "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
+        contents: expect.stringContaining("<string>/opt/homebrew/bin/bun</string>"),
+      },
+    ]);
+    expect(writes[0]?.contents).toContain("<string>/tmp/lazyusage-cli.js</string>");
+    expect(writes[0]?.contents).toContain("<string>daemon</string>");
+    expect(writes[0]?.contents).toContain("<string>start</string>");
+    expect(writes[0]?.contents).toContain("<string>--foreground</string>");
+    expect(writes[0]?.contents).toContain("<string>--interval</string>");
+    expect(writes[0]?.contents).toContain("<string>120</string>");
+    expect(writes[0]?.contents).toContain("<string>--services</string>");
+    expect(writes[0]?.contents).toContain("<string>claude</string>");
+    expect(writes[0]?.contents).toContain("<string>--log-level</string>");
+    expect(writes[0]?.contents).toContain("<string>debug</string>");
+    expect(writes[0]?.contents).toContain("<key>RunAtLoad</key>");
+    expect(writes[0]?.contents).toContain("<key>KeepAlive</key>");
+    expect(output).toEqual([
+      "Installed daemon service at /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
+    ]);
+  });
 });
 
 describe("CLI entrypoint daemon integration", () => {

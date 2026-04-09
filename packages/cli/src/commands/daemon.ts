@@ -1,5 +1,7 @@
 import { Command } from "commander";
-import { existsSync, readFileSync, watch } from "fs";
+import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import { homedir } from "os";
+import { dirname, join } from "path";
 import {
   DATA_SOURCE_LABELS,
   DEFAULT_DAEMON_PID_PATH,
@@ -25,6 +27,10 @@ type DaemonStatusStore = Pick<
 >;
 
 type DaemonStatusRow = NonNullable<ReturnType<UsageStore["getDaemonStatus"]>>;
+type DaemonInstallPlatform = "darwin" | "linux";
+
+const DAEMON_LAUNCHD_LABEL = "com.lazyusage.daemon";
+const DAEMON_SYSTEMD_UNIT_NAME = "lazyusage-daemon.service";
 
 export interface DaemonCommandOptions {
   onStart?: (options: DaemonStartOptions) => Promise<void> | void;
@@ -47,6 +53,11 @@ export interface DaemonCommandOptions {
   stopPollIntervalMs?: number;
   createStore?: () => DaemonStatusStore;
   now?: () => number;
+  platform?: NodeJS.Platform;
+  homeDir?: string;
+  runtimeExecutablePath?: string;
+  cliEntrypointPath?: string;
+  writeServiceFile?: (path: string, contents: string) => void;
 }
 
 function isServiceName(value: string): value is ServiceName {
@@ -197,11 +208,117 @@ function trimTrailingLineBreaks(contents: string): string {
   return contents.replace(/(?:\r?\n)+$/u, "");
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function quoteSystemdArg(value: string): string {
+  return `"${value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\"", "\\\"")}"`;
+}
+
+function createDaemonStartArgs(config: DaemonConfig): string[] {
+  return [
+    "daemon",
+    "start",
+    "--foreground",
+    "--interval",
+    String(config.interval),
+    "--services",
+    config.services.join(","),
+    "--log-level",
+    config.logLevel,
+  ];
+}
+
+function getServiceDefinitionPath(
+  platform: DaemonInstallPlatform,
+  homeDirPath: string,
+): string {
+  if (platform === "darwin") {
+    return join(
+      homeDirPath,
+      "Library",
+      "LaunchAgents",
+      `${DAEMON_LAUNCHD_LABEL}.plist`,
+    );
+  }
+
+  return join(
+    homeDirPath,
+    ".config",
+    "systemd",
+    "user",
+    DAEMON_SYSTEMD_UNIT_NAME,
+  );
+}
+
+function renderLaunchdPlist(
+  command: string[],
+  workingDirectory: string,
+): string {
+  const programArguments = command
+    .map((argument) => `      <string>${escapeXml(argument)}</string>`)
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${DAEMON_LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+${programArguments}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${escapeXml(workingDirectory)}</string>
+  </dict>
+</plist>
+`;
+}
+
+function renderSystemdUnit(
+  command: string[],
+  workingDirectory: string,
+): string {
+  const execStart = command.map(quoteSystemdArg).join(" ");
+
+  return `[Unit]
+Description=lazyusage collector daemon
+
+[Service]
+Type=simple
+WorkingDirectory=${workingDirectory}
+ExecStart=${execStart}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`;
+}
+
 export function createDaemonCommand(
   options: DaemonCommandOptions = {},
 ): Command {
   const pidFilePath = options.pidFilePath ?? DEFAULT_DAEMON_PID_PATH;
   const logFilePath = options.logFilePath ?? DEFAULT_DAEMON_LOG_PATH;
+  const platform = options.platform ?? process.platform;
+  const homeDirPath = options.homeDir ?? homedir();
+  const runtimeExecutablePath =
+    options.runtimeExecutablePath ?? process.execPath;
+  const cliEntrypointPath = options.cliEntrypointPath ?? process.argv[1];
   const readPidFile =
     options.readPidFile ??
     ((path: string): string => {
@@ -259,6 +376,12 @@ export function createDaemonCommand(
   const writeStdout = options.writeStdout ?? ((message: string) => console.log(message));
   const createStore = options.createStore ?? (() => new UsageStore());
   const now = options.now ?? (() => Date.now());
+  const writeServiceFile =
+    options.writeServiceFile ??
+    ((path: string, contents: string): void => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, contents, "utf-8");
+    });
   const waitForProcessExit =
     options.waitForProcessExit ??
     (async (pid: number): Promise<void> => {
@@ -399,6 +522,29 @@ export function createDaemonCommand(
           writeStdout(trimmed);
         }
       });
+    });
+
+  command
+    .command("install")
+    .description("Install the collector daemon as a background service")
+    .action(() => {
+      if (platform !== "darwin" && platform !== "linux") {
+        throw new Error(`Daemon install is not supported on ${platform}.`);
+      }
+
+      const config = (options.loadConfig ?? loadDaemonConfig)({});
+      const commandArgs = [
+        runtimeExecutablePath,
+        cliEntrypointPath,
+        ...createDaemonStartArgs(config),
+      ];
+      const serviceFilePath = getServiceDefinitionPath(platform, homeDirPath);
+      const serviceContents = platform === "darwin"
+        ? renderLaunchdPlist(commandArgs, process.cwd())
+        : renderSystemdUnit(commandArgs, process.cwd());
+
+      writeServiceFile(serviceFilePath, serviceContents);
+      writeStdout(`Installed daemon service at ${serviceFilePath}.`);
     });
 
   return command;
