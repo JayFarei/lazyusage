@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Always-on collector daemon: `lazyusage daemon start|stop|status|logs`
+- Background service install: `lazyusage daemon install|uninstall` (launchd on macOS, systemd user unit on Linux)
+- Optional daemon configuration at `~/.config/lazyusage/daemon.toml`
+- TUI hydrates from daemon snapshots when the daemon is healthy, skipping its own collection chain
+- Graph tab in the stats panel for daemon-backed services (Tab cycles Daily, Weekly, Monthly, Graph)
+- Capacity prediction: `--predict` shows projected spare capacity at window end
+- `lazyusage plan` command for marking upcoming days with expected work intensity (L/M/H/B regimes)
+- CONTRIBUTING.md and expanded README (daemon, prediction, tmux popup workflow, agent capacity budgets)
+
+### Fixed
+- Narrow panels now truncate the border title (dropping the subscription suffix) instead of losing it entirely
+- `pty_helpers.c` is now copied into both dist outputs so installed packages can compile the PTY helper at runtime
+
 ## [0.1.0] - 2026-03-17
 
 ### Added

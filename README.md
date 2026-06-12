@@ -2,13 +2,19 @@
 
 Usage monitoring for Claude CLI and Codex CLI.
 
-`lazyusage` provides:
+`lazyusage` is built around two ideas:
 
-- a terminal dashboard
+1. **A tmux-popup-ready control center for your subscriptions.** Bind the TUI to a tmux key and get instant, glanceable control over session, weekly, and model-specific limits without leaving your editor or agent session.
+2. **A capacity API for agents.** Agents running on a goal, workflow, or loop can ask `lazyusage` how much capacity is left before starting expensive work, and capacity-management strategies (for example, dedicating only a slice of remaining capacity to unsupervised work) can be layered on top of its JSON output.
+
+It provides:
+
+- a terminal dashboard (OpenTUI/SolidJS)
 - single-shot text and JSON snapshots
 - NDJSON streaming for agents
 - a local HTTP/SSE server for dashboards or multi-agent coordination
 - per-project ledger views backed by local session history
+- an optional background collector daemon with usage history and predictions
 
 ## Install
 
@@ -89,6 +95,24 @@ lazyusage --capacity --json
 lazyusage --capacity --json --live
 ```
 
+### tmux popup
+
+The TUI is designed to live in a tmux popup, a one-keystroke overlay on top of whatever you are doing:
+
+```bash
+# ~/.tmux.conf: open lazyusage in a popup with prefix + u
+bind-key u display-popup -E -w 90% -h 80% "lazyusage"
+```
+
+Press `prefix + u` to check your limits, press `q` (or `Esc`) to dismiss. Useful variants:
+
+```bash
+# Claude only, smaller popup
+bind-key U display-popup -E -w 70% -h 50% "lazyusage claude"
+```
+
+This pairs well with long-running agent sessions: keep agents working in your panes, pop the dashboard over them when you want to see how much subscription headroom they have left.
+
 ### Local server
 
 The server is designed for local tooling. It binds to `127.0.0.1` by default and is intended for localhost browser or agent consumers.
@@ -109,6 +133,43 @@ Endpoints:
 - `GET /stream/claude` SSE stream for Claude only
 - `GET /stream/codex` SSE stream for Codex only
 
+## Collector daemon
+
+For continuous history (and the TUI's Graph tab), run the always-on collector daemon. It samples usage on an interval and stores snapshots in the local SQLite database, so history accumulates even when the TUI is closed.
+
+```bash
+lazyusage daemon start      # start in the background
+lazyusage daemon status     # health, last collection, data freshness
+lazyusage daemon logs       # recent log output
+lazyusage daemon stop       # stop the daemon
+
+# Run at login as a background service
+lazyusage daemon install    # launchd agent on macOS, systemd user unit on Linux
+lazyusage daemon uninstall
+```
+
+Configuration is optional and lives at `~/.config/lazyusage/daemon.toml`. When the daemon is healthy, the TUI hydrates from its stored snapshots instead of starting its own collection chain, and the stats panel gains a Graph tab (cycle with `Tab`: Daily, Weekly, Monthly, Graph).
+
+## Capacity prediction and planning
+
+`lazyusage` can project how much spare capacity you will have at the end of the current weekly window, based on your recorded usage history:
+
+```bash
+# Show predicted spare capacity at window end
+lazyusage --predict
+
+# Mark upcoming days with an expected work intensity (regime) to refine the prediction
+lazyusage plan 2026-06-15 H        # High, ~15%/day
+lazyusage plan 2026-06-16 L        # Low, ~3%/day
+lazyusage plan list
+lazyusage plan clear 2026-06-15
+lazyusage plan clear --all
+```
+
+Regimes: `L` (Low, 3%/day), `M` (Medium, 9%/day), `H` (High, 15%/day), `B` (Burst, 25%/day).
+
+This is the foundation for capacity-management strategies: if the prediction says you will end the week with 30% spare, you can decide to dedicate that slice to unsupervised agent work and keep the rest for interactive sessions.
+
 ## Agent integration
 
 The canonical agent skill lives at [`skills/lazyusage/SKILL.md`](skills/lazyusage/SKILL.md).
@@ -121,6 +182,29 @@ It covers:
 - sleep-until-reset logic
 - service failover
 - shared local server usage for multiple agents
+
+### Capacity budgets for unsupervised work
+
+A simple, robust pattern for agents on a goal/loop: give background work only a fixed share of the remaining capacity and stop when it is spent.
+
+```bash
+# Gate a work loop on a capacity budget:
+# unsupervised work may use at most 40% of what currently remains.
+START=$(lazyusage usage-check claude --json-only | jq '[.services[] | select(.name=="claude").metrics[] | select(.name=="week_all").remaining_pct] | first')
+BUDGET=$(echo "$START * 0.4" | bc)
+
+while true; do
+  NOW=$(lazyusage usage-check claude --json-only | jq '[.services[] | select(.name=="claude").metrics[] | select(.name=="week_all").remaining_pct] | first')
+  SPENT=$(echo "$START - $NOW" | bc)
+  if [ "$(echo "$SPENT >= $BUDGET" | bc)" -eq 1 ]; then
+    echo "capacity budget exhausted, stopping unsupervised work"
+    break
+  fi
+  run_one_unit_of_work
+done
+```
+
+The same logic works against the HTTP server (`GET /claude`) when several agents share one collector, and `--predict` can replace the static 40% with a dynamic budget derived from predicted end-of-window spare capacity.
 
 Runnable examples:
 
@@ -187,6 +271,8 @@ LAZYUSAGE_THEME=monochrome lazyusage
 - [`examples/dashboard`](examples/dashboard) browser dashboard example
 
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ```bash
 bun install

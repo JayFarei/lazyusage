@@ -1,7 +1,8 @@
 # Always-On Collector Daemon
 
-**Status:** Planned, pending implementation
+**Status:** Implemented
 **Date:** 2026-04-09
+**Completed:** 2026-04-10
 **Designed via:** /grill-me (12-question design interview)
 
 ## Overview
@@ -11,6 +12,15 @@ A lightweight, headless background process that continuously collects usage snap
 If the daemon is not installed, the TUI works exactly as it does today. No degradation, no missing features beyond the graph.
 
 **Core idea:** the TUI is interactive and ephemeral, the daemon is always-on and persistent. The daemon fills the gaps between TUI sessions, giving the prediction model continuous data and enabling a real-time graph view that shows the full consumption story over a billing window.
+
+## Completion Notes
+
+Implementation now covers:
+- daemon config, logging, lifecycle, collection loop, heartbeat persistence, and service installation paths
+- daemon CLI management (`start`, `stop`, `status`, `logs`, `install`, `uninstall`)
+- daemon-aware TUI startup, daemon-backed on-demand refresh, and conditional Graph tab visibility
+- inline and fullscreen daemon-backed graph rendering with braille time-series output, pace/prediction overlays, and live window markers
+- verification via core tests, TUI tests, and a production build
 
 ### Design Principles
 
