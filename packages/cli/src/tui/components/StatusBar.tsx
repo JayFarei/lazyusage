@@ -2,7 +2,7 @@
  * Status bar component showing last update time, refresh status, and warnings.
  */
 
-import { DATA_SOURCE_LABELS, formatWarningCompact, type ServiceWarning } from "@lazyusage/core";
+import { DATA_SOURCE_LABELS, formatWarningCompact, type ServiceWarning } from "lazyusage-core";
 import { createMemo, Show } from "solid-js";
 import { useTheme } from "../theme.js";
 

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { DEFAULT_DAEMON_PID_PATH, type MetricsDict, type ServiceName, UsageStore } from "@lazyusage/core";
+import { DEFAULT_DAEMON_PID_PATH, type MetricsDict, type ServiceName, UsageStore } from "lazyusage-core";
 import { type Accessor, createSignal } from "solid-js";
 
 type DaemonDetectionStore = Pick<UsageStore, "isDaemonHeartbeatFresh" | "getLatestSnapshot" | "close">;

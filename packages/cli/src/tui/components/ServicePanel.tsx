@@ -3,6 +3,7 @@
  * Each metric renders: label, capacity bar, time markers, period bar, reset time.
  */
 
+import { useTerminalDimensions } from "@opentui/solid";
 import {
   type CapacityPrediction,
   calculateBarWidth,
@@ -15,8 +16,7 @@ import {
   type MetricData,
   type MetricsDict,
   parseTimeToDatetime,
-} from "@lazyusage/core";
-import { useTerminalDimensions } from "@opentui/solid";
+} from "lazyusage-core";
 import { createMemo, For, Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";

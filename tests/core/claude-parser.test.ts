@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseClaudeSessions } from "@lazyusage/core/parsers/claude-parser.js";
+import { parseClaudeSessions } from "lazyusage-core/parsers/claude-parser.js";
 
 async function makeTempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "claude-parser-test-"));

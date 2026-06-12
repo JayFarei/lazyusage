@@ -6,7 +6,7 @@ React + Vite example that consumes the local `lazyusage` HTTP/SSE server.
 
 ```bash
 # Terminal 1
-bunx @lazyusage/cli --serve --port 8080
+bunx lazyusage --serve --port 8080
 
 # Terminal 2
 cd examples/dashboard

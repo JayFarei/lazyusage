@@ -1,11 +1,11 @@
-# @lazyusage/core
+# lazyusage-core
 
 Core collectors, fallback chains, formatters, and storage used by `lazyusage`.
 
 ## Install
 
 ```bash
-bun add @lazyusage/core
+bun add lazyusage-core
 ```
 
 ## What it exports
@@ -16,4 +16,4 @@ bun add @lazyusage/core
 - SQLite-backed snapshot storage
 - shared types for service/resource metadata
 
-For the end-user CLI, install `@lazyusage/cli`.
+For the end-user CLI, install `lazyusage`.

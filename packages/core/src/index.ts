@@ -1,5 +1,5 @@
 /**
- * @lazyusage/core - Core library for usage monitoring
+ * lazyusage-core - Core library for usage monitoring
  *
  * Public API barrel export
  */

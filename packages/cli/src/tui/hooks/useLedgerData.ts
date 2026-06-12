@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from "node:fs";
-import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { type Accessor, createSignal } from "solid-js";
 
 export interface LedgerHook {

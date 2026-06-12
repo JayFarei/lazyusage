@@ -1,4 +1,4 @@
-import type { CapacityPrediction, MetricsDict, ServiceName } from "@lazyusage/core";
+import type { CapacityPrediction, MetricsDict, ServiceName } from "lazyusage-core";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";
 import { GraphPanel, type GraphStore } from "./GraphPanel.js";

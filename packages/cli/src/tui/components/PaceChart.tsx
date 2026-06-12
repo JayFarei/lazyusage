@@ -3,7 +3,7 @@
  * Uses Unicode block characters for a compact visualization.
  */
 
-import type { PacePoint } from "@lazyusage/core/storage/pace";
+import type { PacePoint } from "lazyusage-core/storage/pace";
 import { createMemo, Show } from "solid-js";
 import { useTheme } from "../theme.js";
 

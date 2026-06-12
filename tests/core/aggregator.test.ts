@@ -3,8 +3,8 @@
  * Uses fixed date strings to avoid test sensitivity to current date.
  */
 import { describe, expect, test } from "bun:test";
-import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "@lazyusage/core/parsers/aggregator.js";
-import type { SessionTokens } from "@lazyusage/core/parsers/types";
+import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "lazyusage-core/parsers/aggregator.js";
+import type { SessionTokens } from "lazyusage-core/parsers/types";
 
 /** Get today, N days ago, as YYYY-MM-DD local strings */
 function todayStr(): string {

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Command } from "commander";
 import {
   createClaudeChain,
   createCodexChain,
@@ -17,8 +18,7 @@ import {
   loadDaemonConfig,
   type ServiceName,
   UsageStore,
-} from "@lazyusage/core";
-import { Command } from "commander";
+} from "lazyusage-core";
 
 export interface DaemonStartOptions {
   interval?: number;

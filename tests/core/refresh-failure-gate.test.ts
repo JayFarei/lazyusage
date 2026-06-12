@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RefreshFailureGate } from "@lazyusage/core";
+import { RefreshFailureGate } from "lazyusage-core";
 
 describe("RefreshFailureGate", () => {
   test("canAttempt returns true initially", () => {

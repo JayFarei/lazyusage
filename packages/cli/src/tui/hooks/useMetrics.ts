@@ -2,8 +2,8 @@
  * Reactive metrics state management hook.
  */
 
-import type { FetchResult, MetricsDict, ServiceName, ServiceWarning } from "@lazyusage/core";
-import { detectLimitAdjustment, detectWarning } from "@lazyusage/core";
+import type { FetchResult, MetricsDict, ServiceName, ServiceWarning } from "lazyusage-core";
+import { detectLimitAdjustment, detectWarning } from "lazyusage-core";
 import { createSignal } from "solid-js";
 
 export function useMetrics() {

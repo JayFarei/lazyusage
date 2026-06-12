@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { DataSource, type PersistentFallbackChain } from "@lazyusage/core";
+import { DataSource, type PersistentFallbackChain } from "lazyusage-core";
 import { App } from "../../../packages/cli/src/tui/App.js";
 import {
   createMockGraphStore,

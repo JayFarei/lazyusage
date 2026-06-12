@@ -2,7 +2,7 @@
  * Tests for useMetrics hook.
  */
 import { describe, expect, test } from "bun:test";
-import { DataSource } from "@lazyusage/core";
+import { DataSource } from "lazyusage-core";
 import { createRoot } from "solid-js";
 import { useMetrics } from "../../../packages/cli/src/tui/hooks/useMetrics.js";
 import { mockClaudeMetrics, mockCodexMetrics } from "../helpers.js";

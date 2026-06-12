@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-06-12
 
+### Changed
+- npm package names: the CLI publishes as `lazyusage` and the library as `lazyusage-core` (unscoped)
+
 ### Added
 - Always-on collector daemon: `lazyusage daemon start|stop|status|logs`
 - Background service install: `lazyusage daemon install|uninstall` (launchd on macOS, systemd user unit on Linux)

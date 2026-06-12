@@ -10,7 +10,7 @@ import {
   type MetricsDict,
   type ServiceName,
   type ServiceResourceInfo,
-} from "@lazyusage/core";
+} from "lazyusage-core";
 
 async function collectMetrics(servicesToQuery: string[]): Promise<{
   claudeMetrics: MetricsDict | null;

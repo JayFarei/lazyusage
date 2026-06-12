@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatAllJson, formatCombinedJson, formatJson, type MetricsDict } from "@lazyusage/core";
+import { formatAllJson, formatCombinedJson, formatJson, type MetricsDict } from "lazyusage-core";
 
 describe("formatJson", () => {
   test("outputs valid JSON", () => {

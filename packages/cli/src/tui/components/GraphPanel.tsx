@@ -1,3 +1,4 @@
+import { useTerminalDimensions } from "@opentui/solid";
 import {
   buildPaceData,
   type CapacityPrediction,
@@ -8,8 +9,7 @@ import {
   renderUsageChart,
   type ServiceName,
   UsageStore,
-} from "@lazyusage/core";
-import { useTerminalDimensions } from "@opentui/solid";
+} from "lazyusage-core";
 import { createMemo, For, Show } from "solid-js";
 import { useTheme } from "../theme.js";
 import { LABEL_MAP } from "./ServicePanel.js";

@@ -12,7 +12,7 @@ import {
   type ServiceName,
   UsageStore,
   WEEKLY_WINDOW_HOURS,
-} from "@lazyusage/core";
+} from "lazyusage-core";
 import { createEffect, createSignal, on } from "solid-js";
 
 /** Weekly metric keys that are predictable */

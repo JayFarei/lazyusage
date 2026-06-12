@@ -9,7 +9,7 @@ import { DataSource } from "../types.js";
 import { formatResetFromIso } from "../utils/time.js";
 import { ClaudeCredentialStore } from "./credentials.js";
 
-const PACKAGE_VERSION = "0.1.0"; // from @lazyusage/core package.json
+const PACKAGE_VERSION = "0.1.0"; // from lazyusage-core package.json
 
 export class ClaudeAPIProvider implements UsageProvider {
   static readonly API_URL = "https://api.anthropic.com/api/oauth/usage";

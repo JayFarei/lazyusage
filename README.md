@@ -51,7 +51,7 @@ Usage monitoring for Claude CLI and Codex CLI. A tmux-popup-ready control center
 
 ```bash
 # Install
-bun add -g @lazyusage/cli
+bun add -g lazyusage
 
 # Interactive dashboard
 lazyusage
@@ -126,7 +126,7 @@ A positive value means you can speed up; a negative value means at the current p
 
 The TUI is designed to live in a tmux popup, a one-keystroke overlay on top of whatever you are doing. To set it up:
 
-1. Make sure `lazyusage` is on your `PATH` (`bun add -g @lazyusage/cli`), or use the full path to the binary in the binding below.
+1. Make sure `lazyusage` is on your `PATH` (`bun add -g lazyusage`), or use the full path to the binary in the binding below.
 
 2. Add a binding to `~/.tmux.conf`:
 
@@ -337,13 +337,13 @@ Endpoints:
 ### Fastest path
 
 ```bash
-bunx @lazyusage/cli --help
+bunx lazyusage --help
 ```
 
 ### Global install
 
 ```bash
-bun add -g @lazyusage/cli
+bun add -g lazyusage
 lazyusage --help
 ```
 

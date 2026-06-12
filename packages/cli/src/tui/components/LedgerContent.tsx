@@ -4,7 +4,7 @@
  * Uses DataTable for responsive flexbox-based layout.
  */
 
-import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { createMemo } from "solid-js";
 import { useTheme } from "../theme.js";
 import { type Column, DataTable, type SortState } from "./DataTable.js";

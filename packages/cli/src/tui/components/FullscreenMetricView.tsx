@@ -3,6 +3,7 @@
  * Triggered by `g` when focused on the service panel.
  */
 
+import { useTerminalDimensions } from "@opentui/solid";
 import {
   type CapacityPrediction,
   calculateBarWidth,
@@ -13,8 +14,7 @@ import {
   createTimeMarkers,
   type MetricData,
   type MetricsDict,
-} from "@lazyusage/core";
-import { useTerminalDimensions } from "@opentui/solid";
+} from "lazyusage-core";
 import { For, Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";

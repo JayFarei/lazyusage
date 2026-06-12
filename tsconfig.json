@@ -15,10 +15,10 @@
     "jsxImportSource": "solid-js",
     "types": ["bun-types"],
     "paths": {
-      "@lazyusage/core": ["./packages/core/src/index.ts"],
-      "@lazyusage/core/*": ["./packages/core/src/*"],
-      "@lazyusage/cli": ["./packages/cli/src/index.ts"],
-      "@lazyusage/cli/*": ["./packages/cli/src/*"]
+      "lazyusage-core": ["./packages/core/src/index.ts"],
+      "lazyusage-core/*": ["./packages/core/src/*"],
+      "lazyusage": ["./packages/cli/src/index.ts"],
+      "lazyusage/*": ["./packages/cli/src/*"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tests/**/*.ts"],

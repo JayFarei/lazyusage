@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { useKeyboard } from "@opentui/solid";
 import {
   type CapacityPrediction,
   createClaudeChain,
@@ -15,8 +16,7 @@ import {
   type MetricsDict,
   type PersistentFallbackChain,
   UsageStore,
-} from "@lazyusage/core";
-import { useKeyboard } from "@opentui/solid";
+} from "lazyusage-core";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { FullscreenGraphView } from "./components/FullscreenGraphView.js";
 import { FullscreenMetricView } from "./components/FullscreenMetricView.js";

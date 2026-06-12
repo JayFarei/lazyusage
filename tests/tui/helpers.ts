@@ -3,9 +3,9 @@
  * Provides mock data factories and testRender wrappers.
  */
 
-import type { HistoryEntry, MetricsDict } from "@lazyusage/core";
-import type { ProjectUsage } from "@lazyusage/core/parsers/types.js";
 import { testRender } from "@opentui/solid";
+import type { HistoryEntry, MetricsDict } from "lazyusage-core";
+import type { ProjectUsage } from "lazyusage-core/parsers/types.js";
 import type { JSX } from "solid-js";
 
 // ---------------------------------------------------------------------------

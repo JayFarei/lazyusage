@@ -5,7 +5,7 @@
  * Requires tmux - skips all tests if tmux is unavailable.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { BAR_WIDTH_STEP, MIN_BAR_WIDTH } from "@lazyusage/core/utils/bars.js";
+import { BAR_WIDTH_STEP, MIN_BAR_WIDTH } from "lazyusage-core/utils/bars.js";
 import {
   assertLayoutIntact,
   assertMarkersEquidistant,

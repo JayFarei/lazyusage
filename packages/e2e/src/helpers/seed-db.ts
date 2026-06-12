@@ -9,7 +9,7 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { UsageStore } from "@lazyusage/core";
+import { UsageStore } from "lazyusage-core";
 
 const SEED_DB_DIR = join(import.meta.dir, "../../.test-data");
 const SEED_DB_PATH = join(SEED_DB_DIR, "seeded-usage.db");

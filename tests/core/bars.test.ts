@@ -6,7 +6,7 @@ import {
   createTimeMarkers,
   MAX_BAR_WIDTH,
   MIN_BAR_WIDTH,
-} from "@lazyusage/core/utils/bars.js";
+} from "lazyusage-core/utils/bars.js";
 
 describe("calculateBarWidth", () => {
   test("snaps to 35 multiples", () => {

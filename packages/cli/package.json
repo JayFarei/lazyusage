@@ -1,5 +1,5 @@
 {
-  "name": "@lazyusage/cli",
+  "name": "lazyusage",
   "version": "0.2.0",
   "description": "Terminal and JSON usage monitoring for Claude CLI and Codex CLI.",
   "type": "module",
@@ -41,7 +41,7 @@
   "dependencies": {
     "@opentui/core": "0.1.77",
     "@opentui/solid": "0.1.77",
-    "@lazyusage/core": "workspace:*",
+    "lazyusage-core": "workspace:*",
     "commander": "^12.0.0",
     "solid-js": "^1.9.0"
   }

@@ -6,9 +6,9 @@
  * lazyusage plan clear --all
  */
 
-import type { Regime } from "@lazyusage/core";
-import { ExitCode, UsageStore } from "@lazyusage/core";
 import { Command } from "commander";
+import type { Regime } from "lazyusage-core";
+import { ExitCode, UsageStore } from "lazyusage-core";
 
 const VALID_REGIMES = new Set(["L", "M", "H", "B"]);
 const REGIME_LABELS: Record<string, string> = {

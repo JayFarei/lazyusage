@@ -3,7 +3,7 @@
  * Reuses LedgerContent at full terminal width.
  */
 
-import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { Show } from "solid-js";
 import type { ContentTab } from "../hooks/useViewMode.js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "@lazyusage/core/parsers/aggregator";
+import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "lazyusage-core/parsers/aggregator";
 /**
  * Standalone worker script for loading per-project usage ledger data.
  * Replaces ccusage-worker.ts and codex-ccusage.ts.
@@ -13,8 +13,8 @@ import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "@lazyusage/co
  *
  * Accepts optional --since YYYY-MM-DD flag to limit parsing window (default: 28 days ago).
  */
-import { parseClaudeSessions } from "@lazyusage/core/parsers/claude-parser";
-import { parseCodexSessions } from "@lazyusage/core/parsers/codex-parser";
+import { parseClaudeSessions } from "lazyusage-core/parsers/claude-parser";
+import { parseCodexSessions } from "lazyusage-core/parsers/codex-parser";
 
 function defaultSince(): string {
   const d = new Date();

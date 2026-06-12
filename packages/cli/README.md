@@ -1,17 +1,17 @@
-# @lazyusage/cli
+# lazyusage
 
 CLI package for monitoring Claude CLI and Codex CLI usage.
 
 ## Install
 
 ```bash
-bunx @lazyusage/cli --help
+bunx lazyusage --help
 ```
 
 or:
 
 ```bash
-bun add -g @lazyusage/cli
+bun add -g lazyusage
 lazyusage --help
 ```
 

@@ -3,6 +3,7 @@
  * Port of usage() from src/cli.py
  */
 
+import { Command } from "commander";
 import {
   type CapacityPrediction,
   computeDailyDeltas,
@@ -24,8 +25,7 @@ import {
   sweepStaleUsageSessions,
   UsageStore,
   WEEKLY_WINDOW_HOURS,
-} from "@lazyusage/core";
-import { Command } from "commander";
+} from "lazyusage-core";
 import { collectMetrics, detectAvailableServices, validateService } from "./usage-check.js";
 
 /** Run predictions and return camelCase CapacityPrediction objects keyed by service → metric. */

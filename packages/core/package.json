@@ -1,5 +1,5 @@
 {
-  "name": "@lazyusage/core",
+  "name": "lazyusage-core",
   "version": "0.2.0",
   "description": "Core collectors, formatters, and storage for lazyusage CLI monitoring.",
   "type": "module",

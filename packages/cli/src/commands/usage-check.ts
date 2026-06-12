@@ -3,6 +3,7 @@
  * Port of usage_check() from src/cli.py
  */
 
+import { Command } from "commander";
 import {
   createClaudeChain,
   createCodexChain,
@@ -18,8 +19,7 @@ import {
   type ServiceName,
   type ServiceResourceInfo,
   UsageStore,
-} from "@lazyusage/core";
-import { Command } from "commander";
+} from "lazyusage-core";
 
 export function detectAvailableServices(): string[] {
   const available: string[] = [];

@@ -41,7 +41,7 @@ const cliResult = await Bun.build({
   // @opentui/core must be external (native arm64/x64 binary cannot be bundled).
   // @opentui/solid and solid-js are bundled together so they share a single reactive
   // runtime instance. Making solid-js external causes Bun to pick up the SSR version.
-  external: ["better-sqlite3", "bun:sqlite", "bun:ffi", "@opentui/core", "@lazyusage/core"],
+  external: ["better-sqlite3", "bun:sqlite", "bun:ffi", "@opentui/core", "lazyusage-core"],
   root: rootDir,
 });
 
