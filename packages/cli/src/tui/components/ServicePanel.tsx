@@ -2,22 +2,24 @@
  * Left panel for one service showing full stacked progress bars for all metrics.
  * Each metric renders: label, capacity bar, time markers, period bar, reset time.
  */
-import { For, Show, createMemo } from "solid-js";
-import { useTerminalDimensions } from "@opentui/solid";
-import { useTheme } from "../theme.js";
+
 import {
+  type CapacityPrediction,
+  calculateBarWidth,
+  calculateTimeProgress,
   createCapacityBar,
+  createPeriodBar,
   createPredictionBar,
   createTimeMarkers,
-  createPeriodBar,
-  calculateTimeProgress,
-  calculateBarWidth,
-  parseTimeToDatetime,
   formatTimeRemaining,
-  type MetricsDict,
   type MetricData,
-  type CapacityPrediction,
+  type MetricsDict,
+  parseTimeToDatetime,
 } from "@lazyusage/core";
+import { useTerminalDimensions } from "@opentui/solid";
+import { createMemo, For, Show } from "solid-js";
+import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
+import { useTheme } from "../theme.js";
 
 export const LABEL_MAP: Record<string, string> = {
   session: "Session (5h)",
@@ -63,7 +65,13 @@ export function ServicePanel(props: ServicePanelProps) {
   const panelTitle = () => {
     const sub = props.metrics?.subscription_type;
     const suffix = sub && typeof sub === "string" ? ` - ${sub}` : "";
-    return ` [${props.panelNumber}] ${props.title}${suffix} `;
+    const full = ` [${props.panelNumber}] ${props.title}${suffix} `;
+    // OpenTUI drops a border title entirely when it does not fit, so degrade
+    // gracefully: drop the subscription suffix first, then hard-truncate.
+    const maxLen = panelCols();
+    if (full.length <= maxLen) return full;
+    const short = ` [${props.panelNumber}] ${props.title} `;
+    return short.length <= maxLen ? short : short.slice(0, Math.max(0, maxLen));
   };
 
   const metricEntries = createMemo(() => {
@@ -71,7 +79,7 @@ export function ServicePanel(props: ServicePanelProps) {
     const keys = METRIC_KEYS[props.service] ?? [];
     const entries: Array<{ key: string; label: string; data: MetricData }> = [];
     for (const key of keys) {
-      const val = props.metrics![key];
+      const val = props.metrics?.[key];
       if (val && typeof val === "object" && "used_pct" in val) {
         entries.push({
           key,
@@ -126,7 +134,7 @@ export function ServicePanel(props: ServicePanelProps) {
       flexDirection="column"
       width="100%"
       flexGrow={1}
-      borderStyle={"rounded" as any}
+      borderStyle={ROUNDED_BORDER_STYLE}
       borderColor={props.isActive ? theme.borderActive : theme.text}
       title={panelTitle()}
       titleAlignment="left"
@@ -214,48 +222,35 @@ export function ServicePanel(props: ServicePanelProps) {
                     // Show prediction bar for weekly metrics, but only when the prediction
                     // is meaningful. Skip when window just reset (< 5% used, > 5 days left),
                     // historic rates don't reflect the new window yet.
-                    const predUseful = pred && pred.usedSoFar >= 5 || (pred && pred.remainingDays <= 5);
-                    if (pred && predUseful &&
-                        (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                    const predUseful = (pred && pred.usedSoFar >= 5) || (pred && pred.remainingDays <= 5);
+                    if (
+                      pred &&
+                      predUseful &&
+                      (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")
+                    ) {
                       const w = barWidth();
                       const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                       const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
                       // Single string avoids flex-row alignment issues at narrow widths
                       const barStr = segments.used + segments.predicted + segments.spare;
-                      return (
-                        <text
-                          content={`  ${barStr} \u25c6 ${usedPct()}%`}
-                          fg={theme.text}
-                          height={1}
-                        />
-                      );
+                      const label =
+                        textTier() === "full"
+                          ? ` ${usedPct()}% used`
+                          : textTier() === "compact"
+                            ? ` ${usedPct()}%`
+                            : "";
+                      return <text content={`  ${barStr}${label}`} fg={theme.text} height={1} />;
                     }
-                    return (
-                      <text
-                        content={`  ${capBar()} \u25c6 ${usedPct()}%`}
-                        fg={theme.text}
-                        height={1}
-                      />
-                    );
+                    return <text content={`  ${capBar()} \u25c6 ${usedPct()}%`} fg={theme.text} height={1} />;
                   })()}
                 </Show>
                 {/* Time markers */}
                 <Show when={showMarkers()}>
-                  <text
-                    content={`  ${markers()}`}
-                    fg={theme.surface1}
-                    dim={true}
-                    height={1}
-                  />
+                  <text content={`  ${markers()}`} fg={theme.surface1} dim={true} height={1} />
                 </Show>
                 {/* Period bar */}
                 <Show when={showPeriodBar()}>
-                  <text
-                    content={`  ${perBar()} \u23f1 ${timePctR()}%`}
-                    fg={theme.cyan}
-                    dim={true}
-                    height={1}
-                  />
+                  <text content={`  ${perBar()} \u23f1 ${timePctR()}%`} fg={theme.cyan} dim={true} height={1} />
                 </Show>
                 {/* Spacer above reset for visual breathing room */}
                 <Show when={showResetTime()}>
@@ -283,9 +278,7 @@ export function ServicePanel(props: ServicePanelProps) {
                   if (entry.key !== "week_all" && entry.key !== "week_sonnet" && entry.key !== "weekly") return null;
                   const sparePrefix = pred.confidence === "low" ? "~" : "";
                   const spareVal = `${sparePrefix}${Math.round(pred.predictedSpare)}%`;
-                  const summary = pred.overBudget
-                    ? `  \u26a1 OVER ${spareVal}`
-                    : `  \u26a1 ${spareVal} spare`;
+                  const summary = pred.overBudget ? `  \u26a1 OVER BUDGET ${spareVal}` : `  \u26a1 ${spareVal} spare`;
                   return (
                     <text
                       content={summary}
