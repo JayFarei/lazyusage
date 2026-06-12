@@ -47,6 +47,19 @@ function untrackSession(name: string): void {
   liveSessions.delete(name);
 }
 
+/**
+ * Fail fast when the CLI a session would run is not installed. Otherwise the
+ * session is created, the command dies instantly, and the collector spends
+ * ~12s typing into and polling a dead session before giving up (the exact
+ * behavior that made CI runs with tmux but no claude/codex time out).
+ */
+function assertCommandExists(command: string): void {
+  const executable = command.split(/\s+/)[0];
+  if (!Bun.which(executable)) {
+    throw new Error(`${executable} not found in PATH`);
+  }
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -97,6 +110,7 @@ export class EphemeralSession {
   }
 
   async start(): Promise<void> {
+    assertCommandExists(this.command);
     await sweepStaleUsageSessions();
     await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
     trackSession(this.sessionName);
@@ -153,6 +167,7 @@ export class PersistentSession {
   }
 
   async windup(): Promise<void> {
+    assertCommandExists(this.command);
     await sweepStaleUsageSessions();
     await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
     trackSession(this.sessionName);

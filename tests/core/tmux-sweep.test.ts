@@ -5,7 +5,7 @@
  * Requires tmux; all tests skip silently when it is unavailable.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { sweepStaleUsageSessions } from "../../packages/core/src/utils/tmux.js";
+import { EphemeralSession, PersistentSession, sweepStaleUsageSessions } from "../../packages/core/src/utils/tmux.js";
 
 function tmux(...args: string[]): { exitCode: number; stdout: string } {
   const proc = Bun.spawnSync(["tmux", ...args], { stdout: "pipe", stderr: "ignore" });
@@ -30,6 +30,21 @@ afterEach(() => {
   for (const name of [STALE_SESSION, LIVE_SESSION, UNRELATED_SESSION]) {
     tmux("kill-session", "-t", name);
   }
+});
+
+describe("session start with missing CLI", () => {
+  test("EphemeralSession.start rejects fast when the command is not installed", async () => {
+    const session = new EphemeralSession("claude-usage-test-missing", "definitely-not-a-real-cli");
+    const startedAt = Date.now();
+    await expect(session.start()).rejects.toThrow("not found in PATH");
+    // Must fail before the 2s post-create settle, not after polling a dead session.
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+
+  test("PersistentSession.windup rejects when the command is not installed", async () => {
+    const session = new PersistentSession("claude-live-test-missing", "definitely-not-a-real-cli");
+    await expect(session.windup()).rejects.toThrow("not found in PATH");
+  });
 });
 
 describe("sweepStaleUsageSessions", () => {
