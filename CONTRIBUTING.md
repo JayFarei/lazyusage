@@ -37,7 +37,7 @@ tests/
   tui/    - Unit/snapshot tests for hooks and components
 examples/ - Agent integration examples and browser dashboard
 skills/   - Canonical agent skill (SKILL.md)
-kb/       - Design documents and research notes
+docs/     - Design documents (docs/design/) and research notes (docs/research/)
 ```
 
 ## Running tests
@@ -80,7 +80,7 @@ and commit the regenerated files along with your change.
 3. **New keybindings**: update `packages/cli/src/tui/hooks/useKeybindings.ts` and the `HelpOverlay` component.
 4. **After layout/component changes**: run `bun run build` so the dist bundle stays in sync, and regenerate golden masters if visuals changed.
 
-Design context for larger subsystems (capacity prediction, the collector daemon) lives in `kb/plans/`.
+Design context for larger subsystems (capacity prediction, the collector daemon) lives in `docs/design/`.
 
 ## Pull requests
 

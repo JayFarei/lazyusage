@@ -1,6 +1,6 @@
-# TODOS
+# Roadmap
 
-Public roadmap. Items deferred from the Predictive Capacity v1 review.
+Planned work and deferred items. See [docs/design/](docs/design/) for the design documents behind these.
 
 ## v1.1 — Regime Engine + Calendar TUI
 

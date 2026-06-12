@@ -17,9 +17,13 @@ tests/
   tui/    - Unit/snapshot tests for hooks and components (Bun test)
   core/   - Unit tests for parsers, chain, token refresh
 examples/
-  SKILL.md               - Agent skill: capacity management scenarios
   agent_integration.ts   - Full agentic capacity loop (TypeScript)
   agent_integration.sh   - Full agentic capacity loop (bash)
+skills/
+  lazyusage/             - Canonical agent skill + prompt templates
+docs/
+  design/                - Design documents (prediction, daemon)
+  research/              - Research notes
 scripts/
   build.ts - Pre-bundle CLI for fast cold starts
 ```
