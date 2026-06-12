@@ -1,4 +1,3 @@
-<!-- /autoplan restore point: /Users/jayfarei/.gstack/projects/2026-02-05-test-usage-via-cli/main-autoplan-restore-20260325-104830.md -->
 # Predictive Capacity — v1
 
 **Status:** Reviewed, ready for implementation
@@ -807,7 +806,7 @@ Reservation/lease system for safe multi-agent capacity consumption:
 
 ## Appendix: Data Feasibility (Reference)
 
-Analysis of a real `UsageStore` database (74,453 snapshots across 30 days) confirmed that daily delta extraction with window-reset splitting is feasible. See the [restore point](/Users/jayfarei/.gstack/projects/2026-02-05-test-usage-via-cli/main-autoplan-restore-20260325-104830.md) for the original feasibility data tables.
+Analysis of a real `UsageStore` database (74,453 snapshots across 30 days) confirmed that daily delta extraction with window-reset splitting is feasible.
 
 Key observations:
 1. Daily deltas range from 0-51%, clustering into recognizable patterns

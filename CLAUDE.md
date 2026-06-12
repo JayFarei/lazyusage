@@ -133,6 +133,3 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 - `commander` - CLI argument parsing
 - `better-sqlite3` - Snapshot storage
 - `tmux` - Required for E2E tests only
-
-# currentDate
-Today's date is 2026-03-22.

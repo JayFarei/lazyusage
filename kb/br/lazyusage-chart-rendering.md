@@ -1,7 +1,7 @@
 # LazyUsage Chart Rendering: Self-Scouting Brief
 
 > Research date: 2026-03-26
-> Source: /Users/jayfarei/src/tries/2026-02-05-test-usage-via-cli
+> Source: this repository
 > Category: self-analysis (rendering architecture)
 
 ---

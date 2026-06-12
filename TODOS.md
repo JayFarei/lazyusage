@@ -1,6 +1,6 @@
 # TODOS
 
-Items deferred from Predictive Capacity v1 review (2026-03-25).
+Public roadmap. Items deferred from the Predictive Capacity v1 review.
 
 ## v1.1 — Regime Engine + Calendar TUI
 
