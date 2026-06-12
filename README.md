@@ -9,43 +9,21 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-bun%20%E2%89%A51.3-black)](https://bun.sh)
 
-Usage monitoring for Claude CLI and Codex CLI. A tmux-popup-ready control center for your subscriptions, and a capacity API for agents.
+**Know how much AI subscription capacity you have left, and put all of it to work.**
 
-```text
-╭─ [1] Claude CLI - max ───────────────╮╭─ [3] ━ Daily ━   Weekly     Monthly   ───────────────────╮
-│ ▸ Weekly (All)                       ││                                                         ▲│
-│   ▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 11%       ││  Today                                                  █│
-│      ┃  ┃  ┃  ┃  ┃  ┃                ││                                                         █│
-│   ▓▓░░░░░░░░░░░░░░░░░░░░░░ ⏱ 7%      ││  Project        Input    Output  Cache%  Total ▼ %      █│
-│                                      ││  ───────────────────────────────────────────────────────█│
-│   Resets: Jun 18 at 10:00pm (6d 11h) ││  my-web-app     283,148  791,804 98.8%   86.7M   52.6%  █│
-│   ⚡ OVER BUDGET -25%                ││  lazyusage      67,138   230,663 99.1%   32.4M   19.7%  █│
-│                                      ││  api-server     208,467  254,679 98.3%   27.5M   16.7%  ▀│
-│   Weekly (Sonnet) ◆ 1% ⏱ 7%          ││  infra-scripts  820      28,363  99.7%   9.5M    5.8%    │
-│   Session (5h) ◆ 50% ⏱ 45%           ││  notes          14,561   25,786  99.2%   4.9M    3.0%    │
-│                                      ││  experiments    1,686    18,264  99.5%   3.7M    2.3%    │
-│                                      ││  ───────────────────────────────────────────────────────▼│
-╰──────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
-╭─ [2] Codex CLI - pro ────────────────╮╭─ [4] ━ Daily ━   Weekly     Monthly   ───────────────────╮
-│ ▸ Weekly                             ││                                                          │
-│   ▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 12%       ││  Today                                                   │
-│      ┃  ┃  ┃  ┃  ┃  ┃                ││                                                          │
-│   ▓▓▓▓░░░░░░░░░░░░░░░░░░░░ ⏱ 16%     ││  Project         Input   Output  Cache%   Total ▼ %      │
-│                                      ││  ────────────────────────────────────────────────────────│
-│   Resets: Jun 18 at 8:30am (5d 21h)  ││  my-web-app      2.9M    11,828  0.0%     2.9M    100.0% │
-│   ⚡ OVER BUDGET -19%                ││  ────────────────────────────────────────────────────────│
-│                                      ││  Total           2.9M    11,828  0.0%     2.9M           │
-│   Session (5h) ◆ 5% ⏱ 24%            ││                                                          │
-│                                      ││                                                          │
-╰──────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
- 10:34:38 AM | Last updated: 10:34:35 AM | Auto-refresh: ON (10s) | Source: Claude: API | Codex: API
- [1]Claude  [3]ClaudeStats  [2]Codex  [4]CodexStats  j/k=Navigate  Tab=Focus  g=Fullscreen  ?=Help
-```
+<img src="docs/assets/tui.png" alt="lazyusage TUI: Claude and Codex panels with pace bars, OVER BUDGET warnings, and a per-project token ledger" width="843">
 
-`lazyusage` is built around two ideas:
+`lazyusage` answers the questions you actually ask about your Claude and Codex subscriptions:
 
-1. **A tmux-popup-ready control center for your subscriptions.** Bind the TUI to a tmux key and get instant, glanceable control over session, weekly, and model-specific limits without leaving your editor or agent session.
-2. **A capacity API for agents.** Agents running on a goal, workflow, or loop can ask `lazyusage` how much capacity is left before starting expensive work, and capacity-management strategies (for example, dedicating only a slice of remaining capacity to unsupervised work) can be layered on top of its JSON output.
+- **"Am I overspending against my weekly capacity?"** Pace bars compare allowance burned vs time elapsed, and flag `OVER BUDGET` the moment you burn faster than the window refills.
+- **"Which of my projects is eating the tokens?"** A per-project ledger (Daily / Weekly / Monthly) built from your local session history.
+- **"Can I give agents 50% of what's left, and have them go to sleep when it's spent?"** A JSON capacity API plus copy-paste prompt templates let goal/loop agents budget themselves to a slice of remaining capacity and stop cleanly when it runs out.
+- **"How much will I have spare by the reset?"** Recorded usage history feeds an end-of-window prediction you can plan unsupervised work against.
+
+It serves two audiences with the same data:
+
+1. **Humans, via a tmux-popup dashboard.** Bind the TUI to a key and get a one-keystroke overlay over whatever you are doing, without leaving your editor or agent session.
+2. **Agents, via a capacity API.** Agents on a goal, workflow, or loop check how much capacity is left before expensive work, and layer capacity-management strategies on top of the JSON output.
 
 ## Quick start
 
