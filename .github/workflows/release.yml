@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: |
+          bun test tests/core/
+          bun run test:tui
+          bun test tests/cli/
+
+      - name: Build
+        run: bun run build
+
+      - name: Smoke test packaged CLI
+        run: bun run test:smoke
+
+      - name: Verify tag matches package versions
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          for pkg in packages/core packages/cli; do
+            PKG_VERSION=$(jq -r .version "$pkg/package.json")
+            if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+              echo "::error::$pkg is at $PKG_VERSION but tag is $TAG_VERSION"
+              exit 1
+            fi
+          done
+
+      # npm publish runs only when the NPM_TOKEN secret is configured
+      # (Settings -> Secrets and variables -> Actions). Already-published
+      # versions are skipped so re-running a release is idempotent.
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          for pkg in packages/core packages/cli; do
+            NAME=$(jq -r .name "$pkg/package.json")
+            VERSION=$(jq -r .version "$pkg/package.json")
+            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "$NAME@$VERSION already on npm, skipping"
+            else
+              (cd "$pkg" && bun publish --access public)
+            fi
+          done
+
+      - name: Warn when npm publish is skipped
+        if: env.NPM_TOKEN == ''
+        run: echo "::warning::NPM_TOKEN secret not set; skipped npm publish"
+
+      - name: Extract changelog notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG section found for $VERSION" > release-notes.md
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag
