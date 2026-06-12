@@ -4,6 +4,7 @@
  * Port of src/cli.py
  */
 import { Command } from "commander";
+import pkg from "../package.json";
 import { createDaemonCommand } from "./commands/daemon.js";
 import { planCommand } from "./commands/plan.js";
 import { usageCommand } from "./commands/usage.js";
@@ -11,7 +12,7 @@ import { usageCheckCommand } from "./commands/usage-check.js";
 
 const program = new Command();
 
-program.name("lazyusage").description("Usage monitoring for Claude and Codex CLI").version("0.1.0");
+program.name("lazyusage").description("Usage monitoring for Claude and Codex CLI").version(pkg.version);
 
 program.addCommand(usageCheckCommand);
 program.addCommand(usageCommand);
