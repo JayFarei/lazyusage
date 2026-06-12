@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 /**
  * Build publishable workspace artifacts.
  *
@@ -8,7 +9,6 @@
  *   packages/cli/dist/    - publishable CLI bundle + ledger worker
  */
 import solidTransformPlugin from "../packages/cli/node_modules/@opentui/solid/scripts/solid-plugin";
-import { mkdirSync, rmSync } from "fs";
 
 const rootDir = new URL("../", import.meta.url).pathname;
 const coreDir = `${rootDir}packages/core`;
@@ -66,6 +66,11 @@ if (!workerResult.success) {
   for (const log of workerResult.logs) console.error(log);
   process.exit(1);
 }
+
+// pty.ts compiles pty_helpers.c at runtime via Bun.cc(), resolving the source
+// next to the executing module - so the .c file must ship inside both dists.
+copyFileSync(`${coreDir}/src/utils/pty_helpers.c`, `${coreDistDir}/utils/pty_helpers.c`);
+copyFileSync(`${coreDir}/src/utils/pty_helpers.c`, `${cliDistDir}/pty_helpers.c`);
 
 const outputs = [...cliResult.outputs, ...workerResult.outputs].map((o) => o.path);
 console.log("Build complete:", outputs.join(", "));
