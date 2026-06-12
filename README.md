@@ -97,18 +97,36 @@ lazyusage --capacity --json --live
 
 ### tmux popup
 
-The TUI is designed to live in a tmux popup, a one-keystroke overlay on top of whatever you are doing:
+The TUI is designed to live in a tmux popup, a one-keystroke overlay on top of whatever you are doing. To set it up:
 
-```bash
-# ~/.tmux.conf: open lazyusage in a popup with prefix + u
-bind-key u display-popup -E -w 90% -h 80% "lazyusage"
-```
+1. Make sure `lazyusage` is on your `PATH` (`bun add -g @lazyusage/cli`), or use the full path to the binary in the binding below.
 
-Press `prefix + u` to check your limits, press `q` (or `Esc`) to dismiss. Useful variants:
+2. Add a binding to `~/.tmux.conf`:
+
+   ```bash
+   # Open lazyusage in a popup with prefix + u
+   bind-key u display-popup -E -w 90% -h 80% "lazyusage"
+   ```
+
+3. Reload your tmux configuration:
+
+   ```bash
+   tmux source-file ~/.tmux.conf
+   ```
+
+4. Press `prefix + u` (default prefix is `Ctrl-b`) to open the dashboard, and `q` to dismiss it. `-E` closes the popup automatically when the TUI exits.
+
+Useful variants:
 
 ```bash
 # Claude only, smaller popup
 bind-key U display-popup -E -w 70% -h 50% "lazyusage claude"
+
+# Bind without the prefix (root table), e.g. Alt+u
+bind-key -n M-u display-popup -E -w 90% -h 80% "lazyusage"
+
+# Running from a source checkout instead of a global install
+bind-key u display-popup -E -w 90% -h 80% "cd /path/to/lazyusage && bun run lazyusage"
 ```
 
 This pairs well with long-running agent sessions: keep agents working in your panes, pop the dashboard over them when you want to see how much subscription headroom they have left.
@@ -205,6 +223,12 @@ done
 ```
 
 The same logic works against the HTTP server (`GET /claude`) when several agents share one collector, and `--predict` can replace the static 40% with a dynamic budget derived from predicted end-of-window spare capacity.
+
+Copy-paste prompt templates for goal/loop agents:
+
+- [`skills/lazyusage/templates/claude-goal-capacity.prompt.md`](skills/lazyusage/templates/claude-goal-capacity.prompt.md): Claude agent on a goal that may only spend a fixed share of remaining capacity
+- [`skills/lazyusage/templates/codex-goal-capacity.prompt.md`](skills/lazyusage/templates/codex-goal-capacity.prompt.md): the same capacity-budget protocol for Codex agents (`5h` / `weekly` metric keys)
+- [`skills/lazyusage/templates/claude-session-guard.prompt.md`](skills/lazyusage/templates/claude-session-guard.prompt.md): Claude agent that pauses itself near the 5-hour session limit
 
 Runnable examples:
 

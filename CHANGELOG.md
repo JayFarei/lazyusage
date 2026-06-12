@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Graph tab in the stats panel for daemon-backed services (Tab cycles Daily, Weekly, Monthly, Graph)
 - Capacity prediction: `--predict` shows projected spare capacity at window end
 - `lazyusage plan` command for marking upcoming days with expected work intensity (L/M/H/B regimes)
-- CONTRIBUTING.md and expanded README (daemon, prediction, tmux popup workflow, agent capacity budgets)
+- CONTRIBUTING.md and expanded README (daemon, prediction, tmux popup setup, agent capacity budgets)
+- Copy-paste goal capacity prompt templates for Claude and Codex agents (`skills/lazyusage/templates/`)
 
 ### Fixed
 - Collector tmux sessions no longer pile up: sessions created by this process are killed on exit, and stale sessions leaked by force-killed runs (e.g. a closed tmux popup) are reaped on the next run
