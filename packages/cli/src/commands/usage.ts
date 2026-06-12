@@ -21,6 +21,7 @@ import {
   predict,
   type ServiceName,
   setLogLevel,
+  sweepStaleUsageSessions,
   UsageStore,
   WEEKLY_WINDOW_HOURS,
 } from "@lazyusage/core";
@@ -192,6 +193,9 @@ export const usageCommand = new Command("usage")
         host?: string;
       },
     ) => {
+      // Reap collector tmux sessions leaked by previous force-killed runs.
+      void sweepStaleUsageSessions().catch(() => {});
+
       // Configure logging
       if (opts.logLevel) {
         setLogLevel(opts.logLevel as LogLevel);

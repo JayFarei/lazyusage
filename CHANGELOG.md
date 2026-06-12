@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md and expanded README (daemon, prediction, tmux popup workflow, agent capacity budgets)
 
 ### Fixed
+- Collector tmux sessions no longer pile up: sessions created by this process are killed on exit, and stale sessions leaked by force-killed runs (e.g. a closed tmux popup) are reaped on the next run
 - Narrow panels now truncate the border title (dropping the subscription suffix) instead of losing it entirely
 - `pty_helpers.c` is now copied into both dist outputs so installed packages can compile the PTY helper at runtime
 

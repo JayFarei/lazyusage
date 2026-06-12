@@ -177,6 +177,7 @@ export {
 export {
   EphemeralSession,
   PersistentSession,
+  sweepStaleUsageSessions,
 } from "./utils/tmux.js";
 // Warnings
 export {

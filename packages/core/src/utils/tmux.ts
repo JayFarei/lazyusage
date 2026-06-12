@@ -21,6 +21,67 @@ async function runTmux(
   return { exitCode, stdout };
 }
 
+/** Session names created by the usage collectors: <service>-<kind>-<pid> */
+const USAGE_SESSION_PATTERN = /^(claude|codex)-(usage|live)-(\d+)$/;
+
+/** Sessions created by this process, killed via exit hook if not cleaned up. */
+const liveSessions = new Set<string>();
+let exitHookInstalled = false;
+
+function killSessionSync(name: string): void {
+  Bun.spawnSync(["tmux", "kill-session", "-t", name], { stdout: "ignore", stderr: "ignore" });
+}
+
+function trackSession(name: string): void {
+  liveSessions.add(name);
+  if (!exitHookInstalled) {
+    exitHookInstalled = true;
+    // Async handlers do not run during exit, so kill synchronously.
+    process.on("exit", () => {
+      for (const session of liveSessions) killSessionSync(session);
+    });
+  }
+}
+
+function untrackSession(name: string): void {
+  liveSessions.delete(name);
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Kill leftover collector sessions whose owning process is gone.
+ *
+ * Session names embed the creating pid, so sessions leaked by crashed or
+ * force-killed runs (e.g. a closed tmux popup) can be reaped on the next run.
+ * Returns the number of sessions killed; safe to call when tmux is absent.
+ */
+export async function sweepStaleUsageSessions(): Promise<number> {
+  const { exitCode, stdout } = await runTmux(["list-sessions", "-F", "#{session_name}"], {
+    captureOutput: true,
+    suppressErrors: true,
+  });
+  if (exitCode !== 0) return 0;
+
+  let killed = 0;
+  for (const name of stdout.split("\n")) {
+    const match = USAGE_SESSION_PATTERN.exec(name.trim());
+    if (!match) continue;
+    const pid = Number(match[3]);
+    if (pid === process.pid || isPidAlive(pid)) continue;
+    await runTmux(["kill-session", "-t", name.trim()], { suppressErrors: true });
+    killed++;
+  }
+  return killed;
+}
+
 export class EphemeralSession {
   private sessionName: string;
   private command: string;
@@ -36,7 +97,9 @@ export class EphemeralSession {
   }
 
   async start(): Promise<void> {
+    await sweepStaleUsageSessions();
     await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
+    trackSession(this.sessionName);
     await Bun.sleep(2000);
   }
 
@@ -75,6 +138,7 @@ export class EphemeralSession {
 
   async cleanup(): Promise<void> {
     await runTmux(["kill-session", "-t", this.sessionName], { suppressErrors: true });
+    untrackSession(this.sessionName);
   }
 }
 
@@ -89,7 +153,9 @@ export class PersistentSession {
   }
 
   async windup(): Promise<void> {
+    await sweepStaleUsageSessions();
     await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
+    trackSession(this.sessionName);
     await Bun.sleep(2000);
     this.sessionStarted = true;
   }
@@ -139,6 +205,7 @@ export class PersistentSession {
   async winddown(): Promise<void> {
     if (this.sessionStarted) {
       await runTmux(["kill-session", "-t", this.sessionName], { suppressErrors: true });
+      untrackSession(this.sessionName);
       this.sessionStarted = false;
     }
   }
