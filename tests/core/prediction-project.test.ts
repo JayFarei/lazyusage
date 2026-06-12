@@ -1,18 +1,16 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { predict } from "../../packages/core/src/prediction/project.js";
 import type { DailyDelta, SupervisedMark } from "../../packages/core/src/types.js";
 
 describe("predict", () => {
   const baseDelta = (date: string, delta: number): DailyDelta => ({
-    date, delta, valid: true,
+    date,
+    delta,
+    valid: true,
   });
 
   test("linear projection with history", () => {
-    const deltas: DailyDelta[] = [
-      baseDelta("2026-03-20", 10),
-      baseDelta("2026-03-21", 8),
-      baseDelta("2026-03-22", 12),
-    ];
+    const deltas: DailyDelta[] = [baseDelta("2026-03-20", 10), baseDelta("2026-03-21", 8), baseDelta("2026-03-22", 12)];
     const result = predict(deltas, 47, 2.3, "2026-03-27T16:00:00Z", "claude", "week_all");
     expect(result.service).toBe("claude");
     expect(result.metricName).toBe("week_all");
@@ -27,9 +25,7 @@ describe("predict", () => {
   });
 
   test("cold start with 0 valid deltas", () => {
-    const deltas: DailyDelta[] = [
-      { date: "2026-03-20", delta: 0, valid: false },
-    ];
+    const deltas: DailyDelta[] = [{ date: "2026-03-20", delta: 0, valid: false }];
     const result = predict(deltas, 47, 2.0, "2026-03-27T16:00:00Z", "claude", "week_all");
     expect(result.averageRate).toBe(15); // COLD_START_RATE
     expect(result.confidence).toBe("low");
@@ -99,9 +95,7 @@ describe("predict", () => {
 
   test("confidence thresholds", () => {
     const makeDelta = (n: number) =>
-      Array.from({ length: n }, (_, i) =>
-        baseDelta(`2026-03-${String(i + 1).padStart(2, "0")}`, 5),
-      );
+      Array.from({ length: n }, (_, i) => baseDelta(`2026-03-${String(i + 1).padStart(2, "0")}`, 5));
 
     const low = predict(makeDelta(5), 40, 2, "2026-03-27T16:00:00Z", "claude", "week_all");
     expect(low.confidence).toBe("low");

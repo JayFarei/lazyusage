@@ -11,19 +11,13 @@ export function format12hTime(hour: number, minute: number): string {
 }
 
 export function formatResetDate(dt: Date): string {
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const datePart = `${months[dt.getMonth()]} ${dt.getDate()}`;
   const timePart = format12hTime(dt.getHours(), dt.getMinutes());
   return `${datePart} at ${timePart}`;
 }
 
-export function calculateFallbackTime(
-  hoursOffset: number,
-  sameDay: boolean = true,
-): string {
+export function calculateFallbackTime(hoursOffset: number, sameDay: boolean = true): string {
   const resetTime = new Date(Date.now() + hoursOffset * 3600_000);
   if (sameDay) {
     return format12hTime(resetTime.getHours(), resetTime.getMinutes());
@@ -36,15 +30,23 @@ export function parseTimeToDatetime(timeStr: string): Date {
 
   if (timeStr.includes(" at ")) {
     // Format: "Feb 9 at 8:19pm" or "Feb 11 at 11am"
-    const match = timeStr.match(
-      /^(\w+)\s+(\d+)\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)$/i,
-    );
+    const match = timeStr.match(/^(\w+)\s+(\d+)\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)$/i);
     if (!match) return now;
 
     const [, monthStr, dayStr, hourStr, minuteStr, meridiem] = match;
     const months: Record<string, number> = {
-      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+      jan: 0,
+      feb: 1,
+      mar: 2,
+      apr: 3,
+      may: 4,
+      jun: 5,
+      jul: 6,
+      aug: 7,
+      sep: 8,
+      oct: 9,
+      nov: 10,
+      dec: 11,
     };
 
     const month = months[monthStr.toLowerCase()];
@@ -79,13 +81,7 @@ export function parseTimeToDatetime(timeStr: string): Date {
   if (meridiem.toLowerCase() === "pm" && hour !== 12) hour += 12;
   if (meridiem.toLowerCase() === "am" && hour === 12) hour = 0;
 
-  const parsed = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    hour,
-    minute,
-  );
+  const parsed = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
 
   // If the time is in the past, assume tomorrow
   if (parsed.getTime() < now.getTime()) {
@@ -102,15 +98,13 @@ export function formatResetFromIso(isoStr: string): string {
 
   try {
     const dt = new Date(isoStr);
-    if (isNaN(dt.getTime())) {
+    if (Number.isNaN(dt.getTime())) {
       return calculateFallbackTime(5, true);
     }
 
     const now = new Date();
     const sameDay =
-      dt.getFullYear() === now.getFullYear() &&
-      dt.getMonth() === now.getMonth() &&
-      dt.getDate() === now.getDate();
+      dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth() && dt.getDate() === now.getDate();
 
     if (sameDay) {
       return format12hTime(dt.getHours(), dt.getMinutes());
@@ -121,10 +115,7 @@ export function formatResetFromIso(isoStr: string): string {
   }
 }
 
-export function calculateTimeProgress(
-  resetTimeStr: string,
-  windowHours: number,
-): number {
+export function calculateTimeProgress(resetTimeStr: string, windowHours: number): number {
   const now = new Date();
   const resetTime = parseTimeToDatetime(resetTimeStr);
   const windowMs = windowHours * 3600_000;
@@ -143,11 +134,7 @@ export function calculateTimeProgress(
   return Math.max(0, Math.min(100, percentage));
 }
 
-export function formatTimeRemaining(
-  t: Date,
-  resetsAt: Date,
-  _windowHours: number,
-): string {
+export function formatTimeRemaining(t: Date, resetsAt: Date, _windowHours: number): string {
   const totalSeconds = (resetsAt.getTime() - t.getTime()) / 1000;
 
   if (totalSeconds <= 0) return "0m";

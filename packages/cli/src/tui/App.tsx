@@ -2,37 +2,37 @@
  * Root TUI application component.
  * 2x2 grid layout: each service row has bars (left) + ledger stats (right).
  */
-import { createSignal, onMount, onCleanup, Show } from "solid-js";
-import { join } from "path";
-import { homedir } from "os";
-import { existsSync, readFileSync } from "fs";
-import { useKeyboard } from "@opentui/solid";
-import { useTheme } from "./theme.js";
-import { ServicePanel } from "./components/ServicePanel.js";
-import { StatsPanel } from "./components/StatsPanel.js";
-import { StatusBar } from "./components/StatusBar.js";
-import { HelpOverlay } from "./components/HelpOverlay.js";
-import { FullscreenMetricView } from "./components/FullscreenMetricView.js";
-import { FullscreenStatsView } from "./components/FullscreenStatsView.js";
-import { useMetrics } from "./hooks/useMetrics.js";
-import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
-import { usePanelState } from "./hooks/useViewMode.js";
-import { useLedgerData } from "./hooks/useLedgerData.js";
-import { createKeybindingHandler } from "./hooks/useKeybindings.js";
+
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
-  useDaemonDetection,
-  type DaemonDetectionHook,
-} from "./hooks/useDaemonDetection.js";
-import { usePrediction } from "./hooks/usePrediction.js";
-import {
+  type CapacityPrediction,
   createClaudeChain,
   createCodexChain,
-  UsageStore,
-  DedupTracker,
   DataSource,
-  type PersistentFallbackChain,
+  DedupTracker,
   type MetricsDict,
+  type PersistentFallbackChain,
+  UsageStore,
 } from "@lazyusage/core";
+import { useKeyboard } from "@opentui/solid";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { FullscreenGraphView } from "./components/FullscreenGraphView.js";
+import { FullscreenMetricView } from "./components/FullscreenMetricView.js";
+import { FullscreenStatsView } from "./components/FullscreenStatsView.js";
+import { HelpOverlay } from "./components/HelpOverlay.js";
+import { METRIC_KEYS, ServicePanel } from "./components/ServicePanel.js";
+import { StatsPanel } from "./components/StatsPanel.js";
+import { StatusBar } from "./components/StatusBar.js";
+import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
+import { type DaemonDetectionHook, useDaemonDetection } from "./hooks/useDaemonDetection.js";
+import { createKeybindingHandler } from "./hooks/useKeybindings.js";
+import { useLedgerData } from "./hooks/useLedgerData.js";
+import { useMetrics } from "./hooks/useMetrics.js";
+import { usePrediction } from "./hooks/usePrediction.js";
+import { usePanelState } from "./hooks/useViewMode.js";
+import { useTheme } from "./theme.js";
 
 export interface AppProps {
   /** Optional service filter: "claude" | "codex" | "all" | undefined = show both */
@@ -41,10 +41,8 @@ export interface AppProps {
 }
 
 type AppChain = Pick<PersistentFallbackChain, "start" | "refresh" | "stop">;
-type AppStore = Pick<
-  UsageStore,
-  "cleanupOldSnapshots" | "storeSnapshot" | "close"
->;
+type AppStore = Pick<UsageStore, "cleanupOldSnapshots" | "storeSnapshot" | "close">;
+type AppGraphStore = Pick<UsageStore, "getHistory" | "close">;
 type AppDedupTracker = Pick<DedupTracker, "shouldStoreMetrics">;
 type AppLedgerData = ReturnType<typeof useLedgerData>;
 type AppAutoRefresh = ReturnType<typeof useAutoRefresh>;
@@ -56,6 +54,7 @@ interface AppDeps {
   createAutoRefresh: typeof useAutoRefresh;
   createPrediction: typeof usePrediction;
   createUsageStore: () => AppStore;
+  createGraphStore: () => AppGraphStore;
   createDedupTracker: () => AppDedupTracker;
   createClaudeChain: (persistent: boolean) => AppChain;
   createCodexChain: (persistent: boolean) => AppChain;
@@ -68,20 +67,17 @@ const LEDGER_TABS = ["daily", "weekly", "monthly"] as const;
 
 export function App(props: AppProps = {}) {
   const deps: AppDeps = {
-    createDaemonDetection:
-      props.deps?.createDaemonDetection ?? (() => useDaemonDetection()),
+    createDaemonDetection: props.deps?.createDaemonDetection ?? (() => useDaemonDetection()),
     createLedgerData: props.deps?.createLedgerData ?? useLedgerData,
     createAutoRefresh: props.deps?.createAutoRefresh ?? useAutoRefresh,
     createPrediction: props.deps?.createPrediction ?? usePrediction,
     createUsageStore: props.deps?.createUsageStore ?? (() => new UsageStore()),
-    createDedupTracker:
-      props.deps?.createDedupTracker ?? (() => new DedupTracker()),
+    createGraphStore: props.deps?.createGraphStore ?? (() => new UsageStore()),
+    createDedupTracker: props.deps?.createDedupTracker ?? (() => new DedupTracker()),
     createClaudeChain:
-      props.deps?.createClaudeChain ??
-      ((persistent: boolean) => createClaudeChain(persistent) as AppChain),
+      props.deps?.createClaudeChain ?? ((persistent: boolean) => createClaudeChain(persistent) as AppChain),
     createCodexChain:
-      props.deps?.createCodexChain ??
-      ((persistent: boolean) => createCodexChain(persistent) as AppChain),
+      props.deps?.createCodexChain ?? ((persistent: boolean) => createCodexChain(persistent) as AppChain),
     setIntervalFn: props.deps?.setIntervalFn ?? setInterval,
     clearIntervalFn: props.deps?.clearIntervalFn ?? clearInterval,
   };
@@ -92,23 +88,27 @@ export function App(props: AppProps = {}) {
   const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, warnings, updateMetrics, checkWarning } =
     useMetrics();
   const {
-    activePanel, setActivePanel,
+    activePanel,
+    setActivePanel,
     focusStatsPanel,
-    contentTab, setContentTab,
+    contentTab,
+    setContentTab,
     selectedMetricIndex,
     selectedMetricKey,
     navigateMetric,
     focusedSide,
-    fullscreenTarget, toggleFullscreen, exitFullscreen,
+    fullscreenTarget,
+    toggleFullscreen,
+    exitFullscreen,
     switchFocusSide,
-    sortState, cycleSortColumn, toggleSortDirection,
+    sortState,
+    cycleSortColumn,
+    toggleSortDirection,
   } = usePanelState();
   const [lastUpdated, setLastUpdated] = createSignal<string | null>(null);
   const [helpVisible, setHelpVisible] = createSignal(false);
   const [graphTabPanel, setGraphTabPanel] = createSignal<"claude" | "codex" | null>(null);
-  const [currentTime, setCurrentTime] = createSignal(
-    new Date().toLocaleTimeString()
-  );
+  const [currentTime, setCurrentTime] = createSignal(new Date().toLocaleTimeString());
 
   // Shared 30s tick for time-progress bars (replaces two per-panel setIntervals)
   const [tick, setTick] = createSignal(0);
@@ -117,8 +117,7 @@ export function App(props: AppProps = {}) {
   const daemonDetection = deps.createDaemonDetection();
 
   // Prediction engine: runs on each tick, produces prediction data for weekly bars
-  const { claudePrediction, codexPrediction }: AppPrediction =
-    deps.createPrediction(tick, claudeMetrics, codexMetrics);
+  const { claudePrediction, codexPrediction }: AppPrediction = deps.createPrediction(tick, claudeMetrics, codexMetrics);
 
   const visiblePanelCount = () => (showClaude() ? 1 : 0) + (showCodex() ? 1 : 0);
 
@@ -130,10 +129,7 @@ export function App(props: AppProps = {}) {
   let store: AppStore | null = null;
   const dedup = deps.createDedupTracker();
 
-  async function applyFetchResult(
-    service: "claude" | "codex",
-    result: Awaited<ReturnType<AppChain["refresh"]>>,
-  ) {
+  async function applyFetchResult(service: "claude" | "codex", result: Awaited<ReturnType<AppChain["refresh"]>>) {
     const metrics = result.metrics as MetricsDict | null;
     const error = result.error;
     const source = result.source;
@@ -149,10 +145,7 @@ export function App(props: AppProps = {}) {
     updateMetrics(service, null, String(err), DataSource.FALLBACK);
   }
 
-  async function refreshTrackedChain(
-    service: "claude" | "codex",
-    chain: AppChain,
-  ) {
+  async function refreshTrackedChain(service: "claude" | "codex", chain: AppChain) {
     try {
       const result = await chain.refresh();
       await applyFetchResult(service, result);
@@ -179,14 +172,15 @@ export function App(props: AppProps = {}) {
 
   async function refreshAll() {
     setLastUpdated(new Date().toLocaleTimeString());
-
-    await Promise.all([
-      ...([
+    const activeChains = (
+      [
         [claudeChain, "claude"],
         [codexChain, "codex"],
-      ] as const)
-        .filter(([chain]) => chain !== null)
-        .map(([chain, service]) => refreshTrackedChain(service, chain)),
+      ] as const
+    ).flatMap(([chain, service]) => (chain ? [[chain, service] as const] : []));
+
+    await Promise.all([
+      ...activeChains.map(([chain, service]) => refreshTrackedChain(service, chain)),
       ledger.refresh(),
     ]);
   }
@@ -221,26 +215,25 @@ export function App(props: AppProps = {}) {
 
   const autoRefresh: AppAutoRefresh = deps.createAutoRefresh(refreshAll, 10);
 
-  const isServiceVisible = (panel: "claude" | "codex") =>
-    panel === "claude" ? showClaude() : showCodex();
-  const graphAvailableFor = (service: "claude" | "codex") =>
-    daemonDetection.daemonBackedServices()[service];
+  const isServiceVisible = (panel: "claude" | "codex") => (panel === "claude" ? showClaude() : showCodex());
+  const graphAvailableFor = (service: "claude" | "codex") => daemonDetection.daemonBackedServices()[service];
+  const selectedMetricKeyFor = (service: "claude" | "codex") =>
+    activePanel() === service ? selectedMetricKey() : (METRIC_KEYS[service][0] ?? selectedMetricKey());
+  const graphPredictionFor = (service: "claude" | "codex"): Record<string, CapacityPrediction> | null =>
+    service === "claude" ? claudePrediction() : codexPrediction();
 
   const displayedStatsTab = (service: "claude" | "codex"): StatsTab =>
-    graphTabPanel() === service && graphAvailableFor(service)
-      ? "graph"
-      : contentTab();
+    graphTabPanel() === service && graphAvailableFor(service) ? "graph" : contentTab();
 
   const cycleStatsTab = (direction: "left" | "right") => {
     const service = activePanel();
-    const tabs: StatsTab[] = graphAvailableFor(service)
-      ? [...LEDGER_TABS, "graph"]
-      : [...LEDGER_TABS];
+    const tabs: StatsTab[] = graphAvailableFor(service) ? [...LEDGER_TABS, "graph"] : [...LEDGER_TABS];
     const current = displayedStatsTab(service);
     const currentIndex = tabs.indexOf(current);
-    const nextTab = direction === "right"
-      ? tabs[(currentIndex + 1) % tabs.length]
-      : tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+    const nextTab =
+      direction === "right"
+        ? tabs[(currentIndex + 1) % tabs.length]
+        : tabs[(currentIndex - 1 + tabs.length) % tabs.length];
 
     if (nextTab === "graph") {
       setGraphTabPanel(service);
@@ -248,9 +241,7 @@ export function App(props: AppProps = {}) {
     }
 
     setContentTab(nextTab);
-    setGraphTabPanel((currentPanel) =>
-      currentPanel === service ? null : currentPanel
-    );
+    setGraphTabPanel((currentPanel) => (currentPanel === service ? null : currentPanel));
   };
 
   const setActivePanelIfVisible = (panel: "claude" | "codex") => {
@@ -322,7 +313,9 @@ export function App(props: AppProps = {}) {
     try {
       store = deps.createUsageStore();
       // Clean up rows older than 30 days to prevent unbounded table growth
-      try { store.cleanupOldSnapshots(); } catch {}
+      try {
+        store.cleanupOldSnapshots();
+      } catch {}
     } catch {
       // Database not critical
     }
@@ -359,26 +352,28 @@ export function App(props: AppProps = {}) {
     }
 
     // Start both chains concurrently instead of sequentially
-    await Promise.all(
-      ([
+    const startupChains = (
+      [
         [claudeChain, "claude"],
         [codexChain, "codex"],
-      ] as const)
-        .filter(([chain]) => chain !== null)
-        .map(async ([chain, service]) => {
-          try {
-            const result = await chain.start();
-            const metrics = result.metrics as MetricsDict | null;
-            updateMetrics(service, metrics, result.error, result.source);
-            checkWarning(service, result);
+      ] as const
+    ).flatMap(([chain, service]) => (chain ? [[chain, service] as const] : []));
 
-            if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
-              store.storeSnapshot(service, metrics, result.source);
-            }
-          } catch (err) {
-            updateMetrics(service, null, String(err), DataSource.FALLBACK);
+    await Promise.all(
+      startupChains.map(async ([chain, service]) => {
+        try {
+          const result = await chain.start();
+          const metrics = result.metrics as MetricsDict | null;
+          updateMetrics(service, metrics, result.error, result.source);
+          checkWarning(service, result);
+
+          if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
+            store.storeSnapshot(service, metrics, result.source);
           }
-        })
+        } catch (err) {
+          updateMetrics(service, null, String(err), DataSource.FALLBACK);
+        }
+      }),
     );
 
     setLastUpdated(new Date().toLocaleTimeString());
@@ -426,12 +421,7 @@ export function App(props: AppProps = {}) {
   };
 
   return (
-    <box
-      flexDirection="column"
-      width="100%"
-      height="100%"
-      backgroundColor={theme.base}
-    >
+    <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.base}>
       {/* Row 1: Claude (shown when service=claude or service=all/undefined) */}
       <Show when={showClaude()}>
         <box flexDirection="row" flexGrow={1} width="100%">
@@ -457,6 +447,10 @@ export function App(props: AppProps = {}) {
               weekly={ledger.claudeWeekly()}
               monthly={ledger.claudeMonthly()}
               graphAvailable={graphAvailableFor("claude")}
+              graphMetricKey={selectedMetricKeyFor("claude")}
+              graphMetrics={claudeMetrics()}
+              graphPrediction={graphPredictionFor("claude") ?? undefined}
+              createGraphStore={deps.createGraphStore}
               loading={ledger.loading()}
               error={ledger.error()}
               isActive={activePanel() === "claude" && focusedSide() === "stats"}
@@ -492,6 +486,10 @@ export function App(props: AppProps = {}) {
               weekly={ledger.codexWeekly()}
               monthly={ledger.codexMonthly()}
               graphAvailable={graphAvailableFor("codex")}
+              graphMetricKey={selectedMetricKeyFor("codex")}
+              graphMetrics={codexMetrics()}
+              graphPrediction={graphPredictionFor("codex") ?? undefined}
+              createGraphStore={deps.createGraphStore}
               loading={ledger.loading()}
               error={ledger.error()}
               isActive={activePanel() === "codex" && focusedSide() === "stats"}
@@ -526,7 +524,7 @@ export function App(props: AppProps = {}) {
       </Show>
 
       {/* Fullscreen stats overlay */}
-      <Show when={fullscreenTarget() === "stats"}>
+      <Show when={fullscreenTarget() === "stats" && displayedStatsTab(activePanel()) !== "graph"}>
         <FullscreenStatsView
           service={activePanel()}
           contentTab={contentTab()}
@@ -539,11 +537,18 @@ export function App(props: AppProps = {}) {
         />
       </Show>
 
+      <Show when={fullscreenTarget() === "stats" && displayedStatsTab(activePanel()) === "graph"}>
+        <FullscreenGraphView
+          service={activePanel()}
+          selectedMetricKey={selectedMetricKeyFor(activePanel())}
+          metrics={activePanel() === "claude" ? claudeMetrics() : codexMetrics()}
+          prediction={graphPredictionFor(activePanel()) ?? undefined}
+          createGraphStore={deps.createGraphStore}
+        />
+      </Show>
+
       {/* Help overlay */}
-      <HelpOverlay
-        visible={helpVisible()}
-        onClose={() => setHelpVisible(false)}
-      />
+      <HelpOverlay visible={helpVisible()} onClose={() => setHelpVisible(false)} />
     </box>
   );
 }

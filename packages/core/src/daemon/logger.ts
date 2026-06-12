@@ -1,15 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "fs";
-import { homedir } from "os";
-import { dirname, join } from "path";
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { DaemonLogLevel } from "./config.js";
 
-export const DEFAULT_DAEMON_LOG_PATH = join(
-  homedir(),
-  ".local",
-  "share",
-  "lazyusage",
-  "daemon.log",
-);
+export const DEFAULT_DAEMON_LOG_PATH = join(homedir(), ".local", "share", "lazyusage", "daemon.log");
 
 export interface DaemonLoggerOptions {
   logPath?: string;
@@ -59,9 +53,7 @@ function rotateLogFiles(logPath: string, keepFiles: number): void {
   renameSync(logPath, `${logPath}.1`);
 }
 
-export function createDaemonLogger(
-  options: DaemonLoggerOptions = {},
-): DaemonLogger {
+export function createDaemonLogger(options: DaemonLoggerOptions = {}): DaemonLogger {
   const logPath = options.logPath ?? DEFAULT_DAEMON_LOG_PATH;
   const level = options.level ?? "info";
   const maxSizeBytes = options.maxSizeBytes ?? DEFAULT_MAX_SIZE_BYTES;
@@ -76,10 +68,7 @@ export function createDaemonLogger(
     const entry = `${now().toISOString()} [${entryLevel.toUpperCase()}] ${message}\n`;
     mkdirSync(dirname(logPath), { recursive: true });
 
-    if (
-      existsSync(logPath) &&
-      statSync(logPath).size + Buffer.byteLength(entry, "utf-8") > maxSizeBytes
-    ) {
+    if (existsSync(logPath) && statSync(logPath).size + Buffer.byteLength(entry, "utf-8") > maxSizeBytes) {
       rotateLogFiles(logPath, keepFiles);
     }
 

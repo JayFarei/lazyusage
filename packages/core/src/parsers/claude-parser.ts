@@ -11,12 +11,13 @@
  *   - only new/modified files are read from disk and parsed
  *   - changed files are parsed in parallel
  */
-import { homedir } from "os";
-import { join } from "path";
-import { statSync } from "fs";
-import type { SessionTokens } from "./types.js";
+
+import { statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { resolveProjectName } from "../utils/project.js";
-import { loadCacheSince, putCacheBatch, evictStale } from "./parse-cache.js";
+import { evictStale, loadCacheSince, putCacheBatch } from "./parse-cache.js";
+import type { SessionTokens } from "./types.js";
 
 interface ClaudeEvent {
   type?: string;
@@ -37,17 +38,9 @@ interface ClaudeEvent {
   };
 }
 
-/** Extended session data used for cross-file deduplication before emitting final SessionTokens. */
-interface ParsedEvent extends SessionTokens {
-  /** Canonical dedup key: sessionId:uuid:requestId */
-  dedupKey: string;
-  /** Whether this event came from a subagent file (path contains /subagents/) */
-  isSubagent: boolean;
-}
-
 function dateFromTimestamp(ts: string): string {
   const d = new Date(ts);
-  if (isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return "";
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -96,9 +89,8 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
       const totalTokens = inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens;
 
       // Build dedup key from event identity fields (sessionId:uuid:requestId)
-      const dedupKey = (event.sessionId && event.uuid && event.requestId)
-        ? `${event.sessionId}:${event.uuid}:${event.requestId}`
-        : "";
+      const dedupKey =
+        event.sessionId && event.uuid && event.requestId ? `${event.sessionId}:${event.uuid}:${event.requestId}` : "";
 
       fileResults.push({
         project: resolveProjectName(cwd),
@@ -155,10 +147,7 @@ function deduplicateEvents(sessions: SessionTokens[]): SessionTokens[] {
   return dedupedResults;
 }
 
-export async function parseClaudeSessions(
-  sinceDate?: string,
-  baseDir?: string
-): Promise<SessionTokens[]> {
+export async function parseClaudeSessions(sinceDate?: string, baseDir?: string): Promise<SessionTokens[]> {
   const claudeDir = baseDir ?? join(homedir(), ".claude", "projects");
 
   const glob = new Bun.Glob("**/*.jsonl");
@@ -210,7 +199,11 @@ export async function parseClaudeSessions(
     for (let i = 0; i < toReparse.length; i++) {
       const filePath = toReparse[i];
       const sessions = parsed[i];
-      const mtimeMs = toReparseMtimes.get(filePath)!;
+      const mtimeMs = toReparseMtimes.get(filePath);
+      if (mtimeMs === undefined) {
+        continue;
+      }
+
       newEntries.push({ filePath, mtimeMs, sessions });
       for (const s of sessions) {
         if (!sinceDate || s.date >= sinceDate) results.push(s);

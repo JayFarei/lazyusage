@@ -6,7 +6,11 @@ import type { MetricsDict } from "../types.js";
 import { calculateFallbackTime } from "../utils/time.js";
 
 /** Parse session metric from Claude /usage output */
-export function parseSession(output: string): { used_pct: number | null; remaining_pct: number | null; resets: string | null } {
+export function parseSession(output: string): {
+  used_pct: number | null;
+  remaining_pct: number | null;
+  resets: string | null;
+} {
   const usedMatch = output.match(/Current session[\s\S]*?(\d+)% used/);
   const usedPct = usedMatch ? parseInt(usedMatch[1], 10) : null;
 
@@ -21,7 +25,11 @@ export function parseSession(output: string): { used_pct: number | null; remaini
 }
 
 /** Parse weekly all-models metric from Claude /usage output */
-export function parseWeekAll(output: string): { used_pct: number | null; remaining_pct: number | null; resets: string | null } {
+export function parseWeekAll(output: string): {
+  used_pct: number | null;
+  remaining_pct: number | null;
+  resets: string | null;
+} {
   const usedMatch = output.match(/Current week \(all models\)[\s\S]*?(\d+)% used/);
   const usedPct = usedMatch ? parseInt(usedMatch[1], 10) : null;
 
@@ -36,7 +44,11 @@ export function parseWeekAll(output: string): { used_pct: number | null; remaini
 }
 
 /** Parse weekly Sonnet-only metric from Claude /usage output */
-export function parseWeekSonnet(output: string): { used_pct: number | null; remaining_pct: number | null; resets: string | null } {
+export function parseWeekSonnet(output: string): {
+  used_pct: number | null;
+  remaining_pct: number | null;
+  resets: string | null;
+} {
   const usedMatch = output.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)% used/);
   const usedPct = usedMatch ? parseInt(usedMatch[1], 10) : null;
 
@@ -80,7 +92,9 @@ export function parseSubscription(output: string): string | null {
 }
 
 /** Apply fallback values to missing metrics */
-export function applyFallbacks(metrics: Record<string, { used_pct: number | null; remaining_pct: number | null; resets: string | null }>): void {
+export function applyFallbacks(
+  metrics: Record<string, { used_pct: number | null; remaining_pct: number | null; resets: string | null }>,
+): void {
   // Session fallbacks (5-hour window)
   if (metrics.session.used_pct === null) {
     metrics.session.used_pct = 0;
@@ -120,9 +134,8 @@ export function parseClaudeOutput(output: string): MetricsDict & { __parsed: boo
   };
 
   // Track whether any metric was actually parsed from real output
-  const parsed = metrics.session.used_pct !== null
-    || metrics.week_all.used_pct !== null
-    || metrics.week_sonnet.used_pct !== null;
+  const parsed =
+    metrics.session.used_pct !== null || metrics.week_all.used_pct !== null || metrics.week_sonnet.used_pct !== null;
 
   applyFallbacks(metrics);
 

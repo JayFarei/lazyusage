@@ -3,7 +3,7 @@
  * Detects degraded states from FetchResult and returns actionable user messages.
  */
 
-import { DataSource, type FetchResult, type MetricsDict, type MetricData } from "../types.js";
+import { DataSource, type FetchResult, type MetricData, type MetricsDict } from "../types.js";
 import { parseTimeToDatetime } from "./time.js";
 
 export interface ServiceWarning {
@@ -12,23 +12,13 @@ export interface ServiceWarning {
   action: string;
 }
 
-const AUTH_ERROR_PATTERNS = [
-  /401/i,
-  /403/i,
-  /unauthorized/i,
-  /token.?expired/i,
-  /credentials/i,
-  /authentication/i,
-];
+const AUTH_ERROR_PATTERNS = [/401/i, /403/i, /unauthorized/i, /token.?expired/i, /credentials/i, /authentication/i];
 
 /**
  * Detect actionable warnings from a fetch result.
  * Returns null if no warning is needed.
  */
-export function detectWarning(
-  service: "claude" | "codex",
-  result: FetchResult,
-): ServiceWarning | null {
+export function detectWarning(service: "claude" | "codex", result: FetchResult): ServiceWarning | null {
   // No error and good source = no warning
   if (!result.error && result.source === DataSource.API) return null;
 
@@ -49,10 +39,7 @@ export function detectWarning(
   }
 
   // Degraded to cache/fallback with a non-auth error
-  if (
-    result.source === DataSource.CACHE ||
-    result.source === DataSource.FALLBACK
-  ) {
+  if (result.source === DataSource.CACHE || result.source === DataSource.FALLBACK) {
     if (error.includes("All providers failed")) {
       const loginCmd = service === "claude" ? "claude" : "codex login";
       return {
@@ -119,13 +106,7 @@ function parseResetForComparison(timeStr: string, referenceDate: Date): Date {
   if (meridiem.toLowerCase() === "pm" && hour !== 12) hour += 12;
   if (meridiem.toLowerCase() === "am" && hour === 12) hour = 0;
 
-  return new Date(
-    referenceDate.getFullYear(),
-    referenceDate.getMonth(),
-    referenceDate.getDate(),
-    hour,
-    minute,
-  );
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), hour, minute);
 }
 
 /**

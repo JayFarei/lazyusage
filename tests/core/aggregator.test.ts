@@ -2,12 +2,8 @@
  * Tests for aggregateDaily, aggregateWeekly, aggregateMonthly.
  * Uses fixed date strings to avoid test sensitivity to current date.
  */
-import { describe, test, expect } from "bun:test";
-import {
-  aggregateDaily,
-  aggregateWeekly,
-  aggregateMonthly,
-} from "@lazyusage/core/parsers/aggregator.js";
+import { describe, expect, test } from "bun:test";
+import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "@lazyusage/core/parsers/aggregator.js";
 import type { SessionTokens } from "@lazyusage/core/parsers/types";
 
 /** Get today, N days ago, as YYYY-MM-DD local strings */
@@ -37,6 +33,15 @@ function makeSession(overrides: Partial<SessionTokens> = {}): SessionTokens {
   };
 }
 
+function requireProjectUsage(result: ReturnType<typeof aggregateDaily>, project: string): (typeof result)[number] {
+  const usage = result.find((row) => row.project === project);
+  if (!usage) {
+    throw new Error(`Expected usage row for project: ${project}`);
+  }
+
+  return usage;
+}
+
 describe("aggregateDaily", () => {
   test("returns empty array for empty input", () => {
     expect(aggregateDaily([])).toEqual([]);
@@ -61,7 +66,7 @@ describe("aggregateDaily", () => {
     ];
     const result = aggregateDaily(sessions);
     expect(result).toHaveLength(2);
-    const appA = result.find((r) => r.project === "app-a")!;
+    const appA = requireProjectUsage(result, "app-a");
     expect(appA.totalTokens).toBe(1500);
     expect(appA.inputTokens).toBe(1200);
     expect(appA.outputTokens).toBe(300);
@@ -91,8 +96,8 @@ describe("aggregateDaily", () => {
       makeSession({ project: "small", totalTokens: 2500, date: todayStr() }),
     ];
     const result = aggregateDaily(sessions);
-    const big = result.find((r) => r.project === "big")!;
-    const small = result.find((r) => r.project === "small")!;
+    const big = requireProjectUsage(result, "big");
+    const small = requireProjectUsage(result, "small");
     expect(big.pctOfTotal).toBeCloseTo(75, 1);
     expect(small.pctOfTotal).toBeCloseTo(25, 1);
   });
@@ -112,9 +117,7 @@ describe("aggregateWeekly", () => {
   });
 
   test("returns empty for no sessions in window", () => {
-    const sessions = [
-      makeSession({ date: daysAgoStr(30), totalTokens: 100 }),
-    ];
+    const sessions = [makeSession({ date: daysAgoStr(30), totalTokens: 100 })];
     const result = aggregateWeekly(sessions);
     expect(result).toHaveLength(0);
   });

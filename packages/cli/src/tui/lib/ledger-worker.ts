@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "@lazyusage/core/parsers/aggregator";
 /**
  * Standalone worker script for loading per-project usage ledger data.
  * Replaces ccusage-worker.ts and codex-ccusage.ts.
@@ -14,7 +15,6 @@
  */
 import { parseClaudeSessions } from "@lazyusage/core/parsers/claude-parser";
 import { parseCodexSessions } from "@lazyusage/core/parsers/codex-parser";
-import { aggregateDaily, aggregateWeekly, aggregateMonthly } from "@lazyusage/core/parsers/aggregator";
 
 function defaultSince(): string {
   const d = new Date();
@@ -26,15 +26,10 @@ function defaultSince(): string {
 }
 
 const sinceIdx = process.argv.indexOf("--since");
-const since = sinceIdx !== -1 && process.argv[sinceIdx + 1]
-  ? process.argv[sinceIdx + 1]
-  : defaultSince();
+const since = sinceIdx !== -1 && process.argv[sinceIdx + 1] ? process.argv[sinceIdx + 1] : defaultSince();
 
 try {
-  const [claudeSessions, codexSessions] = await Promise.all([
-    parseClaudeSessions(since),
-    parseCodexSessions(since),
-  ]);
+  const [claudeSessions, codexSessions] = await Promise.all([parseClaudeSessions(since), parseCodexSessions(since)]);
 
   const result = {
     claude: {

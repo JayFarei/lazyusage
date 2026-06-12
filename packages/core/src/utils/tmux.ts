@@ -36,9 +36,7 @@ export class EphemeralSession {
   }
 
   async start(): Promise<void> {
-    await runTmux([
-      "new-session", "-d", "-s", this.sessionName, this.command,
-    ]);
+    await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
     await Bun.sleep(2000);
   }
 
@@ -55,18 +53,13 @@ export class EphemeralSession {
   }
 
   async captureOutput(): Promise<string> {
-    const { stdout } = await runTmux(
-      ["capture-pane", "-t", this.sessionName, "-p", "-S", "-"],
-      { captureOutput: true },
-    );
+    const { stdout } = await runTmux(["capture-pane", "-t", this.sessionName, "-p", "-S", "-"], {
+      captureOutput: true,
+    });
     return stdout;
   }
 
-  async waitForContent(
-    marker: string,
-    timeout: number = 8000,
-    interval: number = 500,
-  ): Promise<string> {
+  async waitForContent(marker: string, timeout: number = 8000, interval: number = 500): Promise<string> {
     let elapsed = 0;
     let output = "";
     while (elapsed < timeout) {
@@ -81,10 +74,7 @@ export class EphemeralSession {
   }
 
   async cleanup(): Promise<void> {
-    await runTmux(
-      ["kill-session", "-t", this.sessionName],
-      { suppressErrors: true },
-    );
+    await runTmux(["kill-session", "-t", this.sessionName], { suppressErrors: true });
   }
 }
 
@@ -99,19 +89,17 @@ export class PersistentSession {
   }
 
   async windup(): Promise<void> {
-    await runTmux([
-      "new-session", "-d", "-s", this.sessionName, this.command,
-    ]);
+    await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
     await Bun.sleep(2000);
     this.sessionStarted = true;
   }
 
   async isAlive(): Promise<boolean> {
     if (!this.sessionStarted) return false;
-    const { exitCode } = await runTmux(
-      ["has-session", "-t", this.sessionName],
-      { captureOutput: true, suppressErrors: true },
-    );
+    const { exitCode } = await runTmux(["has-session", "-t", this.sessionName], {
+      captureOutput: true,
+      suppressErrors: true,
+    });
     return exitCode === 0;
   }
 
@@ -128,18 +116,13 @@ export class PersistentSession {
   }
 
   async captureOutput(): Promise<string> {
-    const { stdout } = await runTmux(
-      ["capture-pane", "-t", this.sessionName, "-p", "-S", "-"],
-      { captureOutput: true },
-    );
+    const { stdout } = await runTmux(["capture-pane", "-t", this.sessionName, "-p", "-S", "-"], {
+      captureOutput: true,
+    });
     return stdout;
   }
 
-  async waitForContent(
-    marker: string,
-    timeout: number = 8000,
-    interval: number = 500,
-  ): Promise<string> {
+  async waitForContent(marker: string, timeout: number = 8000, interval: number = 500): Promise<string> {
     let elapsed = 0;
     let output = "";
     while (elapsed < timeout) {
@@ -155,10 +138,7 @@ export class PersistentSession {
 
   async winddown(): Promise<void> {
     if (this.sessionStarted) {
-      await runTmux(
-        ["kill-session", "-t", this.sessionName],
-        { suppressErrors: true },
-      );
+      await runTmux(["kill-session", "-t", this.sessionName], { suppressErrors: true });
       this.sessionStarted = false;
     }
   }

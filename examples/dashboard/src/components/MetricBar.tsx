@@ -21,14 +21,9 @@ export function MetricBar({ metric }: Props) {
         <span>{pct.toFixed(1)}% used</span>
       </div>
       <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="text-xs text-gray-500 mt-1">
-        Resets: {metric.resets}
-      </div>
+      <div className="text-xs text-gray-500 mt-1">Resets: {metric.resets}</div>
     </div>
   );
 }

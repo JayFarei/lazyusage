@@ -2,10 +2,10 @@
  * Unit tests for PersistentFallbackChain refresh-before-PTY logic.
  * Pure mock test - no network, no files, no Keychain.
  */
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { PersistentFallbackChain, type TokenRefreshable } from "../../packages/core/src/providers/chain.js";
+import type { FetchResult, PersistentUsageProvider, UsageProvider } from "../../packages/core/src/types.js";
 import { DataSource } from "../../packages/core/src/types.js";
-import type { FetchResult, UsageProvider, PersistentUsageProvider } from "../../packages/core/src/types.js";
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -36,7 +36,9 @@ class MockAPIProvider implements UsageProvider {
   callCount = 0;
   _available = false;
 
-  isAvailable(): boolean { return this._available; }
+  isAvailable(): boolean {
+    return this._available;
+  }
 
   async fetch(): Promise<FetchResult> {
     this.callCount++;
@@ -50,8 +52,12 @@ class MockPTYProvider implements PersistentUsageProvider {
   startCalled = false;
   refreshCallCount = 0;
 
-  isAvailable(): boolean { return true; }
-  async fetch(): Promise<FetchResult> { return makePtyResult(); }
+  isAvailable(): boolean {
+    return true;
+  }
+  async fetch(): Promise<FetchResult> {
+    return makePtyResult();
+  }
 
   async start(): Promise<FetchResult> {
     this.startCalled = true;
@@ -78,7 +84,9 @@ class MockCredStore implements TokenRefreshable {
     this._apiProvider = provider;
   }
 
-  canRefresh(): boolean { return this._canRefresh; }
+  canRefresh(): boolean {
+    return this._canRefresh;
+  }
 
   async tryRefreshToken(): Promise<boolean> {
     this.refreshCalled = true;

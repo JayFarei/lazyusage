@@ -3,16 +3,17 @@
  * Queries UsageStore for daily boundaries and runs prediction engine
  * on each 30s tick. Returns prediction state per metric or null on error.
  */
-import { createSignal, createEffect, on } from "solid-js";
+
 import {
-  UsageStore,
-  computeDailyDeltas,
-  predict,
   type CapacityPrediction,
-  type ServiceName,
+  computeDailyDeltas,
   type MetricsDict,
+  predict,
+  type ServiceName,
+  UsageStore,
   WEEKLY_WINDOW_HOURS,
 } from "@lazyusage/core";
+import { createEffect, createSignal, on } from "solid-js";
 
 /** Weekly metric keys that are predictable */
 const PREDICTABLE_METRICS: Record<string, string[]> = {
@@ -77,10 +78,7 @@ function predictForService(
 
       results[metricName] = prediction;
       hasAny = true;
-    } catch {
-      // Silent fallback on error
-      continue;
-    }
+    } catch {}
   }
 
   return hasAny ? results : null;

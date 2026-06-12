@@ -25,8 +25,7 @@ export function usePanelState() {
   const [sortColumn, setSortColumn] = createSignal<LedgerSortColumn>("totalTokens");
   const [sortDirection, setSortDirection] = createSignal<SortDirection>("desc");
 
-  const metricKeysForPanel = (panel: ActivePanel): string[] =>
-    METRIC_KEYS_MAP[panel];
+  const metricKeysForPanel = (panel: ActivePanel): string[] => METRIC_KEYS_MAP[panel];
 
   const selectedMetricKey = () => {
     const keys = metricKeysForPanel(activePanel());

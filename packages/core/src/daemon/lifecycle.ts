@@ -1,17 +1,11 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { dirname, join } from "path";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { UsageStore } from "../storage/database.js";
 import type { DaemonCollector } from "./collector.js";
 import type { DaemonLogger } from "./logger.js";
 
-export const DEFAULT_DAEMON_PID_PATH = join(
-  homedir(),
-  ".local",
-  "share",
-  "lazyusage",
-  "daemon.pid",
-);
+export const DEFAULT_DAEMON_PID_PATH = join(homedir(), ".local", "share", "lazyusage", "daemon.pid");
 
 type DaemonSignal = "SIGINT" | "SIGTERM";
 type DaemonSignalHandler = () => Promise<void>;
@@ -35,23 +29,18 @@ export interface DaemonLifecycle {
 
 export interface DaemonLifecycleOptions {
   collector: Pick<DaemonCollector, "start" | "stop">;
-  store: Pick<UsageStore, "close"> &
-    Partial<Pick<UsageStore, "recordDaemonHeartbeat">>;
+  store: Pick<UsageStore, "close"> & Partial<Pick<UsageStore, "recordDaemonHeartbeat">>;
   logger: Pick<DaemonLogger, "warn">;
   pidFilePath?: string;
   pid?: number;
   onSignal?: (signal: DaemonSignal, handler: DaemonSignalHandler) => void;
   offSignal?: (signal: DaemonSignal, handler: DaemonSignalHandler) => void;
-  spawnBackground?: (
-    options: DaemonBackgroundLaunchOptions,
-  ) => DaemonBackgroundProcess;
+  spawnBackground?: (options: DaemonBackgroundLaunchOptions) => DaemonBackgroundProcess;
 }
 
 const SHUTDOWN_SIGNALS: DaemonSignal[] = ["SIGINT", "SIGTERM"];
 
-export function createDaemonLifecycle(
-  options: DaemonLifecycleOptions,
-): DaemonLifecycle {
+export function createDaemonLifecycle(options: DaemonLifecycleOptions): DaemonLifecycle {
   const pidFilePath = options.pidFilePath ?? DEFAULT_DAEMON_PID_PATH;
   const pid = options.pid ?? process.pid;
   const onSignal =
@@ -77,7 +66,9 @@ export function createDaemonLifecycle(
       }));
 
   let started = false;
+  let starting = false;
   let shuttingDown = false;
+  let pendingShutdown = false;
   const signalHandlers = new Map<DaemonSignal, DaemonSignalHandler>();
 
   const unregisterSignals = (): void => {
@@ -88,7 +79,16 @@ export function createDaemonLifecycle(
   };
 
   const shutdown = async (): Promise<void> => {
-    if (!started || shuttingDown) {
+    if (shuttingDown) {
+      return;
+    }
+
+    if (starting && !started) {
+      pendingShutdown = true;
+      return;
+    }
+
+    if (!started) {
       return;
     }
 
@@ -109,24 +109,25 @@ export function createDaemonLifecycle(
         rmSync(pidFilePath, { force: true });
       }
       started = false;
+      starting = false;
+      pendingShutdown = false;
       shuttingDown = false;
     }
   };
 
   return {
-    async startBackground(
-      input: DaemonBackgroundLaunchOptions,
-    ): Promise<number> {
+    async startBackground(input: DaemonBackgroundLaunchOptions): Promise<number> {
       const child = spawnBackground(input);
       child.unref?.();
       return child.pid;
     },
 
     async startForeground(): Promise<void> {
-      if (started) {
+      if (started || starting) {
         return;
       }
 
+      starting = true;
       const startedAt = new Date().toISOString();
       mkdirSync(dirname(pidFilePath), { recursive: true });
       writeFileSync(pidFilePath, `${pid}\n`, "utf-8");
@@ -139,13 +140,22 @@ export function createDaemonLifecycle(
 
       try {
         await options.collector.start();
+        started = true;
         options.store.recordDaemonHeartbeat?.("_daemon", {
           pid,
           startedAt,
         });
-        started = true;
+
+        if (pendingShutdown) {
+          await shutdown();
+          return;
+        }
+
+        starting = false;
       } catch (error) {
         unregisterSignals();
+        starting = false;
+        pendingShutdown = false;
         rmSync(pidFilePath, { force: true });
         throw error;
       }

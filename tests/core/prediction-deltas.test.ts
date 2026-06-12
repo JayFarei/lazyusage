@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { computeDailyDeltas } from "../../packages/core/src/prediction/deltas.js";
 import type { DailyBoundary } from "../../packages/core/src/types.js";
 

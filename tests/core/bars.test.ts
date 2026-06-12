@@ -1,12 +1,11 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   calculateBarWidth,
-  createTimeMarkers,
   createCapacityBar,
   createPeriodBar,
-  BAR_WIDTH_STEP,
-  MIN_BAR_WIDTH,
+  createTimeMarkers,
   MAX_BAR_WIDTH,
+  MIN_BAR_WIDTH,
 } from "@lazyusage/core/utils/bars.js";
 
 describe("calculateBarWidth", () => {

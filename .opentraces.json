@@ -1,0 +1,13 @@
+{
+  "marker_version": "2",
+  "project_id": "b1ecc6eae15547b897ddba48a7e5909c",
+  "review_policy": "review",
+  "push_policy": "manual",
+  "remotes": {},
+  "active_remote": null,
+  "agents": [
+    "claude-code",
+    "codex-cli",
+    "pi"
+  ]
+}

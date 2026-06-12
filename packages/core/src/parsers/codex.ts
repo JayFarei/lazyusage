@@ -8,24 +8,39 @@ import { calculateFallbackTime, format12hTime, formatResetDate } from "../utils/
 /** Parse month string to month number (0-indexed for JS Date) */
 function parseMonth(monthStr: string): number | null {
   const months: Record<string, number> = {
-    jan: 0, january: 0,
-    feb: 1, february: 1,
-    mar: 2, march: 2,
-    apr: 3, april: 3,
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
     may: 4,
-    jun: 5, june: 5,
-    jul: 6, july: 6,
-    aug: 7, august: 7,
-    sep: 8, september: 8,
-    oct: 9, october: 9,
-    nov: 10, november: 10,
-    dec: 11, december: 11,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11,
   };
   return months[monthStr.toLowerCase()] ?? null;
 }
 
 /** Parse 5h limit metric from Codex /status output */
-export function parse5hLimit(output: string): { used_pct: number | null; remaining_pct: number | null; resets: string | null } {
+export function parse5hLimit(output: string): {
+  used_pct: number | null;
+  remaining_pct: number | null;
+  resets: string | null;
+} {
   const leftMatch = output.match(/5h limit:.*?(\d+)% left/);
   const leftPct = leftMatch ? parseInt(leftMatch[1], 10) : null;
 
@@ -33,7 +48,7 @@ export function parse5hLimit(output: string): { used_pct: number | null; remaini
   const resetRaw = resetMatch ? resetMatch[1].trim() : null;
 
   let resets: string | null = null;
-  if (resetRaw && resetRaw.includes(":")) {
+  if (resetRaw?.includes(":")) {
     const [hourStr, minuteStr] = resetRaw.split(":");
     resets = format12hTime(parseInt(hourStr, 10), parseInt(minuteStr, 10));
   }
@@ -46,7 +61,11 @@ export function parse5hLimit(output: string): { used_pct: number | null; remaini
 }
 
 /** Parse weekly limit metric from Codex /status output (multi-line) */
-export function parseWeeklyLimit(output: string): { used_pct: number | null; remaining_pct: number | null; resets: string | null } {
+export function parseWeeklyLimit(output: string): {
+  used_pct: number | null;
+  remaining_pct: number | null;
+  resets: string | null;
+} {
   const leftMatch = output.match(/weekly limit:.*?(\d+)% left/i);
   const leftPct = leftMatch ? parseInt(leftMatch[1], 10) : null;
 
@@ -91,7 +110,9 @@ export function parseSubscription(output: string): string | null {
 }
 
 /** Apply fallback values to missing metrics */
-export function applyFallbacks(metrics: Record<string, { used_pct: number | null; remaining_pct: number | null; resets: string | null }>): void {
+export function applyFallbacks(
+  metrics: Record<string, { used_pct: number | null; remaining_pct: number | null; resets: string | null }>,
+): void {
   // 5h fallbacks
   if (metrics["5h"].used_pct === null) {
     metrics["5h"].used_pct = 0;

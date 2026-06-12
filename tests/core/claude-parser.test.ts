@@ -2,10 +2,10 @@
  * Tests for parseClaudeSessions().
  * Uses temp directories with synthetic JSONL files.
  */
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { join } from "path";
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseClaudeSessions } from "@lazyusage/core/parsers/claude-parser.js";
 
 async function makeTempDir(): Promise<string> {
@@ -13,7 +13,7 @@ async function makeTempDir(): Promise<string> {
 }
 
 async function writeJsonl(dir: string, name: string, lines: unknown[]): Promise<void> {
-  await Bun.write(join(dir, name), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  await Bun.write(join(dir, name), `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
 }
 
 /** Build a synthetic assistant event line */
@@ -81,10 +81,10 @@ describe("parseClaudeSessions - valid files", () => {
       ]);
       const results = await parseClaudeSessions(undefined, tmpDir);
       expect(results).toHaveLength(1);
-      expect(results[0].inputTokens).toBe(1000);        // fresh input only
+      expect(results[0].inputTokens).toBe(1000); // fresh input only
       expect(results[0].cacheReadTokens).toBe(200);
       expect(results[0].cacheCreationTokens).toBe(300);
-      expect(results[0].totalTokens).toBe(2000);        // 1000 + 200 + 300 + 500
+      expect(results[0].totalTokens).toBe(2000); // 1000 + 200 + 300 + 500
     } finally {
       await rm(tmpDir, { recursive: true });
     }
@@ -93,9 +93,7 @@ describe("parseClaudeSessions - valid files", () => {
   test("extracts project name from cwd", async () => {
     const tmpDir = await makeTempDir();
     try {
-      await writeJsonl(tmpDir, "session.jsonl", [
-        assistantEvent({ cwd: "/home/user/projects/my-app" }),
-      ]);
+      await writeJsonl(tmpDir, "session.jsonl", [assistantEvent({ cwd: "/home/user/projects/my-app" })]);
       const results = await parseClaudeSessions(undefined, tmpDir);
       expect(results[0].project).toBe("my-app");
       expect(results[0].cwd).toBe("/home/user/projects/my-app");
@@ -107,9 +105,7 @@ describe("parseClaudeSessions - valid files", () => {
   test("extracts date from timestamp as YYYY-MM-DD", async () => {
     const tmpDir = await makeTempDir();
     try {
-      await writeJsonl(tmpDir, "session.jsonl", [
-        assistantEvent({ timestamp: "2026-02-17T10:00:00.000Z" }),
-      ]);
+      await writeJsonl(tmpDir, "session.jsonl", [assistantEvent({ timestamp: "2026-02-17T10:00:00.000Z" })]);
       const results = await parseClaudeSessions(undefined, tmpDir);
       expect(results[0].service).toBe("claude");
       // Date is in local time, so we just verify it's a valid date string
@@ -231,7 +227,7 @@ describe("parseClaudeSessions - error handling", () => {
 describe("parseClaudeSessions - cross-file deduplication", () => {
   test("duplicate events across parent and subagent files are deduplicated", async () => {
     const tmpDir = await makeTempDir();
-    const { mkdirSync } = await import("fs");
+    const { mkdirSync } = await import("node:fs");
     try {
       // Same event appears in parent file and subagent file
       const sharedEvent = assistantEvent({
@@ -260,7 +256,7 @@ describe("parseClaudeSessions - cross-file deduplication", () => {
 
   test("dedup prefers subagent file over parent file", async () => {
     const tmpDir = await makeTempDir();
-    const { mkdirSync } = await import("fs");
+    const { mkdirSync } = await import("node:fs");
     try {
       const parentEvent = assistantEvent({
         inputTokens: 1000,
@@ -296,12 +292,8 @@ describe("parseClaudeSessions - cross-file deduplication", () => {
     const tmpDir = await makeTempDir();
     try {
       // Events without sessionId/uuid/requestId cannot be deduplicated
-      await writeJsonl(tmpDir, "a.jsonl", [
-        assistantEvent({ inputTokens: 1000 }),
-      ]);
-      await writeJsonl(tmpDir, "b.jsonl", [
-        assistantEvent({ inputTokens: 2000 }),
-      ]);
+      await writeJsonl(tmpDir, "a.jsonl", [assistantEvent({ inputTokens: 1000 })]);
+      await writeJsonl(tmpDir, "b.jsonl", [assistantEvent({ inputTokens: 2000 })]);
 
       const results = await parseClaudeSessions(undefined, tmpDir);
       // Both kept since no dedup keys

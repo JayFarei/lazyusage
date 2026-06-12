@@ -5,15 +5,15 @@
  * macOS only (browser cookie extraction requires Keychain access).
  */
 
-import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
-import { formatResetFromIso } from "../utils/time.js";
 import { API_TIMEOUT_MS } from "../constants.js";
+import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
+import { DataSource } from "../types.js";
 import {
   getClaudeSessionCookie as _getClaudeSessionCookie,
   invalidateClaudeSessionCookie as _invalidateClaudeSessionCookie,
   type SessionCookie,
 } from "../utils/cookies.js";
+import { formatResetFromIso } from "../utils/time.js";
 
 const WEB_RATE_LIMIT_DEFAULT_SECONDS = 60;
 
@@ -79,17 +79,14 @@ export class ClaudeWebProvider implements UsageProvider {
       }
 
       // Fetch usage
-      const response = await globalThis.fetch(
-        `${ClaudeWebProvider.BASE_URL}/organizations/${this._orgId}/usage`,
-        {
-          method: "GET",
-          headers: {
-            Cookie: `sessionKey=${cookie.value}`,
-            Accept: "application/json",
-          },
-          signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      const response = await globalThis.fetch(`${ClaudeWebProvider.BASE_URL}/organizations/${this._orgId}/usage`, {
+        method: "GET",
+        headers: {
+          Cookie: `sessionKey=${cookie.value}`,
+          Accept: "application/json",
         },
-      );
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
 
       if (response.status === 401 || response.status === 403) {
         this._cookies.invalidate();
@@ -104,10 +101,7 @@ export class ClaudeWebProvider implements UsageProvider {
       }
 
       if (response.status === 429) {
-        const retryAfter = parseInt(
-          response.headers.get("retry-after") ?? String(WEB_RATE_LIMIT_DEFAULT_SECONDS),
-          10,
-        );
+        const retryAfter = parseInt(response.headers.get("retry-after") ?? String(WEB_RATE_LIMIT_DEFAULT_SECONDS), 10);
         ClaudeWebProvider._rateLimitedUntil = Date.now() + retryAfter * 1000;
         return {
           metrics: null,
@@ -151,17 +145,14 @@ export class ClaudeWebProvider implements UsageProvider {
 
   private async _fetchOrgId(sessionKey: string): Promise<string | null> {
     try {
-      const response = await globalThis.fetch(
-        `${ClaudeWebProvider.BASE_URL}/organizations`,
-        {
-          method: "GET",
-          headers: {
-            Cookie: `sessionKey=${sessionKey}`,
-            Accept: "application/json",
-          },
-          signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      const response = await globalThis.fetch(`${ClaudeWebProvider.BASE_URL}/organizations`, {
+        method: "GET",
+        headers: {
+          Cookie: `sessionKey=${sessionKey}`,
+          Accept: "application/json",
         },
-      );
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {

@@ -1,9 +1,10 @@
 /**
  * Reactive metrics state management hook.
  */
+
+import type { FetchResult, MetricsDict, ServiceName, ServiceWarning } from "@lazyusage/core";
+import { detectLimitAdjustment, detectWarning } from "@lazyusage/core";
 import { createSignal } from "solid-js";
-import type { MetricsDict, ServiceName, FetchResult, ServiceWarning } from "@lazyusage/core";
-import { detectWarning, detectLimitAdjustment } from "@lazyusage/core";
 
 export function useMetrics() {
   const [claudeMetrics, setClaudeMetrics] = createSignal<MetricsDict | null>(null);
@@ -16,20 +17,13 @@ export function useMetrics() {
   /** Previous metrics per service, used to detect limit adjustments */
   const prevMetrics: Record<string, MetricsDict> = {};
 
-  function updateMetrics(
-    service: ServiceName,
-    metrics: MetricsDict | null,
-    error: string | null,
-    source: string,
-  ) {
+  function updateMetrics(service: ServiceName, metrics: MetricsDict | null, error: string | null, source: string) {
     // Detect limit adjustments before updating state
     if (metrics && prevMetrics[service]) {
       const adjustments = detectLimitAdjustment(service, prevMetrics[service], metrics);
       if (adjustments.length > 0) {
         setWarnings((prev) => {
-          const filtered = prev.filter(
-            (w) => !(w.service === service && w.message.includes("limit adjusted")),
-          );
+          const filtered = prev.filter((w) => !(w.service === service && w.message.includes("limit adjusted")));
           return [...filtered, ...adjustments];
         });
       }

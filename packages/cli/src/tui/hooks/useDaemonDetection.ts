@@ -1,16 +1,8 @@
-import { readFileSync } from "fs";
-import { createSignal, type Accessor } from "solid-js";
-import {
-  DEFAULT_DAEMON_PID_PATH,
-  UsageStore,
-  type MetricsDict,
-  type ServiceName,
-} from "@lazyusage/core";
+import { readFileSync } from "node:fs";
+import { DEFAULT_DAEMON_PID_PATH, type MetricsDict, type ServiceName, UsageStore } from "@lazyusage/core";
+import { type Accessor, createSignal } from "solid-js";
 
-type DaemonDetectionStore = Pick<
-  UsageStore,
-  "isDaemonHeartbeatFresh" | "getLatestSnapshot" | "close"
->;
+type DaemonDetectionStore = Pick<UsageStore, "isDaemonHeartbeatFresh" | "getLatestSnapshot" | "close">;
 
 interface DaemonBackedServices {
   claude: boolean;
@@ -43,19 +35,13 @@ function createInactiveServices(): DaemonBackedServices {
   };
 }
 
-export function useDaemonDetection(
-  options: DaemonDetectionOptions = {},
-): DaemonDetectionHook {
+export function useDaemonDetection(options: DaemonDetectionOptions = {}): DaemonDetectionHook {
   const [daemonHealthy, setDaemonHealthy] = createSignal(false);
-  const [daemonBackedServices, setDaemonBackedServices] =
-    createSignal<DaemonBackedServices>(createInactiveServices());
-  const [daemonMetrics, setDaemonMetrics] = createSignal<
-    Partial<Record<ServiceName, MetricsDict>>
-  >({});
+  const [daemonBackedServices, setDaemonBackedServices] = createSignal<DaemonBackedServices>(createInactiveServices());
+  const [daemonMetrics, setDaemonMetrics] = createSignal<Partial<Record<ServiceName, MetricsDict>>>({});
 
   const pidFilePath = options.pidFilePath ?? DEFAULT_DAEMON_PID_PATH;
-  const readPidFile =
-    options.readPidFile ?? ((path: string) => readFileSync(path, "utf-8"));
+  const readPidFile = options.readPidFile ?? ((path: string) => readFileSync(path, "utf-8"));
   const isProcessRunning =
     options.isProcessRunning ??
     ((pid: number): boolean => {
@@ -111,9 +97,7 @@ export function useDaemonDetection(
 
       setDaemonBackedServices(nextBackedServices);
       setDaemonMetrics(nextMetrics);
-      setDaemonHealthy(
-        nextBackedServices.claude || nextBackedServices.codex,
-      );
+      setDaemonHealthy(nextBackedServices.claude || nextBackedServices.codex);
     } finally {
       store.close();
     }

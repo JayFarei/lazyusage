@@ -6,10 +6,10 @@
  */
 
 import { Database } from "bun:sqlite";
-import { homedir } from "os";
-import { join } from "path";
-import { existsSync, readdirSync } from "fs";
-import { createDecipheriv, pbkdf2Sync } from "crypto";
+import { createDecipheriv, pbkdf2Sync } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export interface SessionCookie {
   value: string;
@@ -53,20 +53,12 @@ function extractClaudeSessionCookie(): SessionCookie | null {
 
 function extractFromFirefox(): SessionCookie | null {
   try {
-    const profilesDir = join(
-      homedir(),
-      "Library",
-      "Application Support",
-      "Firefox",
-      "Profiles",
-    );
+    const profilesDir = join(homedir(), "Library", "Application Support", "Firefox", "Profiles");
 
     if (!existsSync(profilesDir)) return null;
 
     // Find the default-release profile
-    const profiles = readdirSync(profilesDir).filter(
-      (d) => d.endsWith(".default-release") || d.endsWith(".default"),
-    );
+    const profiles = readdirSync(profilesDir).filter((d) => d.endsWith(".default-release") || d.endsWith(".default"));
     if (profiles.length === 0) return null;
 
     for (const profile of profiles) {
@@ -76,18 +68,15 @@ function extractFromFirefox(): SessionCookie | null {
       try {
         // Open read-only to avoid locking issues with running Firefox
         const db = new Database(cookieDb, { readonly: true });
-        const row = db.query(
-          "SELECT value FROM moz_cookies WHERE host = '.claude.ai' AND name = 'sessionKey' LIMIT 1",
-        ).get() as { value: string } | null;
+        const row = db
+          .query("SELECT value FROM moz_cookies WHERE host = '.claude.ai' AND name = 'sessionKey' LIMIT 1")
+          .get() as { value: string } | null;
         db.close();
 
         if (row?.value?.startsWith("sk-ant-")) {
           return { value: row.value, source: "Firefox" };
         }
-      } catch {
-        // Firefox may have the DB locked, try next profile
-        continue;
-      }
+      } catch {}
     }
 
     return null;
@@ -100,15 +89,7 @@ function extractFromFirefox(): SessionCookie | null {
 
 function extractFromChrome(): SessionCookie | null {
   try {
-    const cookieDb = join(
-      homedir(),
-      "Library",
-      "Application Support",
-      "Google",
-      "Chrome",
-      "Default",
-      "Cookies",
-    );
+    const cookieDb = join(homedir(), "Library", "Application Support", "Google", "Chrome", "Default", "Cookies");
 
     if (!existsSync(cookieDb)) return null;
 
@@ -117,9 +98,9 @@ function extractFromChrome(): SessionCookie | null {
     if (!encryptionKey) return null;
 
     const db = new Database(cookieDb, { readonly: true });
-    const row = db.query(
-      "SELECT encrypted_value FROM cookies WHERE host_key = '.claude.ai' AND name = 'sessionKey' LIMIT 1",
-    ).get() as { encrypted_value: Uint8Array } | null;
+    const row = db
+      .query("SELECT encrypted_value FROM cookies WHERE host_key = '.claude.ai' AND name = 'sessionKey' LIMIT 1")
+      .get() as { encrypted_value: Uint8Array } | null;
     db.close();
 
     if (!row?.encrypted_value) return null;
@@ -137,12 +118,10 @@ function extractFromChrome(): SessionCookie | null {
 
 function getChromeEncryptionKey(): Uint8Array | null {
   try {
-    const proc = Bun.spawnSync([
-      "/usr/bin/security",
-      "find-generic-password",
-      "-s", "Chrome Safe Storage",
-      "-w",
-    ], { stdout: "pipe", stderr: "ignore" });
+    const proc = Bun.spawnSync(["/usr/bin/security", "find-generic-password", "-s", "Chrome Safe Storage", "-w"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
 
     if (proc.exitCode !== 0) return null;
 
@@ -193,7 +172,11 @@ function decryptGCM(data: Uint8Array, key: Uint8Array): string | null {
     const ciphertext = data.slice(12, data.length - 16);
 
     const decipher = createDecipheriv("aes-128-gcm", key, nonce);
-    (decipher as any).setAuthTag(tag);
+    if (!("setAuthTag" in decipher) || typeof decipher.setAuthTag !== "function") {
+      return null;
+    }
+
+    decipher.setAuthTag(tag);
 
     const part1 = new Uint8Array(decipher.update(ciphertext));
     const part2 = new Uint8Array(decipher.final());

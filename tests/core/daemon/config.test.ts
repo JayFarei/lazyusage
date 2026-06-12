@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadDaemonConfig } from "../../../packages/core/src/daemon/config.js";
 
 function makeTempDir(): string {
@@ -36,14 +36,7 @@ describe("loadDaemonConfig", () => {
   test("loads daemon settings from an optional TOML config file", () => {
     writeFileSync(
       configPath,
-      [
-        "interval = 120",
-        'services = ["codex"]',
-        'log_level = "debug"',
-        "",
-        "[pty]",
-        "recycle_hours = 6",
-      ].join("\n"),
+      ["interval = 120", 'services = ["codex"]', 'log_level = "debug"', "", "[pty]", "recycle_hours = 6"].join("\n"),
     );
 
     const config = loadDaemonConfig({ configPath });
@@ -60,14 +53,7 @@ describe("loadDaemonConfig", () => {
   test("prefers CLI overrides over values from the config file", () => {
     writeFileSync(
       configPath,
-      [
-        "interval = 120",
-        'services = ["claude"]',
-        'log_level = "error"',
-        "",
-        "[pty]",
-        "recycle_hours = 8",
-      ].join("\n"),
+      ["interval = 120", 'services = ["claude"]', 'log_level = "error"', "", "[pty]", "recycle_hours = 8"].join("\n"),
     );
 
     const config = loadDaemonConfig({

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createDaemonLogger } from "../../../packages/core/src/daemon/logger.js";
 
 function makeTempDir(): string {
@@ -30,9 +30,7 @@ describe("createDaemonLogger", () => {
     logger.info("collector started");
 
     expect(existsSync(logPath)).toBe(true);
-    expect(readFileSync(logPath, "utf-8")).toBe(
-      "2026-04-09T12:00:00.000Z [INFO] collector started\n",
-    );
+    expect(readFileSync(logPath, "utf-8")).toBe("2026-04-09T12:00:00.000Z [INFO] collector started\n");
   });
 
   test("rotates the active log file when the next entry would exceed the max size", () => {

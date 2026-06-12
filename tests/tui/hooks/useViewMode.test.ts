@@ -2,7 +2,7 @@
  * Tests for usePanelState hook.
  * Uses createRoot from solid-js to provide reactive context.
  */
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createRoot } from "solid-js";
 import { usePanelState } from "../../../packages/cli/src/tui/hooks/useViewMode.js";
 

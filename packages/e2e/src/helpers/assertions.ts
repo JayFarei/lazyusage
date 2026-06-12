@@ -1,7 +1,7 @@
 /**
  * Frame validation assertions for E2E TUI tests.
  */
-import { extractAllMarkers, extractBarWidths, extractPredictionBars, validateEquidistant } from "./markers.js";
+import { extractAllMarkers, extractBarWidths, extractPredictionBars } from "./markers.js";
 
 /** Assert the frame contains core structural markers. */
 export function assertLayoutIntact(frame: string): void {
@@ -18,9 +18,7 @@ export function assertNoTruncation(frame: string, width: number): void {
   const lines = frame.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].length > width) {
-      throw new Error(
-        `Line ${i} exceeds terminal width ${width}: length=${lines[i].length}`,
-      );
+      throw new Error(`Line ${i} exceeds terminal width ${width}: length=${lines[i].length}`);
     }
   }
 }
@@ -52,7 +50,7 @@ export function assertMarkersEquidistant(frame: string): void {
     if (!ml.valid) {
       throw new Error(
         `Time markers not equidistant at line ${ml.lineIndex}: ` +
-        `positions=[${ml.positions.join(",")}] gaps not equal`,
+          `positions=[${ml.positions.join(",")}] gaps not equal`,
       );
     }
   }
@@ -68,10 +66,7 @@ export function assertBarWidthsConsistent(frame: string): void {
   // All bars should have the same width (they all use the same barWidth calculation)
   for (const w of widths) {
     if (w !== firstWidth) {
-      throw new Error(
-        `Inconsistent bar widths: expected all bars to be ${firstWidth} chars wide, ` +
-        `but found ${w}`,
-      );
+      throw new Error(`Inconsistent bar widths: expected all bars to be ${firstWidth} chars wide, ` + `but found ${w}`);
     }
   }
 }
@@ -107,9 +102,7 @@ export function assertPredictionBarWidthsConsistent(frame: string): void {
   const first = predBars[0].total;
   for (const bar of predBars) {
     if (bar.total !== first) {
-      throw new Error(
-        `Prediction bar width mismatch: line ${bar.lineIndex} has total=${bar.total}, expected ${first}`,
-      );
+      throw new Error(`Prediction bar width mismatch: line ${bar.lineIndex} has total=${bar.total}, expected ${first}`);
     }
   }
 }
@@ -122,7 +115,7 @@ export function assertPredictionBarSegmentsValid(frame: string): void {
     if (sum !== bar.total) {
       throw new Error(
         `Prediction bar segment mismatch at line ${bar.lineIndex}: ` +
-        `used(${bar.used}) + predicted(${bar.predicted}) + spare(${bar.spare}) = ${sum} != total(${bar.total})`,
+          `used(${bar.used}) + predicted(${bar.predicted}) + spare(${bar.spare}) = ${sum} != total(${bar.total})`,
       );
     }
   }

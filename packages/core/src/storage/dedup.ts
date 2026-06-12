@@ -36,11 +36,7 @@ export class DedupTracker {
 
   shouldStoreMetrics(service: string, metrics: MetricsDict): boolean {
     for (const [metricName, metricData] of Object.entries(metrics)) {
-      if (
-        metricName === "subscription_type" ||
-        typeof metricData !== "object" ||
-        metricData === null
-      ) {
+      if (metricName === "subscription_type" || typeof metricData !== "object" || metricData === null) {
         continue;
       }
       const usedPct = metricData.used_pct ?? 0;

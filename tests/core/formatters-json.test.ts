@@ -1,10 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import {
-  formatJson,
-  formatAllJson,
-  formatCombinedJson,
-  type MetricsDict,
-} from "@lazyusage/core";
+import { describe, expect, test } from "bun:test";
+import { formatAllJson, formatCombinedJson, formatJson, type MetricsDict } from "@lazyusage/core";
 
 describe("formatJson", () => {
   test("outputs valid JSON", () => {
@@ -65,6 +60,8 @@ describe("formatJson", () => {
     expect(sessionMetric.used_pct).toBe(50);
     expect(sessionMetric.remaining_pct).toBe(50);
     expect(sessionMetric.resets).toBe("3:00pm");
+    expect(sessionMetric.time_remaining).toBeDefined();
+    expect(typeof sessionMetric.time_remaining).toBe("string");
   });
 
   test("skips subscription_type from metrics array", () => {
@@ -144,6 +141,8 @@ describe("formatCombinedJson", () => {
     const claudeSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "claude");
     expect(claudeSvc.metrics).toHaveLength(1);
     expect(claudeSvc.subscription_type).toBe("Max");
+    expect(claudeSvc.metrics[0].time_remaining).toBeDefined();
+    expect(typeof claudeSvc.metrics[0].time_remaining).toBe("string");
   });
 
   test("includes resource-awareness metadata when provided", () => {
@@ -151,19 +150,13 @@ describe("formatCombinedJson", () => {
       subscription_type: "Max",
       session: { used_pct: 25, remaining_pct: 75, resets: "2:31pm" },
     };
-    const result = formatCombinedJson(
-      claudeMetrics,
-      null,
-      ["claude"],
-      undefined,
-      {
-        claude: {
-          source: "cache" as never,
-          stale: true,
-          error: "API unavailable",
-        },
+    const result = formatCombinedJson(claudeMetrics, null, ["claude"], undefined, {
+      claude: {
+        source: "cache" as never,
+        stale: true,
+        error: "API unavailable",
       },
-    );
+    });
     const parsed = JSON.parse(result);
     const claudeSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "claude");
     expect(claudeSvc.source).toBe("cache");

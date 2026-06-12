@@ -1,9 +1,9 @@
 /**
  * Visual snapshot tests for LedgerContent component.
  */
-import { describe, test, expect } from "bun:test";
-import { renderComponent, mockProjectUsage } from "../helpers.js";
+import { describe, expect, test } from "bun:test";
 import { LedgerContent } from "../../../packages/cli/src/tui/components/LedgerContent.js";
+import { mockProjectUsage, renderComponent } from "../helpers.js";
 
 describe("LedgerContent - with data", () => {
   test("renders project names and token counts", async () => {
@@ -11,9 +11,10 @@ describe("LedgerContent - with data", () => {
       { project: "my-app", totalTokens: 45000 },
       { project: "other-proj", totalTokens: 20000 },
     ]);
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 80, height: 20 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Today" />,
+      { width: 80, height: 20 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("my-app");
     expect(frame).toContain("other-proj");
@@ -26,9 +27,10 @@ describe("LedgerContent - with data", () => {
       { project: "big-proj", totalTokens: 75000, pctOfTotal: 75.0 },
       { project: "small-proj", totalTokens: 25000, pctOfTotal: 25.0 },
     ]);
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 80, height: 20 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Today" />,
+      { width: 80, height: 20 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("75.0%");
     expect(frame).toContain("25.0%");
@@ -36,9 +38,10 @@ describe("LedgerContent - with data", () => {
 
   test("renders title", async () => {
     const data = mockProjectUsage();
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Last 7 Days" />
-    ), { width: 80, height: 20 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Last 7 Days" />,
+      { width: 80, height: 20 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("Last 7 Days");
   });
@@ -48,21 +51,21 @@ describe("LedgerContent - with data", () => {
       { project: "proj-a", totalTokens: 60000 },
       { project: "proj-b", totalTokens: 40000 },
     ]);
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 80, height: 20 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Today" />,
+      { width: 80, height: 20 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("Total");
     expect(frame).toContain("100,000"); // 60k + 40k
   });
 
   test("truncates long project names with ellipsis", async () => {
-    const data = mockProjectUsage([
-      { project: "a-very-long-project-name-that-exceeds-limit", totalTokens: 1000 },
-    ]);
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 100, height: 15 });
+    const data = mockProjectUsage([{ project: "a-very-long-project-name-that-exceeds-limit", totalTokens: 1000 }]);
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Today" />,
+      { width: 100, height: 15 },
+    );
     const frame = captureCharFrame();
     // Project name truncated to COL_PROJECT-4 = 18 chars + ".." indicator
     expect(frame).toContain("a-very-long-projec..");
@@ -70,26 +73,29 @@ describe("LedgerContent - with data", () => {
 
   test("snapshot with data", async () => {
     const data = mockProjectUsage();
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={data} service="claude" title="Today" />
-    ), { width: 60, height: 15 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={data} service="claude" title="Today" />,
+      { width: 60, height: 15 },
+    );
     expect(captureCharFrame()).toMatchSnapshot();
   });
 });
 
 describe("LedgerContent - empty state", () => {
   test("shows 'No usage data available' for null data", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={null} service="claude" title="Today" />
-    ), { width: 60, height: 10 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={null} service="claude" title="Today" />,
+      { width: 60, height: 10 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("No usage data available");
   });
 
   test("shows 'No usage data available' for empty array", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <LedgerContent data={[]} service="claude" title="Today" />
-    ), { width: 60, height: 10 });
+    const { captureCharFrame } = await renderComponent(
+      () => <LedgerContent data={[]} service="claude" title="Today" />,
+      { width: 60, height: 10 },
+    );
     const frame = captureCharFrame();
     expect(frame).toContain("No usage data available");
   });

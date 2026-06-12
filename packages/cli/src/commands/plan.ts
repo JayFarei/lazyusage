@@ -5,9 +5,10 @@
  * lazyusage plan clear <date>
  * lazyusage plan clear --all
  */
-import { Command } from "commander";
-import { UsageStore, ExitCode } from "@lazyusage/core";
+
 import type { Regime } from "@lazyusage/core";
+import { ExitCode, UsageStore } from "@lazyusage/core";
+import { Command } from "commander";
 
 const VALID_REGIMES = new Set(["L", "M", "H", "B"]);
 const REGIME_LABELS: Record<string, string> = {
@@ -92,7 +93,9 @@ export const planCommand = new Command("plan")
 
       // plan <date> <regime> [<date> <regime> ...]
       if (args.length % 2 !== 0) {
-        console.error("Error: Date-regime pairs must come in pairs. Usage: lazyusage plan <date> <regime> [<date> <regime> ...]");
+        console.error(
+          "Error: Date-regime pairs must come in pairs. Usage: lazyusage plan <date> <regime> [<date> <regime> ...]",
+        );
         process.exit(ExitCode.FAILURE);
       }
 

@@ -54,6 +54,7 @@ describe("createDaemonCommand", () => {
       ptyRecycleHours: number;
       configPath: string;
     }> = [];
+    const output: string[] = [];
 
     const command = createDaemonCommand({
       loadConfig: (overrides) => {
@@ -70,6 +71,9 @@ describe("createDaemonCommand", () => {
         startedConfigs.push(config);
         return 9876;
       },
+      writeStdout: (message) => {
+        output.push(message);
+      },
     }).exitOverride();
 
     await command.parseAsync(["node", "daemon", "start"]);
@@ -84,6 +88,7 @@ describe("createDaemonCommand", () => {
         configPath: "/tmp/daemon.toml",
       },
     ]);
+    expect(output).toEqual(["Started daemon 9876."]);
   });
 
   test("merges CLI start overrides into daemon config and routes foreground startup", async () => {
@@ -261,13 +266,7 @@ describe("createDaemonCommand", () => {
       },
     }).exitOverride();
 
-    await command.parseAsync([
-      "node",
-      "daemon",
-      "logs",
-      "--lines",
-      "2",
-    ]);
+    await command.parseAsync(["node", "daemon", "logs", "--lines", "2"]);
 
     expect(command.commands.map((subcommand) => subcommand.name())).toContain("logs");
     expect(output).toEqual([
@@ -281,10 +280,9 @@ describe("createDaemonCommand", () => {
 
     const command = createDaemonCommand({
       readLogFile: () =>
-        [
-          "2026-04-09T11:59:00.000Z [WARN] slow refresh",
-          "2026-04-09T12:00:00.000Z [INFO] collector recovered",
-        ].join("\n"),
+        ["2026-04-09T11:59:00.000Z [WARN] slow refresh", "2026-04-09T12:00:00.000Z [INFO] collector recovered"].join(
+          "\n",
+        ),
       followLogFile: async (path, onChunk) => {
         followCalls.push(path);
         onChunk("2026-04-09T12:01:00.000Z [ERROR] collector failed\n");
@@ -294,14 +292,7 @@ describe("createDaemonCommand", () => {
       },
     }).exitOverride();
 
-    await command.parseAsync([
-      "node",
-      "daemon",
-      "logs",
-      "--lines",
-      "1",
-      "--follow",
-    ]);
+    await command.parseAsync(["node", "daemon", "logs", "--lines", "1", "--follow"]);
 
     expect(command.commands.map((subcommand) => subcommand.name())).toContain("logs");
     expect(followCalls).toHaveLength(1);
@@ -310,6 +301,25 @@ describe("createDaemonCommand", () => {
       "2026-04-09T12:00:00.000Z [INFO] collector recovered",
       "2026-04-09T12:01:00.000Z [ERROR] collector failed",
     ]);
+  });
+
+  test("prints a friendly message when daemon logs do not exist yet", async () => {
+    const output: string[] = [];
+
+    const command = createDaemonCommand({
+      readLogFile: () => {
+        const error = new Error("missing log");
+        Object.assign(error, { code: "ENOENT" });
+        throw error;
+      },
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "logs"]);
+
+    expect(output).toEqual(["No daemon logs yet."]);
   });
 
   test("registers a daemon install subcommand and writes a launchd plist on macOS", async () => {
@@ -362,11 +372,7 @@ describe("createDaemonCommand", () => {
     expect(writes[0]?.contents).toContain("<key>RunAtLoad</key>");
     expect(writes[0]?.contents).toContain("<key>KeepAlive</key>");
     expect(serviceManagerCommands).toEqual([
-      [
-        "launchctl",
-        "load",
-        "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
-      ],
+      ["launchctl", "load", "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist"],
     ]);
     expect(output).toEqual([
       "Installed daemon service at /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
@@ -396,15 +402,9 @@ describe("createDaemonCommand", () => {
 
     expect(command.commands.map((subcommand) => subcommand.name())).toContain("uninstall");
     expect(serviceManagerCommands).toEqual([
-      [
-        "launchctl",
-        "unload",
-        "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
-      ],
+      ["launchctl", "unload", "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist"],
     ]);
-    expect(removedPaths).toEqual([
-      "/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist",
-    ]);
+    expect(removedPaths).toEqual(["/Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist"]);
     expect(output).toEqual([
       "Uninstalled daemon service from /Users/tester/Library/LaunchAgents/com.lazyusage.daemon.plist.",
     ]);
@@ -436,9 +436,7 @@ describe("createDaemonCommand", () => {
       ["systemctl", "--user", "disable", "--now", "lazyusage-daemon.service"],
       ["systemctl", "--user", "daemon-reload"],
     ]);
-    expect(removedPaths).toEqual([
-      "/home/tester/.config/systemd/user/lazyusage-daemon.service",
-    ]);
+    expect(removedPaths).toEqual(["/home/tester/.config/systemd/user/lazyusage-daemon.service"]);
     expect(output).toEqual([
       "Uninstalled daemon service from /home/tester/.config/systemd/user/lazyusage-daemon.service.",
     ]);
@@ -447,10 +445,7 @@ describe("createDaemonCommand", () => {
 
 describe("CLI entrypoint daemon integration", () => {
   test("passes daemon help through to the daemon command group", async () => {
-    const entrypointPath = new URL(
-      "../../packages/cli/src/index.ts",
-      import.meta.url,
-    ).pathname;
+    const entrypointPath = new URL("../../packages/cli/src/index.ts", import.meta.url).pathname;
     const subprocess = Bun.spawn({
       cmd: [Bun.argv[0], entrypointPath, "daemon", "--help"],
       cwd: new URL("../../", import.meta.url).pathname,

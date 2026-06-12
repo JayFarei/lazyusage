@@ -5,16 +5,14 @@
 import {
   createClaudeChain,
   createCodexChain,
+  type FallbackChain,
   formatCombinedJson,
   type MetricsDict,
-  type FallbackChain,
-  type ServiceResourceInfo,
   type ServiceName,
+  type ServiceResourceInfo,
 } from "@lazyusage/core";
 
-async function collectMetrics(
-  servicesToQuery: string[],
-): Promise<{
+async function collectMetrics(servicesToQuery: string[]): Promise<{
   claudeMetrics: MetricsDict | null;
   codexMetrics: MetricsDict | null;
   serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>>;
@@ -98,11 +96,7 @@ export function startServer(options: {
 
       // SSE streaming endpoints
       if (path.startsWith("/stream")) {
-        const streamService = path === "/stream/claude"
-          ? ["claude"]
-          : path === "/stream/codex"
-            ? ["codex"]
-            : services;
+        const streamService = path === "/stream/claude" ? ["claude"] : path === "/stream/codex" ? ["codex"] : services;
 
         const stream = new ReadableStream({
           async start(controller) {
@@ -150,7 +144,7 @@ export function startServer(options: {
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            Connection: "keep-alive",
             "Access-Control-Allow-Origin": "*",
           },
         });

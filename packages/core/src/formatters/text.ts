@@ -39,10 +39,7 @@ export function formatCodexText(metrics: MetricsDict): string {
   const fiveH = metrics["5h"] as MetricEntry;
   const weekly = metrics.weekly as MetricEntry;
 
-  const base = [
-    fmtMetric("Session", fiveH, 5),
-    fmtMetric("Weekly", weekly, 168),
-  ].join(" | ");
+  const base = [fmtMetric("Session", fiveH, 5), fmtMetric("Weekly", weekly, 168)].join(" | ");
 
   if (subscription) {
     return `${base} [Subscription: ${subscription}]`;
@@ -81,10 +78,7 @@ export function formatCodexCapacityText(metrics: MetricsDict): string {
   const fiveH = metrics["5h"] as MetricEntry;
   const weekly = metrics.weekly as MetricEntry;
 
-  const base = [
-    fmtCapacity("Session", fiveH, 5),
-    fmtCapacity("Weekly", weekly, 168),
-  ].join(" | ");
+  const base = [fmtCapacity("Session", fiveH, 5), fmtCapacity("Weekly", weekly, 168)].join(" | ");
 
   return subscription ? `${base} [Subscription: ${subscription}]` : base;
 }
@@ -156,10 +150,7 @@ export function formatPredictionText(prediction: {
 }
 
 /** Format prediction as a compact capacity-style suffix */
-export function formatPredictionCapacitySuffix(prediction: {
-  predictedSpare: number;
-  overBudget: boolean;
-}): string {
+export function formatPredictionCapacitySuffix(prediction: { predictedSpare: number; overBudget: boolean }): string {
   if (prediction.overBudget) {
     return `Predicted: OVER BUDGET ${Math.round(prediction.predictedSpare)}%`;
   }

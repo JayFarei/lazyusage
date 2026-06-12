@@ -1,10 +1,10 @@
 /**
  * Unit tests for detectWarning and detectLimitAdjustment from warnings.ts.
  */
-import { describe, test, expect } from "bun:test";
-import { detectWarning, detectLimitAdjustment } from "../../packages/core/src/utils/warnings.js";
-import { DataSource } from "../../packages/core/src/types.js";
+import { describe, expect, test } from "bun:test";
 import type { FetchResult, MetricsDict } from "../../packages/core/src/types.js";
+import { DataSource } from "../../packages/core/src/types.js";
+import { detectLimitAdjustment, detectWarning } from "../../packages/core/src/utils/warnings.js";
 
 // ---------------------------------------------------------------------------
 // detectWarning
@@ -54,9 +54,9 @@ describe("detectWarning", () => {
     };
     const warning = detectWarning("claude", result);
     expect(warning).not.toBeNull();
-    expect(warning!.service).toBe("claude");
-    expect(warning!.message).toContain("auth expired");
-    expect(warning!.action).toContain("claude");
+    expect(warning?.service).toBe("claude");
+    expect(warning?.message).toContain("auth expired");
+    expect(warning?.action).toContain("claude");
   });
 
   test("returns auth warning for 'token expired' errors", () => {
@@ -69,7 +69,7 @@ describe("detectWarning", () => {
     };
     const warning = detectWarning("claude", result);
     expect(warning).not.toBeNull();
-    expect(warning!.message).toContain("auth expired");
+    expect(warning?.message).toContain("auth expired");
   });
 
   test("returns codex-specific action for codex service auth error", () => {
@@ -82,7 +82,7 @@ describe("detectWarning", () => {
     };
     const warning = detectWarning("codex", result);
     expect(warning).not.toBeNull();
-    expect(warning!.action).toContain("codex login");
+    expect(warning?.action).toContain("codex login");
   });
 
   test("returns 'data unavailable' for FALLBACK with 'All providers failed'", () => {
@@ -95,7 +95,7 @@ describe("detectWarning", () => {
     };
     const warning = detectWarning("claude", result);
     expect(warning).not.toBeNull();
-    expect(warning!.message).toContain("data unavailable");
+    expect(warning?.message).toContain("data unavailable");
   });
 
   test("returns null for CACHE source without matching error patterns", () => {
@@ -116,10 +116,7 @@ describe("detectWarning", () => {
 
 describe("detectLimitAdjustment", () => {
   // Helper to build MetricsDict with specific resets and usage
-  function makeMetrics(
-    sessionResets: string,
-    sessionUsed: number,
-  ): MetricsDict {
+  function makeMetrics(sessionResets: string, sessionUsed: number): MetricsDict {
     return {
       subscription_type: "max",
       session: {

@@ -3,10 +3,10 @@
  * Uses a local Bun.serve() mock OAuth server and a temp credentials file.
  * No Keychain, no real OAuth calls.
  */
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
-import { existsSync, readFileSync, rmSync } from "fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ClaudeCredentialStore } from "../../packages/core/src/providers/credentials.js";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,11 @@ describe("ClaudeCredentialStore - token refresh", () => {
       process.env.CLAUDE_CREDENTIALS_FILE = originalEnv;
     }
     // Remove temp file
-    try { rmSync(tmpCredsPath); } catch { /* already gone */ }
+    try {
+      rmSync(tmpCredsPath);
+    } catch {
+      /* already gone */
+    }
   });
 
   test("isAvailable() returns false for expired token", () => {
@@ -96,7 +100,7 @@ describe("ClaudeCredentialStore - token refresh", () => {
     const server = Bun.serve({
       port: 0,
       async fetch(req) {
-        receivedBody = await req.json() as Record<string, unknown>;
+        receivedBody = (await req.json()) as Record<string, unknown>;
         return Response.json({
           access_token: "sk-ant-oat01-REFRESHED",
           refresh_token: "sk-ant-ort01-NEWTOKEN",

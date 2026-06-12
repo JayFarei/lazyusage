@@ -2,7 +2,7 @@
  * Tests for useAutoRefresh hook.
  * Uses createRoot for SolidJS context and fake timers for timer control.
  */
-import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { createRoot } from "solid-js";
 
 // Note: bun:test doesn't have jest.useFakeTimers, we use setInterval spying

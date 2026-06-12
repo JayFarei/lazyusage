@@ -2,21 +2,23 @@
  * Maximum-mode overlay for a service: shows ALL metrics with full bars.
  * Triggered by `g` when focused on the service panel.
  */
-import { For, Show } from "solid-js";
-import { useTerminalDimensions } from "@opentui/solid";
-import { useTheme } from "../theme.js";
+
 import {
+  type CapacityPrediction,
+  calculateBarWidth,
+  calculateTimeProgress,
   createCapacityBar,
+  createPeriodBar,
   createPredictionBar,
   createTimeMarkers,
-  createPeriodBar,
-  calculateTimeProgress,
-  calculateBarWidth,
-  type MetricsDict,
   type MetricData,
-  type CapacityPrediction,
+  type MetricsDict,
 } from "@lazyusage/core";
-import { LABEL_MAP, WINDOW_HOURS, METRIC_KEYS } from "./ServicePanel.js";
+import { useTerminalDimensions } from "@opentui/solid";
+import { For, Show } from "solid-js";
+import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
+import { useTheme } from "../theme.js";
+import { LABEL_MAP, METRIC_KEYS, WINDOW_HOURS } from "./ServicePanel.js";
 
 const BAR_OVERHEAD = 12;
 const MIN_LOCAL_BAR = 20;
@@ -66,7 +68,7 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
       width="100%"
       height="100%"
       flexDirection="column"
-      borderStyle={"rounded" as any}
+      borderStyle={ROUNDED_BORDER_STYLE}
       borderColor={theme.cyan}
       title={title()}
       titleAlignment="left"
@@ -98,7 +100,11 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
               {(() => {
                 const pred = props.prediction?.[entry.key];
                 const predUseful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
-                if (pred && predUseful && (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")) {
+                if (
+                  pred &&
+                  predUseful &&
+                  (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")
+                ) {
                   const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                   const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
                   const barStr = segments.used + segments.predicted + segments.spare;
@@ -123,35 +129,21 @@ export function FullscreenMetricView(props: FullscreenMetricViewProps) {
                   />
                 );
               })()}
-              <text
-                content={`  ${createTimeMarkers(divisions, w)}`}
-                fg={theme.surface1}
-                dim={true}
-                height={1}
-              />
+              <text content={`  ${createTimeMarkers(divisions, w)}`} fg={theme.surface1} dim={true} height={1} />
               <text
                 content={`  ${createPeriodBar(timePct(), w)} \u23f1 ${Math.round(timePct())}%`}
                 fg={theme.cyan}
                 dim={true}
                 height={1}
               />
-              <text
-                content={`    Resets: ${entry.data.resets}`}
-                fg={theme.subtext}
-                height={1}
-              />
+              <text content={`    Resets: ${entry.data.resets}`} fg={theme.subtext} height={1} />
             </box>
           );
         }}
       </For>
 
       <box flexGrow={1} />
-      <text
-        content="  Press g or Escape to return"
-        fg={theme.surface1}
-        height={1}
-        paddingLeft={1}
-      />
+      <text content="  Press g or Escape to return" fg={theme.surface1} height={1} paddingLeft={1} />
     </box>
   );
 }

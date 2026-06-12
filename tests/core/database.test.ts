@@ -1,5 +1,19 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { UsageStore } from "../../packages/core/src/storage/database.js";
+import type { MetricData } from "../../packages/core/src/types.js";
+
+function requireMetric(metric: MetricData | string | null | undefined): MetricData {
+  if (!metric || typeof metric === "string") {
+    throw new Error("Expected metric data");
+  }
+
+  return metric;
+}
+
+function getInternalDb(store: UsageStore): Database {
+  return (store as unknown as { db: Database }).db;
+}
 
 describe("UsageStore", () => {
   let store: UsageStore;
@@ -26,17 +40,17 @@ describe("UsageStore", () => {
       const result = store.getLatestSnapshot("claude");
 
       expect(result).not.toBeNull();
-      expect(result!.subscription_type).toBe("pro");
+      expect(result?.subscription_type).toBe("pro");
 
-      const session = result!.session;
+      const session = result?.session;
       expect(typeof session).toBe("object");
-      expect((session as any).used_pct).toBe(25);
-      expect((session as any).remaining_pct).toBe(75);
-      expect((session as any).resets).toBe("3:00pm");
+      expect(requireMetric(session).used_pct).toBe(25);
+      expect(requireMetric(session).remaining_pct).toBe(75);
+      expect(requireMetric(session).resets).toBe("3:00pm");
 
-      const weekly = result!.weekly;
+      const weekly = result?.weekly;
       expect(typeof weekly).toBe("object");
-      expect((weekly as any).used_pct).toBe(10);
+      expect(requireMetric(weekly).used_pct).toBe(10);
     });
 
     test("returns null when no snapshots exist", () => {
@@ -57,7 +71,7 @@ describe("UsageStore", () => {
       store.storeSnapshot("claude", metrics, "pty", "custom-id");
       const result = store.getLatestSnapshot("claude");
       expect(result).not.toBeNull();
-      expect((result!.session as any).used_pct).toBe(50);
+      expect(requireMetric(result?.session).used_pct).toBe(50);
     });
 
     test("returns latest collection, not older ones", () => {
@@ -73,43 +87,27 @@ describe("UsageStore", () => {
 
       const result = store.getLatestSnapshot("claude");
       expect(result).not.toBeNull();
-      expect((result!.session as any).used_pct).toBe(80);
+      expect(requireMetric(result?.session).used_pct).toBe(80);
     });
 
     test("separates services", () => {
-      store.storeSnapshot(
-        "claude",
-        { session: { used_pct: 30, remaining_pct: 70, resets: "2:00pm" } },
-        "pty",
-      );
-      store.storeSnapshot(
-        "codex",
-        { "5h": { used_pct: 60, remaining_pct: 40, resets: "6:00pm" } },
-        "pty",
-      );
+      store.storeSnapshot("claude", { session: { used_pct: 30, remaining_pct: 70, resets: "2:00pm" } }, "pty");
+      store.storeSnapshot("codex", { "5h": { used_pct: 60, remaining_pct: 40, resets: "6:00pm" } }, "pty");
 
       const claude = store.getLatestSnapshot("claude");
       expect(claude).not.toBeNull();
-      expect((claude!.session as any).used_pct).toBe(30);
+      expect(requireMetric(claude?.session).used_pct).toBe(30);
 
       const codex = store.getLatestSnapshot("codex");
       expect(codex).not.toBeNull();
-      expect((codex!["5h"] as any).used_pct).toBe(60);
+      expect(requireMetric(codex?.["5h"]).used_pct).toBe(60);
     });
   });
 
   describe("getHistory", () => {
     test("returns history entries", () => {
-      store.storeSnapshot(
-        "claude",
-        { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } },
-        "pty",
-      );
-      store.storeSnapshot(
-        "claude",
-        { session: { used_pct: 20, remaining_pct: 80, resets: "3:00pm" } },
-        "pty",
-      );
+      store.storeSnapshot("claude", { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } }, "pty");
+      store.storeSnapshot("claude", { session: { used_pct: 20, remaining_pct: 80, resets: "3:00pm" } }, "pty");
 
       const history = store.getHistory("claude", "session", 1);
       expect(history.length).toBe(2);
@@ -124,16 +122,8 @@ describe("UsageStore", () => {
     });
 
     test("filters by service and metric_name", () => {
-      store.storeSnapshot(
-        "claude",
-        { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } },
-        "pty",
-      );
-      store.storeSnapshot(
-        "codex",
-        { "5h": { used_pct: 50, remaining_pct: 50, resets: "4:00pm" } },
-        "pty",
-      );
+      store.storeSnapshot("claude", { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } }, "pty");
+      store.storeSnapshot("codex", { "5h": { used_pct: 50, remaining_pct: 50, resets: "4:00pm" } }, "pty");
 
       const history = store.getHistory("claude", "session", 24);
       expect(history.length).toBe(1);
@@ -146,7 +136,7 @@ describe("UsageStore", () => {
 
     test("filters ISO timestamps correctly against a fixed cutoff", () => {
       Date.now = () => new Date("2026-02-19T00:00:00.000Z").getTime();
-      const db = (store as any).db;
+      const db = getInternalDb(store);
 
       db.run(
         `INSERT INTO usage_snapshots
@@ -174,11 +164,7 @@ describe("UsageStore", () => {
     });
 
     test("does not delete recent snapshots", () => {
-      store.storeSnapshot(
-        "claude",
-        { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } },
-        "pty",
-      );
+      store.storeSnapshot("claude", { session: { used_pct: 10, remaining_pct: 90, resets: "3:00pm" } }, "pty");
 
       const deleted = store.cleanupOldSnapshots(30);
       expect(deleted).toBe(0);
@@ -189,7 +175,7 @@ describe("UsageStore", () => {
 
     test("deletes snapshots older than cutoff with ISO timestamps", () => {
       Date.now = () => new Date("2026-02-19T00:00:00.000Z").getTime();
-      const db = (store as any).db;
+      const db = getInternalDb(store);
 
       db.run(
         `INSERT INTO usage_snapshots

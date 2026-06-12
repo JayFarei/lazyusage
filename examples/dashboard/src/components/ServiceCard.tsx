@@ -16,11 +16,7 @@ export function ServiceCard({ service }: Props) {
               {service.subscription_type}
             </span>
           )}
-          <span
-            className={`inline-block w-2 h-2 rounded-full ${
-              service.available ? "bg-green-400" : "bg-red-400"
-            }`}
-          />
+          <span className={`inline-block w-2 h-2 rounded-full ${service.available ? "bg-green-400" : "bg-red-400"}`} />
         </div>
       </div>
       {service.metrics.length === 0 ? (

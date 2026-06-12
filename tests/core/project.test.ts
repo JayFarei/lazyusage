@@ -1,10 +1,10 @@
 /**
  * Tests for resolveProjectName().
  */
-import { describe, test, expect, beforeEach } from "bun:test";
-import { join, basename } from "path";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { tmpdir } from "os";
+import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 
 // Import after each test needs a fresh cache - we re-import lazily to work around module cache
 // Since Bun caches module imports, the in-process Map cache persists across tests in the same file.

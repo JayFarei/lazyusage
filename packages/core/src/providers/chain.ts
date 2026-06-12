@@ -3,13 +3,12 @@
  * Port of src/providers/chain.py
  */
 
-import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict } from "../types.js";
-import { UsageCache } from "./cache.js";
-import { calculateFallbackTime } from "../utils/time.js";
 import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
-import { ClaudeAPIProvider } from "./api-claude.js";
+import type { FetchResult, MetricsDict, PersistentUsageProvider, UsageProvider } from "../types.js";
+import { DataSource } from "../types.js";
+import { calculateFallbackTime } from "../utils/time.js";
 import { CodexAPIProvider } from "./api-codex.js";
+import { UsageCache } from "./cache.js";
 
 /** Structured diagnostic event emitted during chain operations */
 export interface ChainDiagnosticEvent {
@@ -35,7 +34,12 @@ export function setChainDiagnosticListener(listener: ChainDiagnosticListener | n
   _diagnosticListener = listener;
 }
 
-function emitDiag(service: string, phase: "start" | "refresh", step: string, detail?: Partial<ChainDiagnosticEvent>): void {
+function emitDiag(
+  service: string,
+  phase: "start" | "refresh",
+  step: string,
+  detail?: Partial<ChainDiagnosticEvent>,
+): void {
   if (!_diagnosticListener) return;
   _diagnosticListener({
     ts: new Date().toISOString(),
@@ -156,9 +160,7 @@ export class SourcePlanner {
     sources.push({ name: "pty", type: "pty", available: this.ptyAvailable });
     sources.push({ name: "cache", type: "cache", available: this.cacheAvailable });
 
-    const recommended = sources
-      .filter((s) => s.available)
-      .map((s) => s.name);
+    const recommended = sources.filter((s) => s.available).map((s) => s.name);
 
     return { sources, recommended };
   }
@@ -205,10 +207,15 @@ export class PersistentFallbackChain {
       this.immediateProviders = allProviders.filter((p) => !isPersistentProvider(p));
       this.persistentProviders = allProviders.filter(isPersistentProvider);
       this.credStore = ptyProviderOrCredStore as TokenRefreshable | undefined;
+      const persistentProvider = this.persistentProviders[0];
+
+      if (!persistentProvider) {
+        throw new Error(`PersistentFallbackChain requires at least one persistent provider for ${service}`);
+      }
 
       // Compat fields
       this.apiProvider = this.immediateProviders[0] ?? null;
-      this.ptyProvider = this.persistentProviders[0] ?? null!;
+      this.ptyProvider = persistentProvider;
     } else {
       // Legacy 2-provider constructor
       this.apiProvider = apiProviderOrProviders;
@@ -250,7 +257,10 @@ export class PersistentFallbackChain {
           // Retry same provider after refresh (credentials may now be valid)
           const retryResult = await provider.fetch();
           if (retryResult.metrics !== null && retryResult.error === null) {
-            emitDiag(this.service, phase, "immediate-ok-after-refresh", { provider: provider.name, source: retryResult.source });
+            emitDiag(this.service, phase, "immediate-ok-after-refresh", {
+              provider: provider.name,
+              source: retryResult.source,
+            });
             this.cache.store(retryResult.metrics, retryResult.timestamp);
             this._lastResult = retryResult;
             return retryResult;
@@ -282,7 +292,11 @@ export class PersistentFallbackChain {
           this._lastResult = result;
           return result;
         }
-        emitDiag(this.service, "start", "persistent-fail", { provider: provider.name, error: result.error ?? undefined, stale: result.stale });
+        emitDiag(this.service, "start", "persistent-fail", {
+          provider: provider.name,
+          error: result.error ?? undefined,
+          stale: result.stale,
+        });
       }
     } else {
       emitDiag(this.service, "start", "pty-skipped-ratelimit", { rateLimited: true });
@@ -329,7 +343,10 @@ export class PersistentFallbackChain {
           this._lastResult = result;
           return result;
         }
-        emitDiag(this.service, "refresh", "persistent-fail", { provider: provider.name, error: result.error ?? undefined });
+        emitDiag(this.service, "refresh", "persistent-fail", {
+          provider: provider.name,
+          error: result.error ?? undefined,
+        });
       }
     } else {
       emitDiag(this.service, "refresh", "pty-skipped-ratelimit", { rateLimited: true });

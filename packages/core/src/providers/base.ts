@@ -3,5 +3,5 @@
  * Port of src/providers/base.py
  */
 
+export type { FetchResult, PersistentUsageProvider, UsageProvider } from "../types.js";
 export { DataSource } from "../types.js";
-export type { FetchResult, UsageProvider, PersistentUsageProvider } from "../types.js";

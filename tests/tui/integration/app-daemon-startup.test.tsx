@@ -1,85 +1,104 @@
 import { describe, expect, mock, test } from "bun:test";
-import { DataSource } from "@lazyusage/core";
+import { DataSource, type PersistentFallbackChain } from "@lazyusage/core";
 import { App } from "../../../packages/cli/src/tui/App.js";
 import {
+  createMockGraphStore,
   mockClaudeMetrics,
   mockCodexMetrics,
+  mockHistoryEntries,
   renderComponent,
 } from "../helpers.js";
 
+type AppChain = Pick<PersistentFallbackChain, "start" | "refresh" | "stop">;
+
+function createThrowingChainFactory(message: string) {
+  const spy = mock((_persistent: boolean): never => {
+    throw new Error(message);
+  });
+
+  return {
+    spy,
+    factory: (persistent: boolean): never => spy(persistent),
+  };
+}
+
 describe("App daemon startup", () => {
   test("cycles daemon-backed stats tabs through Graph and back to Daily", async () => {
-    const { captureCharFrame, mockInput, renderOnce, renderer } =
-      await renderComponent(
-        () => (
-          <App
-            service="claude"
-            deps={{
-              createDaemonDetection: () => ({
-                daemonHealthy: () => true,
-                daemonBackedServices: () => ({
-                  claude: true,
-                  codex: false,
-                }),
-                daemonMetrics: () => ({
-                  claude: mockClaudeMetrics(),
-                }),
-                detect: mock(() => {}),
+    const history = mockHistoryEntries([
+      { minutesAgo: 240, usedPct: 8 },
+      { minutesAgo: 180, usedPct: 18 },
+      { minutesAgo: 60, usedPct: 31 },
+    ]);
+    const claudeChain = createThrowingChainFactory("Claude chain should not be created when daemon-backed");
+    const codexChain = createThrowingChainFactory("Codex chain should not be created in Claude-only mode");
+    const { captureCharFrame, mockInput, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          service="claude"
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => true,
+              daemonBackedServices: () => ({
+                claude: true,
+                codex: false,
               }),
-              createUsageStore: () => ({
-                cleanupOldSnapshots: mock(() => {}),
-                storeSnapshot: mock(() => {}),
-                close: mock(() => {}),
+              daemonMetrics: () => ({
+                claude: mockClaudeMetrics(),
               }),
-              createDedupTracker: () => ({
-                shouldStoreMetrics: () => true,
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createGraphStore: () =>
+              createMockGraphStore({
+                session: history,
+                week_all: history,
+                week_sonnet: history,
               }),
-              createClaudeChain: mock(() => {
-                throw new Error(
-                  "Claude chain should not be created when daemon-backed",
-                );
-              }) as any,
-              createCodexChain: mock(() => {
-                throw new Error(
-                  "Codex chain should not be created in Claude-only mode",
-                );
-              }) as any,
-              createLedgerData: () => ({
-                claudeDaily: () => null,
-                claudeWeekly: () => null,
-                claudeMonthly: () => null,
-                codexDaily: () => null,
-                codexWeekly: () => null,
-                codexMonthly: () => null,
-                loading: () => false,
-                error: () => null,
-                refresh: mock(async () => {}),
-                killAll: mock(() => {}),
-              }),
-              createAutoRefresh: () => ({
-                enabled: () => true,
-                interval: () => 10,
-                togglePause: mock(() => {}),
-                speedUp: mock(() => {}),
-                slowDown: mock(() => {}),
-                startTimer: mock(() => {}),
-              }),
-              createPrediction: () => ({
-                claudePrediction: () => null,
-                codexPrediction: () => null,
-              }),
-              setIntervalFn: (() => 0) as typeof setInterval,
-              clearIntervalFn: (() => {}) as typeof clearInterval,
-            }}
-          />
-        ),
-        { width: 140, height: 40 },
-      );
+            createDedupTracker: () => ({
+              shouldStoreMetrics: () => true,
+            }),
+            createClaudeChain: claudeChain.factory,
+            createCodexChain: codexChain.factory,
+            createLedgerData: () => ({
+              claudeDaily: () => null,
+              claudeWeekly: () => null,
+              claudeMonthly: () => null,
+              codexDaily: () => null,
+              codexWeekly: () => null,
+              codexMonthly: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({
+              claudePrediction: () => null,
+              codexPrediction: () => null,
+            }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 140, height: 40 },
+    );
 
     await Bun.sleep(10);
     await renderOnce();
 
-    mockInput.pressKey("tab");
+    mockInput.pressKey("3");
     mockInput.pressKey("]");
     mockInput.pressKey("]");
     mockInput.pressKey("]");
@@ -97,7 +116,124 @@ describe("App daemon startup", () => {
     renderer.destroy();
   });
 
+  test("opens the fullscreen graph overlay for daemon-backed services", async () => {
+    const history = mockHistoryEntries([
+      { minutesAgo: 240, usedPct: 9 },
+      { minutesAgo: 180, usedPct: 16 },
+      { minutesAgo: 90, usedPct: 27 },
+      { minutesAgo: 20, usedPct: 39 },
+    ]);
+    const claudeChain = createThrowingChainFactory("Claude chain should not be created when daemon-backed");
+    const codexChain = createThrowingChainFactory("Codex chain should not be created in Claude-only mode");
+    const { captureCharFrame, mockInput, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          service="claude"
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => true,
+              daemonBackedServices: () => ({
+                claude: true,
+                codex: false,
+              }),
+              daemonMetrics: () => ({
+                claude: mockClaudeMetrics(),
+              }),
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createGraphStore: () =>
+              createMockGraphStore({
+                session: history,
+                week_all: history,
+                week_sonnet: history,
+              }),
+            createDedupTracker: () => ({
+              shouldStoreMetrics: () => true,
+            }),
+            createClaudeChain: claudeChain.factory,
+            createCodexChain: codexChain.factory,
+            createLedgerData: () => ({
+              claudeDaily: () => null,
+              claudeWeekly: () => null,
+              claudeMonthly: () => null,
+              codexDaily: () => null,
+              codexWeekly: () => null,
+              codexMonthly: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({
+              claudePrediction: () => null,
+              codexPrediction: () => null,
+            }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 140, height: 40 },
+    );
+
+    await Bun.sleep(10);
+    await renderOnce();
+
+    mockInput.pressKey("3");
+    mockInput.pressKey("]");
+    mockInput.pressKey("]");
+    mockInput.pressKey("]");
+    await Bun.sleep(10);
+    await renderOnce();
+
+    mockInput.pressKey("g");
+    await Bun.sleep(10);
+    await renderOnce();
+
+    const frame = captureCharFrame();
+
+    expect(frame).toContain("Graph");
+    expect(frame).toContain("Weekly (All)");
+    expect(frame).toContain("Session (5h)");
+    expect(frame).toContain("actual");
+
+    renderer.destroy();
+  });
+
   test("shows the Graph tab only for daemon-backed services", async () => {
+    const claudeChain = createThrowingChainFactory("Claude chain should not be created when daemon-backed");
+    const createCodexChain = mock(
+      (_persistent: boolean): AppChain => ({
+        start: mock(async () => ({
+          metrics: mockCodexMetrics(),
+          source: DataSource.API,
+          timestamp: Date.now(),
+          error: null,
+          stale: false,
+        })),
+        refresh: mock(async () => ({
+          metrics: mockCodexMetrics(),
+          source: DataSource.API,
+          timestamp: Date.now(),
+          error: null,
+          stale: false,
+        })),
+        stop: mock(async () => {}),
+      }),
+    );
     const { captureCharFrame, renderOnce, renderer } = await renderComponent(
       () => (
         <App
@@ -121,26 +257,8 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: mock(() => {
-              throw new Error("Claude chain should not be created when daemon-backed");
-            }) as any,
-            createCodexChain: mock(() => ({
-              start: mock(async () => ({
-                metrics: mockCodexMetrics(),
-                source: DataSource.API,
-                timestamp: Date.now(),
-                error: null,
-                stale: false,
-              })),
-              refresh: mock(async () => ({
-                metrics: mockCodexMetrics(),
-                source: DataSource.API,
-                timestamp: Date.now(),
-                error: null,
-                stale: false,
-              })),
-              stop: mock(async () => {}),
-            })) as any,
+            createClaudeChain: claudeChain.factory,
+            createCodexChain: (persistent: boolean) => createCodexChain(persistent),
             createLedgerData: () => ({
               claudeDaily: () => null,
               claudeWeekly: () => null,
@@ -244,8 +362,8 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: createClaudeChain as any,
-            createCodexChain: createCodexChain as any,
+            createClaudeChain: (persistent: boolean) => createClaudeChain(persistent),
+            createCodexChain: (persistent: boolean) => createCodexChain(persistent),
             createLedgerData: () => ({
               claudeDaily: () => null,
               claudeWeekly: () => null,
@@ -327,6 +445,7 @@ describe("App daemon startup", () => {
       }),
       stop: temporaryChainStop,
     }));
+    const codexChain = createThrowingChainFactory("Codex chain should not be created in Claude-only mode");
 
     const { captureCharFrame, mockInput, renderOnce, renderer } = await renderComponent(
       () => (
@@ -352,10 +471,8 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: createClaudeChain as any,
-            createCodexChain: mock(() => {
-              throw new Error("Codex chain should not be created in Claude-only mode");
-            }) as any,
+            createClaudeChain: (persistent: boolean) => createClaudeChain(persistent),
+            createCodexChain: codexChain.factory,
             createLedgerData: () => ({
               claudeDaily: () => null,
               claudeWeekly: () => null,

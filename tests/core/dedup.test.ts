@@ -1,5 +1,9 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { DedupTracker } from "../../packages/core/src/storage/dedup.js";
+
+function getLastStoredMap(tracker: DedupTracker): Map<string, [number, number]> {
+  return (tracker as unknown as { lastStored: Map<string, [number, number]> }).lastStored;
+}
 
 describe("DedupTracker", () => {
   let tracker: DedupTracker;
@@ -28,11 +32,12 @@ describe("DedupTracker", () => {
 
       // Manually hack the stored timestamp to simulate 61 seconds ago
       const key = "claude:session";
-      const map = (tracker as any).lastStored as Map<
-        string,
-        [number, number]
-      >;
-      const entry = map.get(key)!;
+      const map = getLastStoredMap(tracker);
+      const entry = map.get(key);
+      if (!entry) {
+        throw new Error(`Expected dedup entry for ${key}`);
+      }
+
       map.set(key, [entry[0], entry[1] - 61]);
 
       expect(tracker.shouldStore("claude", "session", 25)).toBe(true);

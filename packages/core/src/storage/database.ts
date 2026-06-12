@@ -3,11 +3,11 @@
  * Ported from Python src/storage/database.py
  */
 import { Database } from "bun:sqlite";
-import { homedir } from "os";
-import { join, dirname } from "path";
-import { mkdirSync, existsSync, chmodSync } from "fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import type { DailyBoundary, HistoryEntry, MetricsDict, Regime, ServiceName, SupervisedMark } from "../types.js";
 import { parseTimeToDatetime } from "../utils/time.js";
-import type { HistoryEntry, MetricsDict, ServiceName, DailyBoundary, SupervisedMark, Regime } from "../types.js";
 
 type DaemonService = ServiceName | "_daemon";
 
@@ -31,19 +31,12 @@ interface DaemonHeartbeatInput {
 }
 
 export class UsageStore {
-  static readonly DEFAULT_DB_PATH = join(
-    homedir(),
-    ".local",
-    "share",
-    "lazyusage",
-    "usage.db",
-  );
+  static readonly DEFAULT_DB_PATH = join(homedir(), ".local", "share", "lazyusage", "usage.db");
 
   private db: Database;
 
   constructor(dbPath?: string) {
-    const resolvedPath =
-      dbPath ?? process.env.LAZYUSAGE_DB_PATH ?? UsageStore.DEFAULT_DB_PATH;
+    const resolvedPath = dbPath ?? process.env.LAZYUSAGE_DB_PATH ?? UsageStore.DEFAULT_DB_PATH;
 
     if (resolvedPath !== ":memory:") {
       const dir = dirname(resolvedPath);
@@ -54,7 +47,11 @@ export class UsageStore {
 
     this.db = new Database(resolvedPath);
     if (resolvedPath !== ":memory:") {
-      try { chmodSync(resolvedPath, 0o600); } catch { /* may not exist yet */ }
+      try {
+        chmodSync(resolvedPath, 0o600);
+      } catch {
+        /* may not exist yet */
+      }
     }
     this.initDatabase();
   }
@@ -79,9 +76,7 @@ export class UsageStore {
     this.db.run(
       `CREATE INDEX IF NOT EXISTS idx_snapshots_service_metric_ts ON usage_snapshots (service, metric_name, timestamp)`,
     );
-    this.db.run(
-      `CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON usage_snapshots (timestamp)`,
-    );
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON usage_snapshots (timestamp)`);
     this.db.run(`
       CREATE TABLE IF NOT EXISTS capacity_marks (
         date TEXT PRIMARY KEY,
@@ -103,18 +98,12 @@ export class UsageStore {
     `);
   }
 
-  storeSnapshot(
-    service: ServiceName,
-    metrics: MetricsDict,
-    source: string,
-    collectionId?: string,
-  ): void {
+  storeSnapshot(service: ServiceName, metrics: MetricsDict, source: string, collectionId?: string): void {
     if (!metrics || Object.keys(metrics).length === 0) return;
 
     const id = collectionId ?? crypto.randomUUID();
     const timestamp = new Date().toISOString();
-    const subscriptionType =
-      (metrics.subscription_type as string | null) ?? null;
+    const subscriptionType = (metrics.subscription_type as string | null) ?? null;
 
     const stmt = this.db.prepare(`
       INSERT INTO usage_snapshots
@@ -124,11 +113,7 @@ export class UsageStore {
 
     const transaction = this.db.transaction(() => {
       for (const [metricName, metricData] of Object.entries(metrics)) {
-        if (
-          metricName === "subscription_type" ||
-          typeof metricData !== "object" ||
-          metricData === null
-        ) {
+        if (metricName === "subscription_type" || typeof metricData !== "object" || metricData === null) {
           continue;
         }
         const usedPct = metricData.used_pct ?? 0;
@@ -145,18 +130,7 @@ export class UsageStore {
           }
         }
 
-        stmt.run(
-          timestamp,
-          service,
-          metricName,
-          usedPct,
-          remainingPct,
-          resets,
-          resetsAt,
-          subscriptionType,
-          source,
-          id,
-        );
+        stmt.run(timestamp, service, metricName, usedPct, remainingPct, resets, resetsAt, subscriptionType, source, id);
       }
     });
 
@@ -206,11 +180,7 @@ export class UsageStore {
     return metrics;
   }
 
-  getHistory(
-    service: ServiceName,
-    metricName: string,
-    hours: number = 1,
-  ): HistoryEntry[] {
+  getHistory(service: ServiceName, metricName: string, hours: number = 1): HistoryEntry[] {
     const cutoffIso = new Date(Date.now() - hours * 3600_000).toISOString();
     const rows = this.db
       .query(
@@ -234,20 +204,13 @@ export class UsageStore {
 
   cleanupOldSnapshots(days: number = 30): number {
     const cutoffIso = new Date(Date.now() - days * 86400_000).toISOString();
-    const result = this.db.run(
-      `DELETE FROM usage_snapshots WHERE timestamp < ?`,
-      [cutoffIso],
-    );
+    const result = this.db.run(`DELETE FROM usage_snapshots WHERE timestamp < ?`, [cutoffIso]);
     const markCutoff = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
     this.db.run(`DELETE FROM capacity_marks WHERE date < ?`, [markCutoff]);
     return result.changes;
   }
 
-  getDailyBoundaries(
-    service: ServiceName,
-    metricName: string,
-    days: number = 30,
-  ): DailyBoundary[] {
+  getDailyBoundaries(service: ServiceName, metricName: string, days: number = 30): DailyBoundary[] {
     const cutoffIso = new Date(Date.now() - days * 86400_000).toISOString();
     const rows = this.db
       .query(
@@ -291,16 +254,14 @@ export class UsageStore {
   }
 
   setCapacityMark(date: string, regime: Regime): void {
-    this.db.run(
-      `INSERT OR REPLACE INTO capacity_marks (date, regime) VALUES (?, ?)`,
-      [date, regime],
-    );
+    this.db.run(`INSERT OR REPLACE INTO capacity_marks (date, regime) VALUES (?, ?)`, [date, regime]);
   }
 
   getCapacityMarks(): SupervisedMark[] {
-    const rows = this.db
-      .query(`SELECT date, regime FROM capacity_marks ORDER BY date`)
-      .all() as Array<{ date: string; regime: Regime }>;
+    const rows = this.db.query(`SELECT date, regime FROM capacity_marks ORDER BY date`).all() as Array<{
+      date: string;
+      regime: Regime;
+    }>;
     return rows;
   }
 
@@ -319,14 +280,10 @@ export class UsageStore {
 
     const next: DaemonStatusRow = {
       service,
-      lastCollectedAt: hasError
-        ? existing?.lastCollectedAt ?? null
-        : input.collectedAt ?? nowIso,
+      lastCollectedAt: hasError ? (existing?.lastCollectedAt ?? null) : (input.collectedAt ?? nowIso),
       lastSource: input.source ?? existing?.lastSource ?? null,
-      lastError: hasError ? input.error! : null,
-      consecutiveFailures: hasError
-        ? (existing?.consecutiveFailures ?? 0) + 1
-        : 0,
+      lastError: hasError ? (input.error ?? null) : null,
+      consecutiveFailures: hasError ? (existing?.consecutiveFailures ?? 0) + 1 : 0,
       pid: input.pid ?? existing?.pid ?? null,
       startedAt: input.startedAt ?? existing?.startedAt ?? null,
       updatedAt: nowIso,
@@ -372,18 +329,16 @@ export class UsageStore {
          FROM daemon_status
          WHERE service = ?`,
       )
-      .get(service) as
-      | {
-          service: DaemonService;
-          last_collected_at: string | null;
-          last_source: string | null;
-          last_error: string | null;
-          consecutive_failures: number;
-          pid: number | null;
-          started_at: string | null;
-          updated_at: string;
-        }
-      | null;
+      .get(service) as {
+      service: DaemonService;
+      last_collected_at: string | null;
+      last_source: string | null;
+      last_error: string | null;
+      consecutive_failures: number;
+      pid: number | null;
+      started_at: string | null;
+      updated_at: string;
+    } | null;
 
     if (!row) return null;
 
@@ -399,10 +354,7 @@ export class UsageStore {
     };
   }
 
-  isDaemonHeartbeatFresh(
-    service: DaemonService,
-    maxAgeMs: number = 120_000,
-  ): boolean {
+  isDaemonHeartbeatFresh(service: DaemonService, maxAgeMs: number = 120_000): boolean {
     const status = this.getDaemonStatus(service);
     if (!status?.lastCollectedAt) return false;
 

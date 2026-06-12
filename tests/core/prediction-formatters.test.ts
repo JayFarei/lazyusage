@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { formatPredictionText, formatPredictionCapacitySuffix } from "../../packages/core/src/formatters/text.js";
+import { describe, expect, test } from "bun:test";
+import { formatPredictionCapacitySuffix, formatPredictionText } from "../../packages/core/src/formatters/text.js";
 
 describe("formatPredictionText", () => {
   test("normal prediction", () => {

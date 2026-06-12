@@ -3,8 +3,8 @@
  * Run: bun run packages/e2e/scripts/capture-golden.ts
  */
 
+import { join } from "node:path";
 import { captureGoldenFrames } from "../src/helpers/golden.js";
-import { join } from "path";
 
 const ROOT = join(import.meta.dir, "../../..");
 const OUTPUT_DIR = join(ROOT, "packages/e2e/golden");

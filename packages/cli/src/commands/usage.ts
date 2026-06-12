@@ -2,29 +2,30 @@
  * usage command: Interactive TUI or continuous monitoring.
  * Port of usage() from src/cli.py
  */
-import { Command } from "commander";
+
 import {
-  formatClaudeText,
-  formatCodexText,
-  formatCombinedJson,
-  formatWithAvailability,
-  formatClaudeCapacityText,
-  formatCodexCapacityText,
-  formatCapacityWithAvailability,
-  formatCombinedCapacityJson,
-  formatPredictionText,
+  type CapacityPrediction,
+  computeDailyDeltas,
   ExitCode,
+  formatCapacityWithAvailability,
+  formatClaudeCapacityText,
+  formatClaudeText,
+  formatCodexCapacityText,
+  formatCodexText,
+  formatCombinedCapacityJson,
+  formatCombinedJson,
+  formatPredictionText,
+  formatWithAvailability,
+  type LogLevel,
+  type MetricsDict,
+  predict,
+  type ServiceName,
   setLogLevel,
   UsageStore,
-  computeDailyDeltas,
-  predict,
   WEEKLY_WINDOW_HOURS,
-  type LogLevel,
-  type CapacityPrediction,
-  type ServiceName,
-  type MetricsDict,
 } from "@lazyusage/core";
-import { detectAvailableServices, validateService, collectMetrics } from "./usage-check.js";
+import { Command } from "commander";
+import { collectMetrics, detectAvailableServices, validateService } from "./usage-check.js";
 
 /** Run predictions and return camelCase CapacityPrediction objects keyed by service → metric. */
 function runPredictionsRaw(
@@ -54,7 +55,8 @@ function runPredictionsRaw(
         const deltas = computeDailyDeltas(boundaries);
 
         const lastBoundary = boundaries[boundaries.length - 1];
-        const windowEnds = lastBoundary?.resetsAt ?? new Date(Date.now() + WEEKLY_WINDOW_HOURS * 3600_000).toISOString();
+        const windowEnds =
+          lastBoundary?.resetsAt ?? new Date(Date.now() + WEEKLY_WINDOW_HOURS * 3600_000).toISOString();
         const remainingDays = Math.max(0, (new Date(windowEnds).getTime() - Date.now()) / (24 * 3600_000));
         const marks = store.getCapacityMarks();
 
@@ -171,241 +173,245 @@ export const usageCommand = new Command("usage")
       return output;
     },
   })
-  .action(async (
-    service: string | undefined,
-    opts: {
-      live?: boolean;
-      json?: boolean;
-      jsonOnly?: boolean;
-      text?: boolean;
-      capacity?: boolean;
-      refresh?: string;
-      debug?: boolean;
-      verbose?: boolean;
-      logLevel?: string;
-      predict?: boolean;
-      serve?: boolean;
-      port?: string;
-      host?: string;
-    },
-  ) => {
-    // Configure logging
-    if (opts.logLevel) {
-      setLogLevel(opts.logLevel as LogLevel);
-    } else if (opts.verbose || opts.debug) {
-      setLogLevel("debug");
-    }
+  .action(
+    async (
+      service: string | undefined,
+      opts: {
+        live?: boolean;
+        json?: boolean;
+        jsonOnly?: boolean;
+        text?: boolean;
+        capacity?: boolean;
+        refresh?: string;
+        debug?: boolean;
+        verbose?: boolean;
+        logLevel?: string;
+        predict?: boolean;
+        serve?: boolean;
+        port?: string;
+        host?: string;
+      },
+    ) => {
+      // Configure logging
+      if (opts.logLevel) {
+        setLogLevel(opts.logLevel as LogLevel);
+      } else if (opts.verbose || opts.debug) {
+        setLogLevel("debug");
+      }
 
-    const jsonOnly = opts.jsonOnly ?? false;
+      const jsonOnly = opts.jsonOnly ?? false;
 
-    // When jsonOnly is set, suppress stderr and wrap in try-catch
-    if (jsonOnly) {
-      const origError = console.error;
-      console.error = () => {};
-      try {
-        const available = detectAvailableServices();
-        const services = validateService(service, available);
-        const debug = opts.debug ?? false;
+      // When jsonOnly is set, suppress stderr and wrap in try-catch
+      if (jsonOnly) {
+        const origError = console.error;
+        console.error = () => {};
+        try {
+          const available = detectAvailableServices();
+          const services = validateService(service, available);
+          const debug = opts.debug ?? false;
 
-        // --json-only with --capacity
-        if (opts.capacity) {
+          // --json-only with --capacity
+          if (opts.capacity) {
+            const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+            console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+            return;
+          }
+
           const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-          console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
-          return;
+          console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+        } catch (e) {
+          console.error = origError;
+          console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+          process.exit(ExitCode.FAILURE);
+        } finally {
+          console.error = origError;
         }
+        return;
+      }
 
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
-      } catch (e) {
-        console.error = origError;
-        console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      const startTime = performance.now();
+      const available = detectAvailableServices();
+      const services = validateService(service, available);
+      const refresh = Math.max(5, parseInt(opts.refresh ?? "10", 10) || 10);
+      const debug = opts.debug ?? false;
+      const port = parseInt(opts.port ?? "8080", 10) || 8080;
+      const useJson = opts.json || jsonOnly;
+
+      // Validate flag conflicts
+      if (opts.serve && opts.text) {
+        console.error("Error: --serve and --text are mutually exclusive.");
         process.exit(ExitCode.FAILURE);
-      } finally {
-        console.error = origError;
       }
-      return;
-    }
-
-    const startTime = performance.now();
-    const available = detectAvailableServices();
-    const services = validateService(service, available);
-    const refresh = Math.max(5, parseInt(opts.refresh ?? "10", 10) || 10);
-    const debug = opts.debug ?? false;
-    const port = parseInt(opts.port ?? "8080", 10) || 8080;
-    const useJson = opts.json || jsonOnly;
-
-    // Validate flag conflicts
-    if (opts.serve && opts.text) {
-      console.error("Error: --serve and --text are mutually exclusive.");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.serve && opts.live) {
-      console.error("Error: --serve and --live are mutually exclusive (server has its own streaming).");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.serve && opts.json) {
-      console.error("Error: --serve and --json are mutually exclusive (server already outputs JSON).");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.serve && opts.capacity) {
-      console.error("Error: --serve and --capacity are mutually exclusive.");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.predict && opts.serve) {
-      console.error("Error: --predict and --serve are mutually exclusive.");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.port !== "8080" && !opts.serve) {
-      console.error("Error: --port requires --serve.");
-      process.exit(ExitCode.FAILURE);
-    }
-    if (opts.host !== "127.0.0.1" && !opts.serve) {
-      console.error("Error: --host requires --serve.");
-      process.exit(ExitCode.FAILURE);
-    }
-
-    // Route to appropriate mode
-    if (opts.serve) {
-      const { startServer } = await import("../server/index.js");
-      startServer({ services, port, host: opts.host, refreshInterval: refresh, debug });
-      return;
-    }
-
-    // --capacity --json --live: capacity NDJSON stream
-    if (opts.capacity && useJson && opts.live) {
-      const abortController = new AbortController();
-      process.on("SIGINT", () => abortController.abort());
-
-      while (!abortController.signal.aborted) {
-        const loopStart = performance.now();
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
-        const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
-        console.log(JSON.stringify(JSON.parse(output)));
-        const elapsed = (performance.now() - loopStart) / 1000;
-        await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
+      if (opts.serve && opts.live) {
+        console.error("Error: --serve and --live are mutually exclusive (server has its own streaming).");
+        process.exit(ExitCode.FAILURE);
       }
-      return;
-    }
+      if (opts.serve && opts.json) {
+        console.error("Error: --serve and --json are mutually exclusive (server already outputs JSON).");
+        process.exit(ExitCode.FAILURE);
+      }
+      if (opts.serve && opts.capacity) {
+        console.error("Error: --serve and --capacity are mutually exclusive.");
+        process.exit(ExitCode.FAILURE);
+      }
+      if (opts.predict && opts.serve) {
+        console.error("Error: --predict and --serve are mutually exclusive.");
+        process.exit(ExitCode.FAILURE);
+      }
+      if (opts.port !== "8080" && !opts.serve) {
+        console.error("Error: --port requires --serve.");
+        process.exit(ExitCode.FAILURE);
+      }
+      if (opts.host !== "127.0.0.1" && !opts.serve) {
+        console.error("Error: --host requires --serve.");
+        process.exit(ExitCode.FAILURE);
+      }
 
-    // --capacity --json: capacity JSON snapshot
-    if (opts.capacity && useJson) {
-      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-      const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
-      const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
-      console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
-      return;
-    }
+      // Route to appropriate mode
+      if (opts.serve) {
+        const { startServer } = await import("../server/index.js");
+        startServer({ services, port, host: opts.host, refreshInterval: refresh, debug });
+        return;
+      }
 
-    // --capacity (with or without --text): capacity text - most compact agent output
-    if (opts.capacity) {
-      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+      // --capacity --json --live: capacity NDJSON stream
+      if (opts.capacity && useJson && opts.live) {
+        const abortController = new AbortController();
+        process.on("SIGINT", () => abortController.abort());
 
-      let output: string;
-      if (services.length === 1) {
-        if (services.includes("claude") && claudeMetrics) {
-          output = formatClaudeCapacityText(claudeMetrics);
-        } else if (codexMetrics) {
-          output = formatCodexCapacityText(codexMetrics);
+        while (!abortController.signal.aborted) {
+          const loopStart = performance.now();
+          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+          const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          console.log(JSON.stringify(JSON.parse(output)));
+          const elapsed = (performance.now() - loopStart) / 1000;
+          await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
+        }
+        return;
+      }
+
+      // --capacity --json: capacity JSON snapshot
+      if (opts.capacity && useJson) {
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+        const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+        const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
+        console.log(
+          formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions),
+        );
+        return;
+      }
+
+      // --capacity (with or without --text): capacity text - most compact agent output
+      if (opts.capacity) {
+        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+
+        let output: string;
+        if (services.length === 1) {
+          if (services.includes("claude") && claudeMetrics) {
+            output = formatClaudeCapacityText(claudeMetrics);
+          } else if (codexMetrics) {
+            output = formatCodexCapacityText(codexMetrics);
+          } else {
+            output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
+          }
         } else {
           output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
         }
-      } else {
-        output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
-      }
 
-      console.log(output);
+        console.log(output);
 
-      if (opts.predict) {
-        const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
-        for (const [, preds] of Object.entries(rawPreds)) {
-          for (const [, pred] of Object.entries(preds)) {
-            console.log(formatPredictionText(pred));
+        if (opts.predict) {
+          const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+          for (const [, preds] of Object.entries(rawPreds)) {
+            for (const [, pred] of Object.entries(preds)) {
+              console.log(formatPredictionText(pred));
+            }
           }
         }
-      }
 
-      if (debug) {
-        const elapsed = (performance.now() - startTime) / 1000;
-        console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
-      }
-      return;
-    }
-
-    // --predict standalone: text prediction output
-    if (opts.predict && !useJson && !opts.capacity && !opts.text) {
-      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
-      const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
-
-      const lines: string[] = [];
-      for (const [svc, preds] of Object.entries(rawPreds)) {
-        for (const [metric, pred] of Object.entries(preds)) {
-          lines.push(`${svc} ${metric}: ${formatPredictionText(pred)}`);
+        if (debug) {
+          const elapsed = (performance.now() - startTime) / 1000;
+          console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
         }
+        return;
       }
-      if (lines.length === 0) {
-        console.log("No prediction data available (no weekly metrics found).");
-      } else {
-        console.log(lines.join("\n"));
+
+      // --predict standalone: text prediction output
+      if (opts.predict && !useJson && !opts.capacity && !opts.text) {
+        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+        const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+
+        const lines: string[] = [];
+        for (const [svc, preds] of Object.entries(rawPreds)) {
+          for (const [metric, pred] of Object.entries(preds)) {
+            lines.push(`${svc} ${metric}: ${formatPredictionText(pred)}`);
+          }
+        }
+        if (lines.length === 0) {
+          console.log("No prediction data available (no weekly metrics found).");
+        } else {
+          console.log(lines.join("\n"));
+        }
+        return;
       }
-      return;
-    }
 
-    if (opts.text) {
-      // Single text snapshot
-      const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+      if (opts.text) {
+        // Single text snapshot
+        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
 
-      let output: string;
-      if (services.length === 1) {
-        if (services.includes("claude") && claudeMetrics) {
-          output = formatClaudeText(claudeMetrics);
-        } else if (codexMetrics) {
-          output = formatCodexText(codexMetrics);
+        let output: string;
+        if (services.length === 1) {
+          if (services.includes("claude") && claudeMetrics) {
+            output = formatClaudeText(claudeMetrics);
+          } else if (codexMetrics) {
+            output = formatCodexText(codexMetrics);
+          } else {
+            output = formatWithAvailability(claudeMetrics, codexMetrics, available);
+          }
         } else {
           output = formatWithAvailability(claudeMetrics, codexMetrics, available);
         }
-      } else {
-        output = formatWithAvailability(claudeMetrics, codexMetrics, available);
+
+        console.log(output);
+
+        if (debug) {
+          const elapsed = (performance.now() - startTime) / 1000;
+          console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+        }
+        return;
       }
 
-      console.log(output);
-
-      if (debug) {
-        const elapsed = (performance.now() - startTime) / 1000;
-        console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+      if (useJson && !opts.live) {
+        // Single JSON snapshot
+        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
+        const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+        const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
+        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
+        return;
       }
-      return;
-    }
 
-    if (useJson && !opts.live) {
-      // Single JSON snapshot
-      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-      const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
-      const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
-      console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
-      return;
-    }
+      if (useJson && opts.live) {
+        // Continuous NDJSON stream to stdout
+        const abortController = new AbortController();
+        process.on("SIGINT", () => abortController.abort());
 
-    if (useJson && opts.live) {
-      // Continuous NDJSON stream to stdout
-      const abortController = new AbortController();
-      process.on("SIGINT", () => abortController.abort());
-
-      while (!abortController.signal.aborted) {
-        const loopStart = performance.now();
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
-        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
-        // NDJSON: compact single-line JSON objects
-        console.log(JSON.stringify(JSON.parse(output)));
-        const elapsed = (performance.now() - loopStart) / 1000;
-        await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
+        while (!abortController.signal.aborted) {
+          const loopStart = performance.now();
+          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+          const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          // NDJSON: compact single-line JSON objects
+          console.log(JSON.stringify(JSON.parse(output)));
+          const elapsed = (performance.now() - loopStart) / 1000;
+          await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
+        }
+        return;
       }
-      return;
-    }
 
-    // Launch TUI (default)
-    const { render } = await import("@opentui/solid");
-    const { App } = await import("../tui/App.js");
-    // Pass validated service filter to TUI
-    const tuiService = (services.length === 1 ? services[0] : "all") as "claude" | "codex" | "all";
-    render(() => App({ service: tuiService }), { useMouse: true });
-  });
+      // Launch TUI (default)
+      const { render } = await import("@opentui/solid");
+      const { App } = await import("../tui/App.js");
+      // Pass validated service filter to TUI
+      const tuiService = (services.length === 1 ? services[0] : "all") as "claude" | "codex" | "all";
+      render(() => App({ service: tuiService }), { useMouse: true });
+    },
+  );

@@ -1,5 +1,5 @@
-import { DedupTracker } from "../storage/dedup.js";
 import type { UsageStore } from "../storage/database.js";
+import { DedupTracker } from "../storage/dedup.js";
 import type { FetchResult, MetricsDict, ServiceName } from "../types.js";
 import type { DaemonLogger } from "./logger.js";
 
@@ -19,7 +19,7 @@ export interface DaemonCollector {
   stop(): Promise<void>;
 }
 
-type DaemonCollectorTimer = ReturnType<typeof globalThis.setInterval>;
+type DaemonCollectorTimer = unknown;
 
 export interface DaemonCollectorOptions {
   services: Partial<Record<ServiceName, DaemonCollectorChain>>;
@@ -30,10 +30,7 @@ export interface DaemonCollectorOptions {
   now?: () => Date;
   intervalSeconds?: number;
   ptyRecycleHours?: number;
-  setInterval?: (
-    callback: () => Promise<void>,
-    intervalMs: number,
-  ) => DaemonCollectorTimer;
+  setInterval?: (callback: () => Promise<void>, intervalMs: number) => DaemonCollectorTimer;
   clearInterval?: (timer: DaemonCollectorTimer) => void;
 }
 
@@ -46,20 +43,20 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-export function createDaemonCollector(
-  options: DaemonCollectorOptions,
-): DaemonCollector {
+export function createDaemonCollector(options: DaemonCollectorOptions): DaemonCollector {
   const dedup = options.dedup ?? new DedupTracker();
   const now = options.now ?? (() => new Date());
   const intervalSeconds = options.intervalSeconds ?? 60;
   const standbys = options.standbys ?? {};
   const ptyRecycleMs = (options.ptyRecycleHours ?? 4) * 60 * 60 * 1000;
-  const setIntervalFn = options.setInterval ?? ((callback, intervalMs) =>
-    globalThis.setInterval(() => {
-      void callback();
-    }, intervalMs));
-  const clearIntervalFn = options.clearInterval ?? ((timer) =>
-    globalThis.clearInterval(timer));
+  const setIntervalFn =
+    options.setInterval ??
+    ((callback, intervalMs) =>
+      globalThis.setInterval(() => {
+        void callback();
+      }, intervalMs));
+  const clearIntervalFn =
+    options.clearInterval ?? ((timer) => globalThis.clearInterval(timer as ReturnType<typeof globalThis.setInterval>));
   let timer: DaemonCollectorTimer | null = null;
   let running = false;
   let lastStandbyRecycleAt: number | null = null;
@@ -76,9 +73,7 @@ export function createDaemonCollector(
       try {
         await standby[action]();
       } catch (error) {
-        options.logger.warn(
-          `[${service}] standby ${phase} failed: ${formatError(error)}`,
-        );
+        options.logger.warn(`[${service}] standby ${phase} failed: ${formatError(error)}`);
       }
     }
   };
@@ -107,9 +102,7 @@ export function createDaemonCollector(
       try {
         await chain.stop();
       } catch (error) {
-        options.logger.warn(
-          `[${service}] shutdown failed: ${formatError(error)}`,
-        );
+        options.logger.warn(`[${service}] shutdown failed: ${formatError(error)}`);
       }
     }
   };

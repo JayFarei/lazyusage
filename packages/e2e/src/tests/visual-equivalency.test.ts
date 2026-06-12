@@ -13,18 +13,17 @@
  *
  * Requires tmux - skips all tests if tmux unavailable.
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { join } from "path";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { extractStructuralInvariants } from "../helpers/golden.js";
 import {
-  isTmuxAvailable,
   captureFrame,
   createTestSession,
+  isTmuxAvailable,
+  killSession,
   launchTUI,
   waitForContent,
-  killSession,
 } from "../helpers/tmux.js";
-import { extractStructuralInvariants } from "../helpers/golden.js";
-import type { CaptureResult } from "../helpers/golden.js";
 
 const GOLDEN_DIR = join(import.meta.dir, "../../golden");
 
@@ -67,10 +66,7 @@ async function loadGolden(width: number, height: number): Promise<Record<string,
 }
 
 /** Capture a fresh frame at a given resolution and extract its structural invariants. */
-async function captureFreshInvariants(
-  width: number,
-  height: number,
-): Promise<Record<string, unknown>> {
+async function captureFreshInvariants(width: number, height: number): Promise<Record<string, unknown>> {
   const session = `e2e-vis-${width}x${height}`;
   await killSession(session);
   await createTestSession(session, width, height);

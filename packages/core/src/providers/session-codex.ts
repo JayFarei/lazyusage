@@ -4,12 +4,12 @@
  * This is the most reliable source since Codex embeds rate limit data in every session.
  */
 
-import { homedir } from "os";
-import { join } from "path";
-import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
-import { formatResetFromIso } from "../utils/time.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { CODEX_PLAN_TYPE_MAP } from "../constants.js";
+import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
+import { DataSource } from "../types.js";
+import { formatResetFromIso } from "../utils/time.js";
 
 interface RateLimits {
   limit_id?: string;
@@ -103,13 +103,9 @@ export class CodexSessionProvider implements UsageProvider {
             const stat = Bun.file(file);
             // Use lastModified as a proxy for recency
             allFiles.push({ path: file, mtimeMs: stat.lastModified });
-          } catch {
-            continue;
-          }
+          } catch {}
         }
-      } catch {
-        continue;
-      }
+      } catch {}
     }
 
     if (allFiles.length === 0) return null;

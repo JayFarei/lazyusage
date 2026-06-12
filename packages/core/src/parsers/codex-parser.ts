@@ -8,12 +8,13 @@
  *
  * Performance: same mtime pre-filter + parse-cache strategy as claude-parser.
  */
-import { homedir } from "os";
-import { join } from "path";
-import { statSync } from "fs";
-import type { SessionTokens } from "./types.js";
+
+import { statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { resolveProjectName } from "../utils/project.js";
-import { loadCacheSince, putCacheBatch, evictStale } from "./parse-cache.js";
+import { evictStale, loadCacheSince, putCacheBatch } from "./parse-cache.js";
+import type { SessionTokens } from "./types.js";
 
 interface SessionMeta {
   type?: string;
@@ -46,18 +47,11 @@ interface EventMsg {
 
 function dateFromTimestamp(ts: string): string {
   const d = new Date(ts);
-  if (isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return "";
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-/** Result from parsing a single Codex file, including session_id for dedup. */
-interface ParsedCodexSession {
-  sessionId: string;
-  mtimeMs: number;
-  session: SessionTokens;
 }
 
 /** Parse a single Codex session file. Returns a single-element array (or empty). */
@@ -110,10 +104,8 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
 
     if (!lastUsage) return [];
 
-    const inputTokens =
-      (lastUsage.input_tokens ?? 0) + (lastUsage.cached_input_tokens ?? 0);
-    const outputTokens =
-      (lastUsage.output_tokens ?? 0) + (lastUsage.reasoning_output_tokens ?? 0);
+    const inputTokens = (lastUsage.input_tokens ?? 0) + (lastUsage.cached_input_tokens ?? 0);
+    const outputTokens = (lastUsage.output_tokens ?? 0) + (lastUsage.reasoning_output_tokens ?? 0);
 
     const session: SessionTokens = {
       project: resolveProjectName(cwd),
@@ -138,10 +130,7 @@ async function parseFile(filePath: string): Promise<SessionTokens[]> {
   }
 }
 
-export async function parseCodexSessions(
-  sinceDate?: string,
-  baseDir?: string
-): Promise<SessionTokens[]> {
+export async function parseCodexSessions(sinceDate?: string, baseDir?: string): Promise<SessionTokens[]> {
   // When baseDir is provided (e.g., tests), scan it directly.
   // Otherwise, scan both sessions/ and archived_sessions/ under ~/.codex/
   const scanDirs = baseDir
@@ -149,7 +138,7 @@ export async function parseCodexSessions(
     : [join(homedir(), ".codex", "sessions"), join(homedir(), ".codex", "archived_sessions")];
 
   const glob = new Bun.Glob("**/*.jsonl");
-  let allFiles: string[] = [];
+  const allFiles: string[] = [];
   for (const dir of scanDirs) {
     try {
       allFiles.push(...Array.from(glob.scanSync({ cwd: dir, absolute: true })));
@@ -197,7 +186,11 @@ export async function parseCodexSessions(
     for (let i = 0; i < toReparse.length; i++) {
       const filePath = toReparse[i];
       const sessions = parsed[i];
-      const mtimeMs = toReparseMtimes.get(filePath)!;
+      const mtimeMs = toReparseMtimes.get(filePath);
+      if (mtimeMs === undefined) {
+        continue;
+      }
+
       newEntries.push({ filePath, mtimeMs, sessions });
       for (const s of sessions) {
         if (!sinceDate || s.date >= sinceDate) results.push(s);
@@ -219,10 +212,7 @@ export async function parseCodexSessions(
  * in both sessions/ and archived_sessions/, keep the copy from the file
  * with the latest mtime. Sessions without a session_id are always kept.
  */
-function deduplicateBySessionId(
-  sessions: SessionTokens[],
-  _fileMtimes: Map<string, number>
-): SessionTokens[] {
+function deduplicateBySessionId(sessions: SessionTokens[], _fileMtimes: Map<string, number>): SessionTokens[] {
   const seen = new Map<string, SessionTokens>();
   const result: SessionTokens[] = [];
 

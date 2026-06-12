@@ -3,11 +3,11 @@
  * Port of src/providers/cache.py
  */
 
-import { homedir } from "os";
-import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
 
 export class UsageCache implements UsageProvider {
   static readonly CACHE_DIR = join(homedir(), ".cache", "lazyusage");

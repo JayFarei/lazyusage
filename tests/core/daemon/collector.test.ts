@@ -16,10 +16,7 @@ const CODEX_METRICS: MetricsDict = {
   weekly: { used_pct: 55, remaining_pct: 45, resets: "3d" },
 };
 
-function makeSuccessResult(
-  metrics: MetricsDict,
-  source: DataSource,
-): FetchResult {
+function makeSuccessResult(metrics: MetricsDict, source: DataSource): FetchResult {
   return {
     metrics,
     source,
@@ -73,6 +70,14 @@ class MockStandby {
   }
 }
 
+function requireScheduledTick(tick: (() => Promise<void>) | null): () => Promise<void> {
+  if (!tick) {
+    throw new Error("Expected daemon collector to schedule a recurring tick");
+  }
+
+  return tick;
+}
+
 describe("createDaemonCollector", () => {
   let store: UsageStore;
 
@@ -85,12 +90,8 @@ describe("createDaemonCollector", () => {
   });
 
   test("runs one collection cycle and persists successful refresh results", async () => {
-    const claudeChain = new MockChain(
-      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
-    );
-    const codexChain = new MockChain(
-      makeSuccessResult(CODEX_METRICS, DataSource.PTY),
-    );
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
+    const codexChain = new MockChain(makeSuccessResult(CODEX_METRICS, DataSource.PTY));
     const warnings: string[] = [];
 
     const collector = createDaemonCollector({
@@ -130,9 +131,7 @@ describe("createDaemonCollector", () => {
 
   test("records refresh failures and continues collecting other services", async () => {
     const claudeChain = new MockChain(new Error("claude CLI unavailable"));
-    const codexChain = new MockChain(
-      makeSuccessResult(CODEX_METRICS, DataSource.API),
-    );
+    const codexChain = new MockChain(makeSuccessResult(CODEX_METRICS, DataSource.API));
     const warnings: string[] = [];
 
     const collector = createDaemonCollector({
@@ -164,15 +163,11 @@ describe("createDaemonCollector", () => {
       lastError: null,
       consecutiveFailures: 0,
     });
-    expect(warnings).toEqual([
-      "[claude] collection failed: claude CLI unavailable",
-    ]);
+    expect(warnings).toEqual(["[claude] collection failed: claude CLI unavailable"]);
   });
 
   test("starts an immediate recurring collection loop and stops it cleanly", async () => {
-    const claudeChain = new MockChain(
-      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
-    );
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
     const scheduledIntervals: number[] = [];
     const clearedHandles: unknown[] = [];
     let scheduledTick: (() => Promise<void>) | null = null;
@@ -204,21 +199,20 @@ describe("createDaemonCollector", () => {
     expect(scheduledIntervals).toEqual([60_000]);
     expect(scheduledTick).not.toBeNull();
 
-    await scheduledTick?.();
+    const runScheduledTick = requireScheduledTick(scheduledTick);
+    await runScheduledTick();
     expect(claudeChain.refreshCalls).toBe(2);
 
     await collector.stop();
 
     expect(clearedHandles).toEqual([timerHandle]);
 
-    await scheduledTick?.();
+    await runScheduledTick();
     expect(claudeChain.refreshCalls).toBe(2);
   });
 
   test("warms standby PTYs on start, recycles them on schedule, and winds them down on stop", async () => {
-    const claudeChain = new MockChain(
-      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
-    );
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
     const claudeStandby = new MockStandby();
     let currentTime = new Date("2026-04-09T08:00:00.000Z").getTime();
     let scheduledTick: (() => Promise<void>) | null = null;
@@ -247,31 +241,21 @@ describe("createDaemonCollector", () => {
 
     expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
 
+    const runScheduledTick = requireScheduledTick(scheduledTick);
     currentTime += 3 * 60 * 60 * 1000;
-    await scheduledTick?.();
+    await runScheduledTick();
     expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
 
     currentTime += 61 * 60 * 1000;
-    await scheduledTick?.();
-    expect(claudeStandby.lifecycleCalls).toEqual([
-      "windup",
-      "winddown",
-      "windup",
-    ]);
+    await runScheduledTick();
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup", "winddown", "windup"]);
 
     await collector.stop();
-    expect(claudeStandby.lifecycleCalls).toEqual([
-      "windup",
-      "winddown",
-      "windup",
-      "winddown",
-    ]);
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup", "winddown", "windup", "winddown"]);
   });
 
   test("stops service chains during shutdown and logs cleanup failures without aborting", async () => {
-    const claudeChain = new MockStoppableChain(
-      makeSuccessResult(CLAUDE_METRICS, DataSource.API),
-    );
+    const claudeChain = new MockStoppableChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
     const codexChain = new MockStoppableChain(
       makeSuccessResult(CODEX_METRICS, DataSource.PTY),
       new Error("codex PTY cleanup failed"),
@@ -296,8 +280,6 @@ describe("createDaemonCollector", () => {
 
     expect(claudeChain.stopCalls).toBe(1);
     expect(codexChain.stopCalls).toBe(1);
-    expect(warnings).toContain(
-      "[codex] shutdown failed: codex PTY cleanup failed",
-    );
+    expect(warnings).toContain("[codex] shutdown failed: codex PTY cleanup failed");
   });
 });

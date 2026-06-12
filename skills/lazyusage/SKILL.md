@@ -58,6 +58,10 @@ Recommended policy:
 
 ## Common patterns
 
+### Prompt templates
+
+- [`templates/claude-session-guard.prompt.md`](templates/claude-session-guard.prompt.md): prompt for Claude agents that should watch the Claude `session` / `Session (5h)` metric and sleep at 90-95% usage.
+
 ### Pre-flight gate
 
 ```bash

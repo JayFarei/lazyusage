@@ -1,25 +1,24 @@
-import { Command } from "commander";
+import { existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  watch,
-  writeFileSync,
-} from "fs";
-import { homedir } from "os";
-import { dirname, join } from "path";
-import {
+  createClaudeChain,
+  createCodexChain,
+  createDaemonCollector,
+  createDaemonLifecycle,
+  createDaemonLogger,
   DATA_SOURCE_LABELS,
-  DEFAULT_DAEMON_PID_PATH,
-  DEFAULT_DAEMON_LOG_PATH,
-  UsageStore,
-  loadDaemonConfig,
+  type DaemonCollectorChain,
   type DaemonConfig,
   type DaemonConfigOverrides,
   type DaemonLogLevel,
+  DEFAULT_DAEMON_LOG_PATH,
+  DEFAULT_DAEMON_PID_PATH,
+  loadDaemonConfig,
   type ServiceName,
+  UsageStore,
 } from "@lazyusage/core";
+import { Command } from "commander";
 
 export interface DaemonStartOptions {
   interval?: number;
@@ -28,16 +27,15 @@ export interface DaemonStartOptions {
   logLevel?: string;
 }
 
-type DaemonStatusStore = Pick<
-  UsageStore,
-  "getDaemonStatus" | "isDaemonHeartbeatFresh" | "close"
->;
+type DaemonStatusStore = Pick<UsageStore, "getDaemonStatus" | "isDaemonHeartbeatFresh" | "close">;
 
 type DaemonStatusRow = NonNullable<ReturnType<UsageStore["getDaemonStatus"]>>;
 type DaemonInstallPlatform = "darwin" | "linux";
 
 const DAEMON_LAUNCHD_LABEL = "com.lazyusage.daemon";
 const DAEMON_SYSTEMD_UNIT_NAME = "lazyusage-daemon.service";
+const DAEMON_START_TIMEOUT_MS = 30_000;
+const DAEMON_START_POLL_INTERVAL_MS = 50;
 
 export interface DaemonCommandOptions {
   onStart?: (options: DaemonStartOptions) => Promise<void> | void;
@@ -48,10 +46,7 @@ export interface DaemonCommandOptions {
   logFilePath?: string;
   readPidFile?: (path: string) => string;
   readLogFile?: (path: string) => string;
-  followLogFile?: (
-    path: string,
-    onChunk: (chunk: string) => void,
-  ) => Promise<void> | void;
+  followLogFile?: (path: string, onChunk: (chunk: string) => void) => Promise<void> | void;
   signalProcess?: (pid: number, signal: "SIGTERM") => void;
   isProcessRunning?: (pid: number) => boolean;
   waitForProcessExit?: (pid: number) => Promise<void>;
@@ -105,12 +100,7 @@ function parseLineCount(input?: string): number | undefined {
 }
 
 function parseLogLevelOverride(input?: string): DaemonLogLevel | undefined {
-  if (
-    input === "error"
-    || input === "warn"
-    || input === "info"
-    || input === "debug"
-  ) {
+  if (input === "error" || input === "warn" || input === "info" || input === "debug") {
     return input;
   }
 
@@ -184,16 +174,12 @@ function formatServiceSummary(
   }
 
   const age = formatAge(status.lastCollectedAt, nowMs);
-  const source = status.lastSource
-    ? (DATA_SOURCE_LABELS[status.lastSource] ?? status.lastSource)
-    : null;
+  const source = status.lastSource ? (DATA_SOURCE_LABELS[status.lastSource] ?? status.lastSource) : null;
   const summary = `${fresh ? "healthy" : "stale"}${age ? ` ${age} ago` : ""}${source ? ` via ${source}` : ""}`;
   const details: string[] = [];
 
   if (status.consecutiveFailures > 0) {
-    details.push(
-      `${status.consecutiveFailures} failure${status.consecutiveFailures === 1 ? "" : "s"}`,
-    );
+    details.push(`${status.consecutiveFailures} failure${status.consecutiveFailures === 1 ? "" : "s"}`);
   }
 
   if (status.lastError) {
@@ -222,14 +208,12 @@ function escapeXml(value: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
 
 function quoteSystemdArg(value: string): string {
-  return `"${value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("\"", "\\\"")}"`;
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 function createDaemonStartArgs(config: DaemonConfig): string[] {
@@ -246,35 +230,63 @@ function createDaemonStartArgs(config: DaemonConfig): string[] {
   ];
 }
 
-function getServiceDefinitionPath(
-  platform: DaemonInstallPlatform,
-  homeDirPath: string,
-): string {
-  if (platform === "darwin") {
-    return join(
-      homeDirPath,
-      "Library",
-      "LaunchAgents",
-      `${DAEMON_LAUNCHD_LABEL}.plist`,
-    );
+function createPersistentDaemonChain(service: ServiceName): DaemonCollectorChain {
+  const chain = service === "claude" ? createClaudeChain(true) : createCodexChain(true);
+
+  if (!("refresh" in chain) || !("stop" in chain)) {
+    throw new Error(`Persistent daemon chain unavailable for ${service}.`);
   }
 
-  return join(
-    homeDirPath,
-    ".config",
-    "systemd",
-    "user",
-    DAEMON_SYSTEMD_UNIT_NAME,
-  );
+  return chain;
 }
 
-function renderLaunchdPlist(
-  command: string[],
-  workingDirectory: string,
-): string {
-  const programArguments = command
-    .map((argument) => `      <string>${escapeXml(argument)}</string>`)
-    .join("\n");
+async function waitForDaemonReady(
+  pidFilePath: string,
+  expectedPid: number,
+  isProcessRunning: (pid: number) => boolean,
+  readPidFile: (path: string) => string,
+  createStore: () => DaemonStatusStore,
+): Promise<void> {
+  const deadline = Date.now() + DAEMON_START_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    if (!isProcessRunning(expectedPid)) {
+      throw new Error(`Daemon process ${expectedPid} exited before startup completed.`);
+    }
+
+    try {
+      if (parsePid(readPidFile(pidFilePath)) === expectedPid) {
+        const store = createStore();
+
+        try {
+          const daemonStatus = store.getDaemonStatus("_daemon");
+          if (daemonStatus?.pid === expectedPid && daemonStatus.startedAt) {
+            return;
+          }
+        } finally {
+          store.close();
+        }
+      }
+    } catch {
+      // Continue waiting until the daemon writes its pid file.
+    }
+
+    await Bun.sleep(DAEMON_START_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(`Timed out waiting for daemon ${expectedPid} to become ready.`);
+}
+
+function getServiceDefinitionPath(platform: DaemonInstallPlatform, homeDirPath: string): string {
+  if (platform === "darwin") {
+    return join(homeDirPath, "Library", "LaunchAgents", `${DAEMON_LAUNCHD_LABEL}.plist`);
+  }
+
+  return join(homeDirPath, ".config", "systemd", "user", DAEMON_SYSTEMD_UNIT_NAME);
+}
+
+function renderLaunchdPlist(command: string[], workingDirectory: string): string {
+  const programArguments = command.map((argument) => `      <string>${escapeXml(argument)}</string>`).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -297,10 +309,7 @@ ${programArguments}
 `;
 }
 
-function renderSystemdUnit(
-  command: string[],
-  workingDirectory: string,
-): string {
+function renderSystemdUnit(command: string[], workingDirectory: string): string {
   const execStart = command.map(quoteSystemdArg).join(" ");
 
   return `[Unit]
@@ -318,10 +327,7 @@ WantedBy=default.target
 `;
 }
 
-function getInstallServiceManagerCommands(
-  platform: DaemonInstallPlatform,
-  serviceFilePath: string,
-): string[][] {
+function getInstallServiceManagerCommands(platform: DaemonInstallPlatform, serviceFilePath: string): string[][] {
   if (platform === "darwin") {
     return [["launchctl", "load", serviceFilePath]];
   }
@@ -332,10 +338,7 @@ function getInstallServiceManagerCommands(
   ];
 }
 
-function getUninstallServiceManagerCommands(
-  platform: DaemonInstallPlatform,
-  serviceFilePath: string,
-): string[][] {
+function getUninstallServiceManagerCommands(platform: DaemonInstallPlatform, serviceFilePath: string): string[][] {
   if (platform === "darwin") {
     return [["launchctl", "unload", serviceFilePath]];
   }
@@ -346,15 +349,12 @@ function getUninstallServiceManagerCommands(
   ];
 }
 
-export function createDaemonCommand(
-  options: DaemonCommandOptions = {},
-): Command {
+export function createDaemonCommand(options: DaemonCommandOptions = {}): Command {
   const pidFilePath = options.pidFilePath ?? DEFAULT_DAEMON_PID_PATH;
   const logFilePath = options.logFilePath ?? DEFAULT_DAEMON_LOG_PATH;
   const platform = options.platform ?? process.platform;
   const homeDirPath = options.homeDir ?? homedir();
-  const runtimeExecutablePath =
-    options.runtimeExecutablePath ?? process.execPath;
+  const runtimeExecutablePath = options.runtimeExecutablePath ?? process.execPath;
   const cliEntrypointPath = options.cliEntrypointPath ?? process.argv[1];
   const readPidFile =
     options.readPidFile ??
@@ -365,13 +365,11 @@ export function createDaemonCommand(
 
       return readFileSync(path, "utf-8");
     });
-  const readLogFile =
-    options.readLogFile ??
-    ((path: string): string => readFileSync(path, "utf-8"));
+  const readLogFile = options.readLogFile ?? ((path: string): string => readFileSync(path, "utf-8"));
   const followLogFile =
     options.followLogFile ??
     ((path: string, onChunk: (chunk: string) => void): Promise<void> =>
-      new Promise((resolve, reject) => {
+      new Promise((_resolve, reject) => {
         let previousContents = readLogFile(path);
         const watcher = watch(path, () => {
           try {
@@ -434,11 +432,7 @@ export function createDaemonCommand(
 
       if (result.exitCode !== 0) {
         const stderr = result.stderr.toString().trim();
-        throw new Error(
-          stderr.length > 0
-            ? stderr
-            : `Service manager command failed: ${command.join(" ")}`,
-        );
+        throw new Error(stderr.length > 0 ? stderr : `Service manager command failed: ${command.join(" ")}`);
       }
     });
   const waitForProcessExit =
@@ -460,9 +454,61 @@ export function createDaemonCommand(
         throw new Error(`Timed out waiting for daemon ${pid} to exit.`);
       }
     });
+  const defaultStartForeground = async (config: DaemonConfig): Promise<void> => {
+    const logger = createDaemonLogger({
+      logPath: logFilePath,
+      level: config.logLevel,
+    });
+    const store = new UsageStore();
+    const services: Partial<Record<ServiceName, DaemonCollectorChain>> = {};
 
-  const command = new Command("daemon")
-    .description("Manage the always-on collector daemon");
+    for (const service of config.services) {
+      services[service] = createPersistentDaemonChain(service);
+    }
+
+    const collector = createDaemonCollector({
+      services,
+      store,
+      logger,
+      intervalSeconds: config.interval,
+      ptyRecycleHours: config.ptyRecycleHours,
+    });
+    const lifecycle = createDaemonLifecycle({
+      collector,
+      store,
+      logger,
+      pidFilePath,
+    });
+
+    logger.info(
+      `[daemon] starting pid=${process.pid} interval=${config.interval}s services=${config.services.join(",")} logLevel=${config.logLevel}`,
+    );
+
+    try {
+      await lifecycle.startForeground();
+      logger.info(`[daemon] collector online pid=${process.pid}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[daemon] startup failed: ${message}`);
+      store.close();
+      throw error;
+    }
+  };
+  const defaultStartBackground = async (config: DaemonConfig): Promise<number> => {
+    const child = Bun.spawn([runtimeExecutablePath, resolve(cliEntrypointPath), ...createDaemonStartArgs(config)], {
+      cwd: process.cwd(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true,
+    });
+
+    child.unref?.();
+    await waitForDaemonReady(pidFilePath, child.pid, isProcessRunning, readPidFile, createStore);
+    return child.pid;
+  };
+
+  const command = new Command("daemon").description("Manage the always-on collector daemon");
 
   command
     .command("start")
@@ -471,12 +517,7 @@ export function createDaemonCommand(
     .option("--services <services>", "Comma-separated services to collect")
     .option("--foreground", "Run in the foreground instead of forking")
     .option("--log-level <level>", "Daemon log level")
-    .action(async (input: {
-      interval?: string;
-      services?: string;
-      foreground?: boolean;
-      logLevel?: string;
-    }) => {
+    .action(async (input: { interval?: string; services?: string; foreground?: boolean; logLevel?: string }) => {
       const startOptions: DaemonStartOptions = {
         interval: parseInterval(input.interval),
         services: parseServices(input.services),
@@ -496,11 +537,12 @@ export function createDaemonCommand(
       });
 
       if (startOptions.foreground) {
-        await options.startForeground?.(config);
+        await (options.startForeground ?? defaultStartForeground)(config);
         return;
       }
 
-      await options.startBackground?.(config);
+      const pid = await (options.startBackground ?? defaultStartBackground)(config);
+      writeStdout(`Started daemon ${pid}.`);
     });
 
   command
@@ -543,12 +585,8 @@ export function createDaemonCommand(
 
         const services: ServiceName[] = ["claude", "codex"];
         const serviceSummaries = services.map((service) =>
-          formatServiceSummary(
-            service,
-            store.getDaemonStatus(service),
-            store.isDaemonHeartbeatFresh(service),
-            nowMs,
-          ));
+          formatServiceSummary(service, store.getDaemonStatus(service), store.isDaemonHeartbeatFresh(service), nowMs),
+        );
 
         writeStdout([daemonSummary, ...serviceSummaries].join(" | "));
       } finally {
@@ -563,7 +601,19 @@ export function createDaemonCommand(
     .option("--follow", "Follow appended log output")
     .action(async (input: { lines?: string; follow?: boolean }) => {
       const lineCount = parseLineCount(input.lines) ?? 10;
-      const contents = readLogFile(logFilePath);
+      let contents: string;
+
+      try {
+        contents = readLogFile(logFilePath);
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? error.code : null;
+        if (code === "ENOENT") {
+          writeStdout("No daemon logs yet.");
+          return;
+        }
+        throw error;
+      }
+
       const output = tailLogContent(contents, lineCount);
 
       if (!input.follow) {
@@ -592,21 +642,15 @@ export function createDaemonCommand(
       }
 
       const config = (options.loadConfig ?? loadDaemonConfig)({});
-      const commandArgs = [
-        runtimeExecutablePath,
-        cliEntrypointPath,
-        ...createDaemonStartArgs(config),
-      ];
+      const commandArgs = [runtimeExecutablePath, cliEntrypointPath, ...createDaemonStartArgs(config)];
       const serviceFilePath = getServiceDefinitionPath(platform, homeDirPath);
-      const serviceContents = platform === "darwin"
-        ? renderLaunchdPlist(commandArgs, process.cwd())
-        : renderSystemdUnit(commandArgs, process.cwd());
+      const serviceContents =
+        platform === "darwin"
+          ? renderLaunchdPlist(commandArgs, process.cwd())
+          : renderSystemdUnit(commandArgs, process.cwd());
 
       writeServiceFile(serviceFilePath, serviceContents);
-      for (const serviceManagerCommand of getInstallServiceManagerCommands(
-        platform,
-        serviceFilePath,
-      )) {
+      for (const serviceManagerCommand of getInstallServiceManagerCommands(platform, serviceFilePath)) {
         await runServiceManagerCommand(serviceManagerCommand);
       }
       writeStdout(`Installed daemon service at ${serviceFilePath}.`);
@@ -621,10 +665,7 @@ export function createDaemonCommand(
       }
 
       const serviceFilePath = getServiceDefinitionPath(platform, homeDirPath);
-      for (const serviceManagerCommand of getUninstallServiceManagerCommands(
-        platform,
-        serviceFilePath,
-      )) {
+      for (const serviceManagerCommand of getUninstallServiceManagerCommands(platform, serviceFilePath)) {
         await runServiceManagerCommand(serviceManagerCommand);
       }
       removeServiceFile(serviceFilePath);

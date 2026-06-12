@@ -2,7 +2,7 @@
  * Aggregate SessionTokens into per-project usage summaries.
  * Three time windows: daily (today), weekly (7 days), monthly (28 days).
  */
-import type { SessionTokens, ProjectUsage } from "./types.js";
+import type { ProjectUsage, SessionTokens } from "./types.js";
 
 function todayStr(): string {
   const d = new Date();
@@ -22,13 +22,16 @@ function daysAgoStr(days: number): string {
 }
 
 function groupByProject(sessions: SessionTokens[]): ProjectUsage[] {
-  const map = new Map<string, {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheCreationTokens: number;
-    totalTokens: number;
-  }>();
+  const map = new Map<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      totalTokens: number;
+    }
+  >();
 
   for (const s of sessions) {
     const existing = map.get(s.project);

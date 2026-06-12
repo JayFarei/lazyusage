@@ -2,6 +2,7 @@
  * Help overlay showing keyboard shortcuts.
  */
 import { Show } from "solid-js";
+import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";
 
 interface HelpOverlayProps {
@@ -44,7 +45,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
         height={23}
         backgroundColor={theme.surface0}
         borderColor={theme.cyan}
-        borderStyle={"rounded" as any}
+        borderStyle={ROUNDED_BORDER_STYLE}
         padding={1}
       >
         <text content={helpText} fg={theme.text} />

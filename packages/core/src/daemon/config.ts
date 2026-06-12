@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ServiceName } from "../types.js";
 
 export type DaemonLogLevel = "error" | "warn" | "info" | "debug";
@@ -21,12 +21,7 @@ export interface DaemonConfigOverrides {
   ptyRecycleHours?: number;
 }
 
-export const DEFAULT_DAEMON_CONFIG_PATH = join(
-  homedir(),
-  ".config",
-  "lazyusage",
-  "daemon.toml",
-);
+export const DEFAULT_DAEMON_CONFIG_PATH = join(homedir(), ".config", "lazyusage", "daemon.toml");
 
 interface ParsedDaemonConfigFile {
   interval?: unknown;
@@ -57,21 +52,16 @@ function parseLogLevel(value: unknown): DaemonLogLevel | undefined {
   return undefined;
 }
 
-export function loadDaemonConfig(
-  overrides: DaemonConfigOverrides = {},
-): DaemonConfig {
+export function loadDaemonConfig(overrides: DaemonConfigOverrides = {}): DaemonConfig {
   const configPath = overrides.configPath ?? DEFAULT_DAEMON_CONFIG_PATH;
   const fileConfig: ParsedDaemonConfigFile = existsSync(configPath)
-    ? Bun.TOML.parse(readFileSync(configPath, "utf-8")) as ParsedDaemonConfigFile
+    ? (Bun.TOML.parse(readFileSync(configPath, "utf-8")) as ParsedDaemonConfigFile)
     : {};
 
   const interval = typeof fileConfig.interval === "number" ? fileConfig.interval : undefined;
   const services = parseServices(fileConfig.services);
   const logLevel = parseLogLevel(fileConfig.log_level);
-  const ptyRecycleHours =
-    typeof fileConfig.pty?.recycle_hours === "number"
-      ? fileConfig.pty.recycle_hours
-      : undefined;
+  const ptyRecycleHours = typeof fileConfig.pty?.recycle_hours === "number" ? fileConfig.pty.recycle_hours : undefined;
 
   return {
     interval: overrides.interval ?? interval ?? 60,

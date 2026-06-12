@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { createDaemonLifecycle } from "../../../packages/core/src/daemon/lifecycle.js";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createDaemonLifecycle,
+  type DaemonBackgroundLaunchOptions,
+} from "../../../packages/core/src/daemon/lifecycle.js";
 
 class MockCollector {
   startCalls = 0;
@@ -14,6 +17,27 @@ class MockCollector {
 
   async stop(): Promise<void> {
     this.stopCalls += 1;
+  }
+}
+
+class DeferredCollector {
+  startCalls = 0;
+  stopCalls = 0;
+  private resolveStart: (() => void) | null = null;
+
+  async start(): Promise<void> {
+    this.startCalls += 1;
+    await new Promise<void>((resolve) => {
+      this.resolveStart = resolve;
+    });
+  }
+
+  async stop(): Promise<void> {
+    this.stopCalls += 1;
+  }
+
+  finishStart(): void {
+    this.resolveStart?.();
   }
 }
 
@@ -138,17 +162,46 @@ describe("createDaemonLifecycle", () => {
     expect(signalHandlers.size).toBe(0);
   });
 
+  test("queues shutdown requested during startup and exits once startup completes", async () => {
+    const collector = new DeferredCollector();
+    const store = new MockStore();
+    const signalHandlers = new Map<string, () => Promise<void>>();
+
+    const lifecycle = createDaemonLifecycle({
+      collector,
+      store,
+      logger: { warn: () => {} },
+      pidFilePath,
+      pid: 4321,
+      onSignal: (signal, handler) => {
+        signalHandlers.set(signal, handler);
+      },
+      offSignal: (signal) => {
+        signalHandlers.delete(signal);
+      },
+    });
+
+    const startPromise = lifecycle.startForeground();
+
+    expect(existsSync(pidFilePath)).toBe(true);
+    await signalHandlers.get("SIGTERM")?.();
+    expect(collector.stopCalls).toBe(0);
+
+    collector.finishStart();
+    await startPromise;
+
+    expect(collector.startCalls).toBe(1);
+    expect(collector.stopCalls).toBe(1);
+    expect(store.closeCalls).toBe(1);
+    expect(existsSync(pidFilePath)).toBe(false);
+    expect(signalHandlers.size).toBe(0);
+  });
+
   test("spawns a detached background daemon process and returns its pid", async () => {
     const collector = new MockCollector();
     const store = new MockStore();
     const child = new MockBackgroundProcess(9876);
-    let spawnInput:
-      | {
-          command: string[];
-          cwd?: string;
-          env?: Record<string, string | undefined>;
-        }
-      | null = null;
+    const spawnInputs: DaemonBackgroundLaunchOptions[] = [];
 
     const lifecycle = createDaemonLifecycle({
       collector,
@@ -156,7 +209,7 @@ describe("createDaemonLifecycle", () => {
       logger: { warn: () => {} },
       pidFilePath,
       spawnBackground: (input) => {
-        spawnInput = input;
+        spawnInputs.push(input);
         return child;
       },
     });
@@ -172,12 +225,15 @@ describe("createDaemonLifecycle", () => {
     expect(pid).toBe(9876);
     expect(collector.startCalls).toBe(0);
     expect(existsSync(pidFilePath)).toBe(false);
-    expect(spawnInput).toEqual({
-      command: ["bun", "run", "lazyusage", "daemon", "start", "--foreground"],
-      cwd: tempDir,
-      env: {
-        LAZYUSAGE_DB_PATH: join(tempDir, "usage.db"),
-      },
+    const backgroundInput = spawnInputs[0];
+    if (!backgroundInput) {
+      throw new Error("Expected background spawn input");
+    }
+
+    expect(backgroundInput.command).toEqual(["bun", "run", "lazyusage", "daemon", "start", "--foreground"]);
+    expect(backgroundInput.cwd).toBe(tempDir);
+    expect(backgroundInput.env).toEqual({
+      LAZYUSAGE_DB_PATH: join(tempDir, "usage.db"),
     });
     expect(child.unrefCalls).toBe(1);
   });
