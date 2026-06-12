@@ -1,12 +1,12 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
+  calculateFallbackTime,
+  calculateTimeProgress,
   format12hTime,
   formatResetDate,
-  parseTimeToDatetime,
-  formatTimeRemaining,
-  calculateTimeProgress,
-  calculateFallbackTime,
   formatResetFromIso,
+  formatTimeRemaining,
+  parseTimeToDatetime,
 } from "@lazyusage/core/utils/time.js";
 
 describe("format12hTime", () => {
@@ -165,13 +165,7 @@ describe("calculateFallbackTime", () => {
 describe("formatResetFromIso", () => {
   test("formats same-day ISO time", () => {
     const now = new Date();
-    const iso = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      15,
-      30,
-    ).toISOString();
+    const iso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 15, 30).toISOString();
     const result = formatResetFromIso(iso);
     expect(result).toBe("3:30pm");
   });

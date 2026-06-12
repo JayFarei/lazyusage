@@ -3,9 +3,9 @@
  * Port of src/formatters/json.py
  */
 
-import type { MetricsDict, ServiceName, ServiceResourceInfo } from "../types.js";
-import { calculateTimeProgress } from "../utils/time.js";
 import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
+import type { MetricsDict, ServiceName, ServiceResourceInfo } from "../types.js";
+import { calculateTimeProgress, formatTimeRemaining, parseTimeToDatetime } from "../utils/time.js";
 
 const WINDOW_HOURS: Record<string, number> = {
   session: SESSION_WINDOW_HOURS,
@@ -15,10 +15,14 @@ const WINDOW_HOURS: Record<string, number> = {
   weekly: WEEKLY_WINDOW_HOURS,
 };
 
-function enrichMetric(name: string, metric: { used_pct: number; remaining_pct: number; resets: string }): Record<string, unknown> {
+function enrichMetric(
+  name: string,
+  metric: { used_pct: number; remaining_pct: number; resets: string },
+): Record<string, unknown> {
   const windowHours = WINDOW_HOURS[name] ?? 168;
   const timeElapsedPct = Math.round(calculateTimeProgress(metric.resets, windowHours));
   const capacityRemaining = timeElapsedPct - metric.used_pct;
+  const resetsAt = parseTimeToDatetime(metric.resets);
   return {
     name,
     used_pct: metric.used_pct,
@@ -26,6 +30,7 @@ function enrichMetric(name: string, metric: { used_pct: number; remaining_pct: n
     time_elapsed_pct: timeElapsedPct,
     capacity_remaining: capacityRemaining,
     resets: metric.resets,
+    time_remaining: formatTimeRemaining(new Date(), resetsAt, windowHours),
   };
 }
 
@@ -138,7 +143,10 @@ export function formatAllJson(claudeMetrics: MetricsDict, codexMetrics: MetricsD
     },
   };
 
-  const services = output.services as Record<string, { subscription_type: string | null; metrics: Array<Record<string, unknown>> }>;
+  const services = output.services as Record<
+    string,
+    { subscription_type: string | null; metrics: Array<Record<string, unknown>> }
+  >;
 
   for (const [name, data] of Object.entries(claudeMetrics)) {
     if (name === "subscription_type" || typeof data !== "object" || data === null) continue;

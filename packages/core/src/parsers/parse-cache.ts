@@ -10,14 +10,13 @@
  * Engine: bun:sqlite (same as UsageStore)
  */
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "fs";
-import { homedir } from "os";
-import { join, dirname } from "path";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { SessionTokens } from "./types.js";
 
 const CACHE_DB_PATH =
-  process.env.LAZYUSAGE_PARSE_CACHE_PATH ??
-  join(homedir(), ".cache", "lazyusage", "parse-cache.db");
+  process.env.LAZYUSAGE_PARSE_CACHE_PATH ?? join(homedir(), ".cache", "lazyusage", "parse-cache.db");
 
 // Bump this when SessionTokens shape changes to force a full re-parse.
 const SCHEMA_VERSION = 2;
@@ -66,9 +65,7 @@ export interface CacheEntry {
 export function loadCacheSince(sinceDateMs: number): Map<string, CacheEntry> {
   const db = getDb();
   const rows = db
-    .prepare(
-      "SELECT file_path, mtime_ms, sessions_json FROM parse_cache WHERE mtime_ms >= ?"
-    )
+    .prepare("SELECT file_path, mtime_ms, sessions_json FROM parse_cache WHERE mtime_ms >= ?")
     .all(sinceDateMs) as Array<{
     file_path: string;
     mtime_ms: number;
@@ -92,14 +89,10 @@ export function loadCacheSince(sinceDateMs: number): Map<string, CacheEntry> {
 /**
  * Persist a batch of new/updated cache entries inside a single transaction.
  */
-export function putCacheBatch(
-  entries: Array<{ filePath: string; mtimeMs: number; sessions: SessionTokens[] }>
-): void {
+export function putCacheBatch(entries: Array<{ filePath: string; mtimeMs: number; sessions: SessionTokens[] }>): void {
   if (entries.length === 0) return;
   const db = getDb();
-  const stmt = db.prepare(
-    "INSERT OR REPLACE INTO parse_cache (file_path, mtime_ms, sessions_json) VALUES (?, ?, ?)"
-  );
+  const stmt = db.prepare("INSERT OR REPLACE INTO parse_cache (file_path, mtime_ms, sessions_json) VALUES (?, ?, ?)");
   db.transaction(() => {
     for (const { filePath, mtimeMs, sessions } of entries) {
       stmt.run(filePath, mtimeMs, JSON.stringify(sessions));
@@ -130,13 +123,9 @@ export function evictStale(existingFiles: string[]): void {
   const existingSet = new Set(existingFiles);
 
   // Get all cached file paths
-  const rows = db
-    .prepare("SELECT file_path FROM parse_cache")
-    .all() as Array<{ file_path: string }>;
+  const rows = db.prepare("SELECT file_path FROM parse_cache").all() as Array<{ file_path: string }>;
 
-  const toDelete = rows
-    .map((r) => r.file_path)
-    .filter((p) => !existingSet.has(p));
+  const toDelete = rows.map((r) => r.file_path).filter((p) => !existingSet.has(p));
 
   if (toDelete.length > 0) {
     const stmt = db.prepare("DELETE FROM parse_cache WHERE file_path = ?");
@@ -151,7 +140,7 @@ export function evictStale(existingFiles: string[]): void {
     const excess = countRow.cnt - MAX_CACHE_ENTRIES;
     db.run(
       "DELETE FROM parse_cache WHERE file_path IN (SELECT file_path FROM parse_cache ORDER BY mtime_ms ASC LIMIT ?)",
-      [excess]
+      [excess],
     );
   }
 }

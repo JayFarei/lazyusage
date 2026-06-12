@@ -18,6 +18,12 @@ export interface Theme {
   blue: string;
   chartYellow: string;
   chartCyan: string;
+  graphActual: string;
+  graphPace: string;
+  graphProjected: string;
+  graphNow: string;
+  graphGrid: string;
+  graphThreshold: string;
   borderActive: string;
   borderInactive: string;
   selectionBg: string;
@@ -36,6 +42,12 @@ export const catppuccinMocha: Theme = {
   blue: "#89b4fa",
   chartYellow: "#FFFF00",
   chartCyan: "#89dceb",
+  graphActual: "#a6e3a1",
+  graphPace: "#f9e2af",
+  graphProjected: "#89b4fa",
+  graphNow: "#f38ba8",
+  graphGrid: "#585b70",
+  graphThreshold: "#fab387",
   borderActive: "#a6e3a1",
   borderInactive: "#45475a",
   selectionBg: "#313244",
@@ -54,6 +66,12 @@ export const monochrome: Theme = {
   blue: "#d8d8d8",
   chartYellow: "#f1f1f1",
   chartCyan: "#d8d8d8",
+  graphActual: "#f1f1f1",
+  graphPace: "#d8d8d8",
+  graphProjected: "#cfcfcf",
+  graphNow: "#ffffff",
+  graphGrid: "#4a4a4a",
+  graphThreshold: "#b8b8b8",
   borderActive: "#f1f1f1",
   borderInactive: "#4a4a4a",
   selectionBg: "#2b2b2b",

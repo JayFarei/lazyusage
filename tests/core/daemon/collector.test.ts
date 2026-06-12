@@ -1,0 +1,285 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createDaemonCollector } from "../../../packages/core/src/daemon/collector.js";
+import { UsageStore } from "../../../packages/core/src/storage/database.js";
+import { DataSource, type FetchResult, type MetricsDict } from "../../../packages/core/src/types.js";
+
+const CLAUDE_METRICS: MetricsDict = {
+  subscription_type: "max",
+  session: { used_pct: 25, remaining_pct: 75, resets: "2h" },
+  week_all: { used_pct: 40, remaining_pct: 60, resets: "3d" },
+  week_sonnet: { used_pct: 15, remaining_pct: 85, resets: "3d" },
+};
+
+const CODEX_METRICS: MetricsDict = {
+  subscription_type: "pro",
+  "5h": { used_pct: 30, remaining_pct: 70, resets: "4h" },
+  weekly: { used_pct: 55, remaining_pct: 45, resets: "3d" },
+};
+
+function makeSuccessResult(metrics: MetricsDict, source: DataSource): FetchResult {
+  return {
+    metrics,
+    source,
+    timestamp: Date.now() / 1000,
+    error: null,
+    stale: false,
+  };
+}
+
+class MockChain {
+  constructor(private readonly result: FetchResult | Error) {}
+
+  refreshCalls = 0;
+
+  async refresh(): Promise<FetchResult> {
+    this.refreshCalls += 1;
+    if (this.result instanceof Error) {
+      throw this.result;
+    }
+    return this.result;
+  }
+}
+
+class MockStoppableChain extends MockChain {
+  constructor(
+    result: FetchResult | Error,
+    private readonly stopError?: Error,
+  ) {
+    super(result);
+  }
+
+  stopCalls = 0;
+
+  async stop(): Promise<void> {
+    this.stopCalls += 1;
+    if (this.stopError) {
+      throw this.stopError;
+    }
+  }
+}
+
+class MockStandby {
+  lifecycleCalls: string[] = [];
+
+  async windup(): Promise<void> {
+    this.lifecycleCalls.push("windup");
+  }
+
+  async winddown(): Promise<void> {
+    this.lifecycleCalls.push("winddown");
+  }
+}
+
+function requireScheduledTick(tick: (() => Promise<void>) | null): () => Promise<void> {
+  if (!tick) {
+    throw new Error("Expected daemon collector to schedule a recurring tick");
+  }
+
+  return tick;
+}
+
+describe("createDaemonCollector", () => {
+  let store: UsageStore;
+
+  beforeEach(() => {
+    store = new UsageStore(":memory:");
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("runs one collection cycle and persists successful refresh results", async () => {
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
+    const codexChain = new MockChain(makeSuccessResult(CODEX_METRICS, DataSource.PTY));
+    const warnings: string[] = [];
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+        codex: codexChain,
+      },
+      store,
+      logger: {
+        warn: (message) => warnings.push(message),
+      },
+      now: () => new Date("2026-04-09T12:00:00.000Z"),
+    });
+
+    await collector.collectOnce();
+
+    expect(claudeChain.refreshCalls).toBe(1);
+    expect(codexChain.refreshCalls).toBe(1);
+    expect(store.getLatestSnapshot("claude")).toEqual(CLAUDE_METRICS);
+    expect(store.getLatestSnapshot("codex")).toEqual(CODEX_METRICS);
+    expect(store.getDaemonStatus("claude")).toMatchObject({
+      service: "claude",
+      lastCollectedAt: "2026-04-09T12:00:00.000Z",
+      lastSource: DataSource.API,
+      lastError: null,
+      consecutiveFailures: 0,
+    });
+    expect(store.getDaemonStatus("codex")).toMatchObject({
+      service: "codex",
+      lastCollectedAt: "2026-04-09T12:00:00.000Z",
+      lastSource: DataSource.PTY,
+      lastError: null,
+      consecutiveFailures: 0,
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  test("records refresh failures and continues collecting other services", async () => {
+    const claudeChain = new MockChain(new Error("claude CLI unavailable"));
+    const codexChain = new MockChain(makeSuccessResult(CODEX_METRICS, DataSource.API));
+    const warnings: string[] = [];
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+        codex: codexChain,
+      },
+      store,
+      logger: {
+        warn: (message) => warnings.push(message),
+      },
+      now: () => new Date("2026-04-09T12:05:00.000Z"),
+    });
+
+    await collector.collectOnce();
+
+    expect(store.getLatestSnapshot("claude")).toBeNull();
+    expect(store.getDaemonStatus("claude")).toMatchObject({
+      service: "claude",
+      lastCollectedAt: null,
+      lastError: "claude CLI unavailable",
+      consecutiveFailures: 1,
+    });
+    expect(store.getLatestSnapshot("codex")).toEqual(CODEX_METRICS);
+    expect(store.getDaemonStatus("codex")).toMatchObject({
+      service: "codex",
+      lastCollectedAt: "2026-04-09T12:05:00.000Z",
+      lastSource: DataSource.API,
+      lastError: null,
+      consecutiveFailures: 0,
+    });
+    expect(warnings).toEqual(["[claude] collection failed: claude CLI unavailable"]);
+  });
+
+  test("starts an immediate recurring collection loop and stops it cleanly", async () => {
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
+    const scheduledIntervals: number[] = [];
+    const clearedHandles: unknown[] = [];
+    let scheduledTick: (() => Promise<void>) | null = null;
+    const timerHandle = { id: "collector-loop" };
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+      },
+      store,
+      logger: {
+        warn: () => {},
+      },
+      now: () => new Date("2026-04-09T12:10:00.000Z"),
+      intervalSeconds: 60,
+      setInterval: (callback, intervalMs) => {
+        scheduledIntervals.push(intervalMs);
+        scheduledTick = callback;
+        return timerHandle;
+      },
+      clearInterval: (handle) => {
+        clearedHandles.push(handle);
+      },
+    });
+
+    await collector.start();
+
+    expect(claudeChain.refreshCalls).toBe(1);
+    expect(scheduledIntervals).toEqual([60_000]);
+    expect(scheduledTick).not.toBeNull();
+
+    const runScheduledTick = requireScheduledTick(scheduledTick);
+    await runScheduledTick();
+    expect(claudeChain.refreshCalls).toBe(2);
+
+    await collector.stop();
+
+    expect(clearedHandles).toEqual([timerHandle]);
+
+    await runScheduledTick();
+    expect(claudeChain.refreshCalls).toBe(2);
+  });
+
+  test("warms standby PTYs on start, recycles them on schedule, and winds them down on stop", async () => {
+    const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
+    const claudeStandby = new MockStandby();
+    let currentTime = new Date("2026-04-09T08:00:00.000Z").getTime();
+    let scheduledTick: (() => Promise<void>) | null = null;
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+      },
+      standbys: {
+        claude: claudeStandby,
+      },
+      store,
+      logger: {
+        warn: () => {},
+      },
+      now: () => new Date(currentTime),
+      ptyRecycleHours: 4,
+      setInterval: (callback) => {
+        scheduledTick = callback;
+        return { id: "collector-loop" };
+      },
+      clearInterval: () => {},
+    });
+
+    await collector.start();
+
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
+
+    const runScheduledTick = requireScheduledTick(scheduledTick);
+    currentTime += 3 * 60 * 60 * 1000;
+    await runScheduledTick();
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup"]);
+
+    currentTime += 61 * 60 * 1000;
+    await runScheduledTick();
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup", "winddown", "windup"]);
+
+    await collector.stop();
+    expect(claudeStandby.lifecycleCalls).toEqual(["windup", "winddown", "windup", "winddown"]);
+  });
+
+  test("stops service chains during shutdown and logs cleanup failures without aborting", async () => {
+    const claudeChain = new MockStoppableChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
+    const codexChain = new MockStoppableChain(
+      makeSuccessResult(CODEX_METRICS, DataSource.PTY),
+      new Error("codex PTY cleanup failed"),
+    );
+    const warnings: string[] = [];
+
+    const collector = createDaemonCollector({
+      services: {
+        claude: claudeChain,
+        codex: codexChain,
+      },
+      store,
+      logger: {
+        warn: (message) => warnings.push(message),
+      },
+      setInterval: () => ({ id: "collector-loop" }),
+      clearInterval: () => {},
+    });
+
+    await collector.start();
+    await collector.stop();
+
+    expect(claudeChain.stopCalls).toBe(1);
+    expect(codexChain.stopCalls).toBe(1);
+    expect(warnings).toContain("[codex] shutdown failed: codex PTY cleanup failed");
+  });
+});

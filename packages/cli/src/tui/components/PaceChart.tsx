@@ -2,9 +2,10 @@
  * Sparkline chart showing hourly usage pace over time.
  * Uses Unicode block characters for a compact visualization.
  */
-import { Show, createMemo } from "solid-js";
-import { useTheme } from "../theme.js";
+
 import type { PacePoint } from "@lazyusage/core/storage/pace";
+import { createMemo, Show } from "solid-js";
+import { useTheme } from "../theme.js";
 
 const SPARK_CHARS = [" ", "\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"];
 
@@ -52,15 +53,11 @@ export function PaceChart(props: PaceChartProps) {
 
   return (
     <box flexDirection="column" width="100%">
-      <text
-        content={`  ${props.label}`}
-        fg={theme.cyan}
-        bold={true}
-        height={1}
-      />
-      <Show when={props.points.length > 0} fallback={
-        <text content="  No pace data available" fg={theme.subtext} height={1} />
-      }>
+      <text content={`  ${props.label}`} fg={theme.cyan} bold={true} height={1} />
+      <Show
+        when={props.points.length > 0}
+        fallback={<text content="  No pace data available" fg={theme.subtext} height={1} />}
+      >
         <text content={`  ${sparkline()}`} fg={theme.green} height={1} />
         <text content={`  ${summary()}`} fg={theme.subtext} height={1} />
       </Show>

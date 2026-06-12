@@ -6,11 +6,20 @@
  *  2. Common dev-dir heuristic - find a known collection dir and take the next component
  *  3. Leaf fallback - last path component
  */
-import { existsSync } from "fs";
-import { homedir } from "os";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 
 const COLLECTION_DIRS = new Set([
-  "src", "dev", "development", "projects", "repos", "workspace", "code", "tries", "work", "github",
+  "src",
+  "dev",
+  "development",
+  "projects",
+  "repos",
+  "workspace",
+  "code",
+  "tries",
+  "work",
+  "github",
 ]);
 const HOME = homedir();
 const cache = new Map<string, string>();
@@ -28,7 +37,7 @@ function gitRootWalk(startPath: string): string | null {
   let current = startPath;
   let depth = 0;
   while (depth < 6 && current !== "/" && current !== HOME) {
-    if (existsSync(current + "/.git")) {
+    if (existsSync(`${current}/.git`)) {
       return leafName(current);
     }
     const parent = current.slice(0, current.lastIndexOf("/")) || "/";

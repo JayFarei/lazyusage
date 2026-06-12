@@ -28,7 +28,7 @@ export function ConnectionBanner({ status, error, port, onPortChange }: Props) {
           value={port}
           onChange={(e) => {
             const v = parseInt(e.target.value, 10);
-            if (!isNaN(v) && v > 0) onPortChange(v);
+            if (!Number.isNaN(v) && v > 0) onPortChange(v);
           }}
           className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-200 focus:outline-none focus:border-gray-500"
         />

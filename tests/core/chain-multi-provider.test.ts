@@ -2,10 +2,10 @@
  * Unit tests for PersistentFallbackChain multi-provider array constructor.
  * Tests the new N-provider chain with immediate + persistent partitioning.
  */
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { PersistentFallbackChain, type TokenRefreshable } from "../../packages/core/src/providers/chain.js";
+import type { FetchResult, PersistentUsageProvider, UsageProvider } from "../../packages/core/src/types.js";
 import { DataSource } from "../../packages/core/src/types.js";
-import type { FetchResult, UsageProvider, PersistentUsageProvider } from "../../packages/core/src/types.js";
 
 const SUCCESS_METRICS = {
   subscription_type: "max",
@@ -36,7 +36,9 @@ class MockProvider implements UsageProvider {
     this._shouldSucceed = shouldSucceed;
   }
 
-  isAvailable(): boolean { return true; }
+  isAvailable(): boolean {
+    return true;
+  }
   async fetch(): Promise<FetchResult> {
     this.fetchCallCount++;
     return makeResult(this.sourceType, this._shouldSucceed);
@@ -50,8 +52,12 @@ class MockPersistentProvider implements PersistentUsageProvider {
   refreshCallCount = 0;
   stopCallCount = 0;
 
-  isAvailable(): boolean { return true; }
-  async fetch(): Promise<FetchResult> { return makeResult(DataSource.PTY, true); }
+  isAvailable(): boolean {
+    return true;
+  }
+  async fetch(): Promise<FetchResult> {
+    return makeResult(DataSource.PTY, true);
+  }
 
   async start(): Promise<FetchResult> {
     this.startCallCount++;
@@ -61,13 +67,20 @@ class MockPersistentProvider implements PersistentUsageProvider {
     this.refreshCallCount++;
     return makeResult(DataSource.PTY, true);
   }
-  async stop(): Promise<void> { this.stopCallCount++; }
+  async stop(): Promise<void> {
+    this.stopCallCount++;
+  }
 }
 
 class MockCredStore implements TokenRefreshable {
   refreshCallCount = 0;
-  canRefresh(): boolean { return false; }
-  async tryRefreshToken(): Promise<boolean> { this.refreshCallCount++; return false; }
+  canRefresh(): boolean {
+    return false;
+  }
+  async tryRefreshToken(): Promise<boolean> {
+    this.refreshCallCount++;
+    return false;
+  }
 }
 
 describe("PersistentFallbackChain - array constructor", () => {

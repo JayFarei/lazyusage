@@ -5,18 +5,16 @@
  * then spawns the CLI with the secondary fd as stdin/stdout/stderr.
  */
 
-import { dlopen, FFIType, ptr, cc } from "bun:ffi";
-import { readSync, writeSync, closeSync } from "fs";
-import { spawn, type ChildProcess } from "child_process";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { cc, dlopen, FFIType, ptr } from "bun:ffi";
+import { type ChildProcess, spawn } from "node:child_process";
+import { closeSync, readSync, writeSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // -- Native FFI loading --
 
 function loadOpenpty() {
-  const libNames = process.platform === "darwin"
-    ? ["libutil.dylib"]
-    : ["libutil.so.1", "libutil.so", "libc.so.6"];
+  const libNames = process.platform === "darwin" ? ["libutil.dylib"] : ["libutil.so.1", "libutil.so", "libc.so.6"];
 
   for (const name of libNames) {
     try {
@@ -26,7 +24,9 @@ function loadOpenpty() {
           returns: FFIType.i32,
         },
       });
-    } catch { /* try next */ }
+    } catch {
+      /* try next */
+    }
   }
   return null;
 }
@@ -61,13 +61,7 @@ function allocatePty(): PtyPair {
   const primaryBuf = new Int32Array(1);
   const secondaryBuf = new Int32Array(1);
 
-  const result = lib.symbols.openpty(
-    ptr(primaryBuf),
-    ptr(secondaryBuf),
-    null,
-    null,
-    null,
-  );
+  const result = lib.symbols.openpty(ptr(primaryBuf), ptr(secondaryBuf), null, null, null);
 
   lib.close();
 
@@ -121,11 +115,16 @@ function drainFd(fd: number): string {
 
 function mapSpecialKey(key: string): string {
   switch (key) {
-    case "Enter": return "\r";
-    case "Escape": return "\x1b";
-    case "Tab": return "\t";
-    case "Backspace": return "\x7f";
-    default: return key;
+    case "Enter":
+      return "\r";
+    case "Escape":
+      return "\x1b";
+    case "Tab":
+      return "\t";
+    case "Backspace":
+      return "\x7f";
+    default:
+      return key;
   }
 }
 
@@ -133,7 +132,7 @@ function mapSpecialKey(key: string): string {
 
 /** Ephemeral PTY session (single-shot, killed after use) */
 export class DirectSession {
-  private name: string;
+  readonly name: string;
   private command: string;
   private pty: PtyPair | null = null;
   private child: ChildProcess | null = null;
@@ -156,7 +155,11 @@ export class DirectSession {
     });
 
     // Close secondary fd in parent (child owns it now)
-    try { closeSync(this.pty.secondaryFd); } catch { /* ignore */ }
+    try {
+      closeSync(this.pty.secondaryFd);
+    } catch {
+      /* ignore */
+    }
 
     // Wait for CLI to initialize
     await Bun.sleep(2000);
@@ -186,11 +189,7 @@ export class DirectSession {
     return this.outputBuffer;
   }
 
-  async waitForContent(
-    marker: string,
-    timeout: number = 8000,
-    interval: number = 500,
-  ): Promise<string> {
+  async waitForContent(marker: string, timeout: number = 8000, interval: number = 500): Promise<string> {
     let elapsed = 0;
     while (elapsed < timeout) {
       await Bun.sleep(interval);
@@ -207,7 +206,11 @@ export class DirectSession {
 
   async cleanup(): Promise<void> {
     if (this.pty) {
-      try { closeSync(this.pty.primaryFd); } catch { /* ignore */ }
+      try {
+        closeSync(this.pty.primaryFd);
+      } catch {
+        /* ignore */
+      }
       this.pty = null;
     }
     if (this.child) {
@@ -220,7 +223,7 @@ export class DirectSession {
 
 /** Persistent PTY session (kept alive between refreshes) */
 export class PersistentDirectSession {
-  private name: string;
+  readonly name: string;
   private command: string;
   private pty: PtyPair | null = null;
   private child: ChildProcess | null = null;
@@ -239,7 +242,11 @@ export class PersistentDirectSession {
       stdio: [this.pty.secondaryFd, this.pty.secondaryFd, this.pty.secondaryFd],
     });
 
-    try { closeSync(this.pty.secondaryFd); } catch { /* ignore */ }
+    try {
+      closeSync(this.pty.secondaryFd);
+    } catch {
+      /* ignore */
+    }
 
     await Bun.sleep(2000);
     if (this.pty) {
@@ -274,11 +281,7 @@ export class PersistentDirectSession {
     return this.outputBuffer;
   }
 
-  async waitForContent(
-    marker: string,
-    timeout: number = 8000,
-    interval: number = 500,
-  ): Promise<string> {
+  async waitForContent(marker: string, timeout: number = 8000, interval: number = 500): Promise<string> {
     let elapsed = 0;
     while (elapsed < timeout) {
       await Bun.sleep(interval);
@@ -297,7 +300,11 @@ export class PersistentDirectSession {
     if (this.sessionStarted) {
       // Try graceful exit
       if (this.pty) {
-        try { writeFd(this.pty.primaryFd, "/exit\r"); } catch { /* ignore */ }
+        try {
+          writeFd(this.pty.primaryFd, "/exit\r");
+        } catch {
+          /* ignore */
+        }
       }
 
       // Wait briefly for graceful exit
@@ -307,7 +314,11 @@ export class PersistentDirectSession {
       }
 
       if (this.pty) {
-        try { closeSync(this.pty.primaryFd); } catch { /* ignore */ }
+        try {
+          closeSync(this.pty.primaryFd);
+        } catch {
+          /* ignore */
+        }
         this.pty = null;
       }
       if (this.child) {

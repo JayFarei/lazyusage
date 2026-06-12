@@ -2,10 +2,10 @@
  * Tests for parseCodexSessions().
  * Uses temp directories with synthetic JSONL files.
  */
-import { describe, test, expect } from "bun:test";
-import { join } from "path";
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseCodexSessions } from "@lazyusage/core/parsers/codex-parser.js";
 
 async function makeTempDir(): Promise<string> {
@@ -13,7 +13,7 @@ async function makeTempDir(): Promise<string> {
 }
 
 async function writeJsonl(dir: string, name: string, lines: unknown[]): Promise<void> {
-  await Bun.write(join(dir, name), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  await Bun.write(join(dir, name), `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
 }
 
 /** Build a session_meta first line */
@@ -89,7 +89,7 @@ describe("parseCodexSessions - valid files", () => {
       await writeJsonl(tmpDir, "session.jsonl", [
         sessionMeta(),
         tokenCountEvent({ inputTokens: 500, outputTokens: 200 }), // early partial
-        { type: "event_msg", payload: { type: "other" } },          // non-token event
+        { type: "event_msg", payload: { type: "other" } }, // non-token event
         tokenCountEvent({ inputTokens: 2000, outputTokens: 800 }), // final cumulative
       ]);
       const results = await parseCodexSessions(undefined, tmpDir);
@@ -116,7 +116,7 @@ describe("parseCodexSessions - valid files", () => {
       ]);
       const results = await parseCodexSessions(undefined, tmpDir);
       expect(results[0].inputTokens).toBe(1200); // 1000 + 200
-      expect(results[0].outputTokens).toBe(600);  // 500 + 100
+      expect(results[0].outputTokens).toBe(600); // 500 + 100
     } finally {
       await rm(tmpDir, { recursive: true });
     }

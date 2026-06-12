@@ -8,22 +8,19 @@
  * Sub-test A: Expired creds with no refresh token -> graceful PTY/fallback (no crash)
  * Sub-test B: Normal operation without env override -> source shows "api"
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
-import { rmSync, writeFileSync } from "fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assertNoCrash, assertStatusBarPresent } from "../helpers/assertions.js";
 import {
-  isTmuxAvailable,
-  createTestSession,
-  launchTUI,
   captureFrame,
-  waitForContent,
+  createTestSession,
+  isTmuxAvailable,
   killSession,
+  launchTUI,
+  waitForContent,
 } from "../helpers/tmux.js";
-import {
-  assertStatusBarPresent,
-  assertNoCrash,
-} from "../helpers/assertions.js";
 
 const SESSION_PREFIX = "e2e-token-refresh";
 const ROOT = join(import.meta.dir, "../../../..");
@@ -53,7 +50,7 @@ function writeTempCreds(path: string, overrides: Record<string, unknown> = {}): 
   const payload = {
     claudeAiOauth: {
       accessToken: "sk-ant-oat01-EXPIRED",
-      refreshToken: "",  // intentionally missing - no refresh possible
+      refreshToken: "", // intentionally missing - no refresh possible
       expiresAt: Date.now() - 60_000,
       subscriptionType: "max",
       rateLimitTier: "default",
@@ -79,10 +76,12 @@ describe("Token refresh E2E - expired creds, no refresh token", () => {
 
       // Launch TUI with env var pointing to our expired creds file
       const cmd = `CLAUDE_CREDENTIALS_FILE=${tmpCredsPath} bun --preload=${PRELOAD} ${TUI_SCRIPT} usage`;
-      const proc = Bun.spawnSync(["tmux", "send-keys", "-t", session, cmd, "Enter"]);
+      const _proc = Bun.spawnSync(["tmux", "send-keys", "-t", session, cmd, "Enter"]);
 
       // Wait for TUI to render something
-      const frame = await waitForContent(session, "Claude", 25000);
+      await waitForContent(session, "Claude", 25000);
+      await Bun.sleep(3000);
+      const frame = await captureFrame(session);
 
       // TUI must not crash
       assertNoCrash(frame);
@@ -91,8 +90,13 @@ describe("Token refresh E2E - expired creds, no refresh token", () => {
       assertStatusBarPresent(frame);
 
       // Should show either pty or fallback or cache as source - not stuck on "undefined"
+      const normalized = frame.toLowerCase();
       const hasKnownSource =
-        frame.includes("pty") || frame.includes("fallback") || frame.includes("cache") || frame.includes("api");
+        normalized.includes("terminal") ||
+        normalized.includes("offline") ||
+        normalized.includes("cached") ||
+        normalized.includes("api") ||
+        normalized.includes("web");
       expect(hasKnownSource).toBe(true);
 
       // No raw JS error text visible in the TUI
@@ -100,7 +104,11 @@ describe("Token refresh E2E - expired creds, no refresh token", () => {
       expect(frame.toLowerCase()).not.toContain("typeerror");
     } finally {
       await killSession(session);
-      try { rmSync(tmpCredsPath); } catch { /* already gone */ }
+      try {
+        rmSync(tmpCredsPath);
+      } catch {
+        /* already gone */
+      }
     }
   });
 });
@@ -117,14 +125,21 @@ describe("Token refresh E2E - normal operation (sanity check)", () => {
       await createTestSession(session, 120, 40);
       await launchTUI(session);
 
-      const frame = await waitForContent(session, "Claude", 25000);
+      await waitForContent(session, "Claude", 25000);
+      await Bun.sleep(3000);
+      const frame = await captureFrame(session);
 
       assertNoCrash(frame);
       assertStatusBarPresent(frame);
 
       // Source label must show one of the known values
+      const normalized = frame.toLowerCase();
       const hasKnownSource =
-        frame.includes("api") || frame.includes("pty") || frame.includes("fallback") || frame.includes("cache");
+        normalized.includes("api") ||
+        normalized.includes("terminal") ||
+        normalized.includes("offline") ||
+        normalized.includes("cached") ||
+        normalized.includes("web");
       expect(hasKnownSource).toBe(true);
     } finally {
       await killSession(session);

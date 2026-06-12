@@ -2,15 +2,23 @@
  * Unit tests for CodexAPIProvider 429 rate-limit handling.
  * Mirrors the pattern from api-claude.test.ts.
  */
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAPIProvider } from "../../packages/core/src/providers/api-codex.js";
-import { DataSource } from "../../packages/core/src/types.js";
 
 const originalFetch = globalThis.fetch;
+type CodexApiProviderTestStatics = { _rateLimitedUntil: number };
+
+function setCodexApiRateLimit(value: number): void {
+  (CodexAPIProvider as unknown as CodexApiProviderTestStatics)._rateLimitedUntil = value;
+}
+
+function getCodexApiRateLimit(): number {
+  return (CodexAPIProvider as unknown as CodexApiProviderTestStatics)._rateLimitedUntil;
+}
 
 beforeEach(() => {
   // Reset static rate limit state between tests
-  (CodexAPIProvider as any)._rateLimitedUntil = 0;
+  setCodexApiRateLimit(0);
 });
 
 afterEach(() => {
@@ -28,14 +36,11 @@ describe("CodexAPIProvider - rate limit (429)", () => {
     }
 
     globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_error" } }),
-        {
-          status: 429,
-          statusText: "Too Many Requests",
-          headers: { "Retry-After": "60" },
-        },
-      )) as unknown as typeof fetch;
+      new Response(JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_error" } }), {
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: { "Retry-After": "60" },
+      })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
     expect(result.error).toContain("429");
@@ -73,7 +78,7 @@ describe("CodexAPIProvider - rate limit (429)", () => {
     expect(CodexAPIProvider.isRateLimited()).toBe(true);
 
     // Manually expire the timer
-    (CodexAPIProvider as any)._rateLimitedUntil = Date.now() - 1;
+    setCodexApiRateLimit(Date.now() - 1);
     expect(CodexAPIProvider.isRateLimited()).toBe(false);
   });
 
@@ -81,12 +86,11 @@ describe("CodexAPIProvider - rate limit (429)", () => {
     const provider = new CodexAPIProvider();
     if (!provider.isAvailable()) return;
 
-    globalThis.fetch = (async () =>
-      new Response("{}", { status: 429 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch;
 
     const before = Date.now();
     await provider.fetch();
-    const rateLimitedUntil = (CodexAPIProvider as any)._rateLimitedUntil;
+    const rateLimitedUntil = getCodexApiRateLimit();
 
     // Default is 60s, should be within 55-65s from now
     expect(rateLimitedUntil - before).toBeGreaterThan(55_000);

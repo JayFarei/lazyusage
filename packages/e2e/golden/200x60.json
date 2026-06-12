@@ -3,7 +3,7 @@
     "width": 200,
     "height": 60
   },
-  "capturedAt": "2026-02-17T22:53:07.081Z",
+  "capturedAt": "2026-04-10T09:30:30.675Z",
   "hasClaude": true,
   "hasCodex": true,
   "hasStatusBar": true,
@@ -13,54 +13,43 @@
     {
       "lineIndex": 3,
       "positions": [
+        9,
+        14,
+        19,
+        24,
+        29,
+        34
+      ],
+      "gap": 5,
+      "valid": true
+    },
+    {
+      "lineIndex": 11,
+      "positions": [
+        9,
+        14,
+        19,
+        24,
+        29,
+        34
+      ],
+      "gap": 5,
+      "valid": true
+    },
+    {
+      "lineIndex": 19,
+      "positions": [
         11,
         18,
         25,
         32
       ],
       "gap": 7,
-      "valid": true
-    },
-    {
-      "lineIndex": 9,
-      "positions": [
-        9,
-        14,
-        19,
-        24,
-        29,
-        34
-      ],
-      "gap": 5,
-      "valid": true
-    },
-    {
-      "lineIndex": 15,
-      "positions": [
-        9,
-        14,
-        19,
-        24,
-        29,
-        34
-      ],
-      "gap": 5,
       "valid": true
     },
     {
       "lineIndex": 32,
       "positions": [
-        11,
-        18,
-        25,
-        32
-      ],
-      "gap": 7,
-      "valid": true
-    },
-    {
-      "lineIndex": 38,
-      "positions": [
         9,
         14,
         19,
@@ -69,6 +58,17 @@
         34
       ],
       "gap": 5,
+      "valid": true
+    },
+    {
+      "lineIndex": 40,
+      "positions": [
+        11,
+        18,
+        25,
+        32
+      ],
+      "gap": 7,
       "valid": true
     }
   ],
@@ -82,19 +82,19 @@
       "total": 35
     },
     {
-      "lineIndex": 8,
-      "total": 35
-    },
-    {
       "lineIndex": 10,
       "total": 35
     },
     {
-      "lineIndex": 14,
+      "lineIndex": 12,
       "total": 35
     },
     {
-      "lineIndex": 16,
+      "lineIndex": 18,
+      "total": 35
+    },
+    {
+      "lineIndex": 20,
       "total": 35
     },
     {
@@ -106,15 +106,15 @@
       "total": 35
     },
     {
-      "lineIndex": 37,
+      "lineIndex": 39,
       "total": 35
     },
     {
-      "lineIndex": 39,
+      "lineIndex": 41,
       "total": 35
     }
   ],
-  "structuralLineCount": 58,
+  "structuralLineCount": 57,
   "borderCharsFound": [
     "│",
     "─",

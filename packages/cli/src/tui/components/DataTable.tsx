@@ -2,13 +2,13 @@
  * Reusable flexbox-based table using OpenTUI's native Yoga layout.
  * Each cell is a <box> with percentage width, giving true responsive columns.
  */
-import { For, Show, createMemo } from "solid-js";
+import { createMemo, For, Show } from "solid-js";
 import { useTheme } from "../theme.js";
 
 export interface Column<T> {
   key: keyof T;
   label: string;
-  width: string;           // Yoga percentage: "33%", "17%", etc.
+  width: string; // Yoga percentage: "33%", "17%", etc.
   align?: "left" | "right";
   format?: (value: T[keyof T], row: T) => string;
   headerFg?: string;
@@ -30,7 +30,7 @@ export interface DataTableProps<T> {
   emptyMessage?: string;
 }
 
-export function DataTable<T extends Record<string, any>>(props: DataTableProps<T>) {
+export function DataTable<T extends object>(props: DataTableProps<T>) {
   const theme = useTheme();
 
   const sortedData = createMemo(() => {
@@ -41,9 +41,7 @@ export function DataTable<T extends Record<string, any>>(props: DataTableProps<T
     return items.sort((a, b) => {
       const aVal = a[sort.column];
       const bVal = b[sort.column];
-      const cmp = typeof aVal === "string"
-        ? aVal.localeCompare(bVal as string)
-        : (aVal as number) - (bVal as number);
+      const cmp = typeof aVal === "string" ? aVal.localeCompare(bVal as string) : (aVal as number) - (bVal as number);
       return sort.direction === "asc" ? cmp : -cmp;
     });
   });
@@ -63,11 +61,7 @@ export function DataTable<T extends Record<string, any>>(props: DataTableProps<T
   return (
     <box flexDirection="column" width="100%">
       <Show when={props.data.length === 0}>
-        <text
-          content={props.emptyMessage ?? "No data available"}
-          fg={theme.subtext}
-          height={1}
-        />
+        <text content={props.emptyMessage ?? "No data available"} fg={theme.subtext} height={1} />
       </Show>
       <Show when={props.data.length > 0}>
         {/* Header row */}
@@ -96,11 +90,7 @@ export function DataTable<T extends Record<string, any>>(props: DataTableProps<T
               <For each={props.columns}>
                 {(col) => (
                   <box width={col.width} height={1}>
-                    <text
-                      content={cellContent(col, row)}
-                      fg={theme.text}
-                      height={1}
-                    />
+                    <text content={cellContent(col, row)} fg={theme.text} height={1} />
                   </box>
                 )}
               </For>
@@ -116,11 +106,7 @@ export function DataTable<T extends Record<string, any>>(props: DataTableProps<T
             <For each={props.columns}>
               {(col) => (
                 <box width={col.width} height={1}>
-                  <text
-                    content={props.footerRow?.[col.key] ?? ""}
-                    fg={theme.yellow}
-                    height={1}
-                  />
+                  <text content={props.footerRow?.[col.key] ?? ""} fg={theme.yellow} height={1} />
                 </box>
               )}
             </For>

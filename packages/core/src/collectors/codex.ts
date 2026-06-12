@@ -3,9 +3,9 @@
  * Port of src/collectors/codex.py
  */
 
-import type { MetricsDict, EphemeralCollector, PersistentCollector } from "../types.js";
-import { EphemeralSession, PersistentSession } from "../utils/tmux.js";
 import { parseCodexOutput } from "../parsers/codex.js";
+import type { EphemeralCollector, MetricsDict, PersistentCollector } from "../types.js";
+import { EphemeralSession, PersistentSession } from "../utils/tmux.js";
 
 /** Ephemeral collector for Codex CLI (single-shot usage) */
 export class CodexEphemeralCollector implements EphemeralCollector {

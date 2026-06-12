@@ -3,10 +3,12 @@
  * Port of src/providers/pty.py
  */
 
-import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, PersistentUsageProvider, MetricsDict } from "../types.js";
 import { ClaudeEphemeralCollector, ClaudePersistentCollector } from "../collectors/claude.js";
 import { CodexEphemeralCollector, CodexPersistentCollector } from "../collectors/codex.js";
+import type { FetchResult, MetricsDict, PersistentUsageProvider, UsageProvider } from "../types.js";
+import { DataSource } from "../types.js";
+
+type ParsedMetricsDict = MetricsDict & { __parsed?: boolean };
 
 /** Check if metrics are genuinely missing or came entirely from fallbacks */
 function isLikelyStale(metrics: MetricsDict | null): boolean {
@@ -15,7 +17,7 @@ function isLikelyStale(metrics: MetricsDict | null): boolean {
   const metricEntries = Object.entries(metrics).filter(([key]) => key !== "subscription_type" && key !== "__parsed");
   if (metricEntries.length === 0) return true;
   // If parser flagged that no regex matched, all values are from applyFallbacks()
-  if ("__parsed" in metrics && (metrics as any).__parsed === false) return true;
+  if ((metrics as ParsedMetricsDict).__parsed === false) return true;
   return false;
 }
 

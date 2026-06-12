@@ -11,6 +11,7 @@
     "dist/"
   ],
   "license": "MIT",
+  "author": "Jay Farei",
   "repository": {
     "type": "git",
     "url": "https://github.com/jayfarei/lazyusage.git"

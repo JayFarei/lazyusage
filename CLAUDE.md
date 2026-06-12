@@ -17,9 +17,13 @@ tests/
   tui/    - Unit/snapshot tests for hooks and components (Bun test)
   core/   - Unit tests for parsers, chain, token refresh
 examples/
-  SKILL.md               - Agent skill: capacity management scenarios
   agent_integration.ts   - Full agentic capacity loop (TypeScript)
   agent_integration.sh   - Full agentic capacity loop (bash)
+skills/
+  lazyusage/             - Canonical agent skill + prompt templates
+docs/
+  design/                - Design documents (prediction, daemon)
+  research/              - Research notes
 scripts/
   build.ts - Pre-bundle CLI for fast cold starts
 ```
@@ -133,6 +137,3 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 - `commander` - CLI argument parsing
 - `better-sqlite3` - Snapshot storage
 - `tmux` - Required for E2E tests only
-
-# currentDate
-Today's date is 2026-03-22.

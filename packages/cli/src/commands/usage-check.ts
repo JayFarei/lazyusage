@@ -2,23 +2,24 @@
  * usage-check command: Fast point-in-time usage snapshot.
  * Port of usage_check() from src/cli.py
  */
-import { Command } from "commander";
+
 import {
   createClaudeChain,
   createCodexChain,
+  detectWarning,
+  ExitCode,
+  type FallbackChain,
   formatClaudeText,
   formatCodexText,
   formatCombinedJson,
-  formatWithAvailability,
-  detectWarning,
   formatWarningStderr,
-  UsageStore,
-  ExitCode,
+  formatWithAvailability,
   type MetricsDict,
-  type FallbackChain,
   type ServiceName,
   type ServiceResourceInfo,
+  UsageStore,
 } from "@lazyusage/core";
+import { Command } from "commander";
 
 export function detectAvailableServices(): string[] {
   const available: string[] = [];
@@ -27,15 +28,10 @@ export function detectAvailableServices(): string[] {
   return available;
 }
 
-function validateService(
-  service: string | undefined,
-  available: string[],
-): string[] {
+function validateService(service: string | undefined, available: string[]): string[] {
   if (!service) {
     if (available.length === 0) {
-      console.error(
-        "Error: No CLI tools found. Please install 'claude' or 'codex' CLI.",
-      );
+      console.error("Error: No CLI tools found. Please install 'claude' or 'codex' CLI.");
       process.exit(ExitCode.BINARY_NOT_FOUND);
     }
     return available;
@@ -159,69 +155,77 @@ export const usageCheckCommand = new Command("usage-check")
   .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
   .option("--text", "Output as text (default)")
   .option("--debug", "Show execution timing and source info")
-  .action(async (service: string | undefined, opts: {
-    json?: boolean;
-    jsonOnly?: boolean;
-    text?: boolean;
-    debug?: boolean;
-  }) => {
-    const jsonOnly = opts.jsonOnly ?? false;
+  .action(
+    async (
+      service: string | undefined,
+      opts: {
+        json?: boolean;
+        jsonOnly?: boolean;
+        text?: boolean;
+        debug?: boolean;
+      },
+    ) => {
+      const jsonOnly = opts.jsonOnly ?? false;
 
-    if (jsonOnly) {
-      const origError = console.error;
-      console.error = () => {};
-      try {
-        const startTime = performance.now();
-        const available = detectAvailableServices();
-        const services = validateService(service, available);
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
+      if (jsonOnly) {
+        const origError = console.error;
+        console.error = () => {};
+        try {
+          const startTime = performance.now();
+          const available = detectAvailableServices();
+          const services = validateService(service, available);
+          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(
+            services,
+            opts.debug ?? false,
+          );
 
-        const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
-        console.log(output);
+          const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          console.log(output);
 
-        if (opts.debug) {
+          if (opts.debug) {
+            console.error = origError;
+            const elapsed = (performance.now() - startTime) / 1000;
+            console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+          }
+        } catch (e) {
           console.error = origError;
-          const elapsed = (performance.now() - startTime) / 1000;
-          console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+          console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+          process.exit(ExitCode.FAILURE);
+        } finally {
+          console.error = origError;
         }
-      } catch (e) {
-        console.error = origError;
-        console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-        process.exit(ExitCode.FAILURE);
-      } finally {
-        console.error = origError;
+        return;
       }
-      return;
-    }
 
-    const startTime = performance.now();
-    const available = detectAvailableServices();
-    const services = validateService(service, available);
-    const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
+      const startTime = performance.now();
+      const available = detectAvailableServices();
+      const services = validateService(service, available);
+      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
 
-    let output: string;
-    if (opts.json) {
-      output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
-    } else {
-      if (services.length === 1) {
-        if (services.includes("claude") && claudeMetrics) {
-          output = formatClaudeText(claudeMetrics);
-        } else if (codexMetrics) {
-          output = formatCodexText(codexMetrics);
+      let output: string;
+      if (opts.json) {
+        output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+      } else {
+        if (services.length === 1) {
+          if (services.includes("claude") && claudeMetrics) {
+            output = formatClaudeText(claudeMetrics);
+          } else if (codexMetrics) {
+            output = formatCodexText(codexMetrics);
+          } else {
+            output = formatWithAvailability(claudeMetrics, codexMetrics, available);
+          }
         } else {
           output = formatWithAvailability(claudeMetrics, codexMetrics, available);
         }
-      } else {
-        output = formatWithAvailability(claudeMetrics, codexMetrics, available);
       }
-    }
 
-    console.log(output);
+      console.log(output);
 
-    if (opts.debug) {
-      const elapsed = (performance.now() - startTime) / 1000;
-      console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
-    }
-  });
+      if (opts.debug) {
+        const elapsed = (performance.now() - startTime) / 1000;
+        console.error(`\nExecution time: ${elapsed.toFixed(2)}s`);
+      }
+    },
+  );
 
 export { collectMetrics, validateService };

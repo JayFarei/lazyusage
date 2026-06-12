@@ -2,9 +2,10 @@
  * Test helpers for TUI component testing.
  * Provides mock data factories and testRender wrappers.
  */
-import { testRender } from "@opentui/solid";
-import type { MetricsDict } from "@lazyusage/core";
+
+import type { HistoryEntry, MetricsDict } from "@lazyusage/core";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types.js";
+import { testRender } from "@opentui/solid";
 import type { JSX } from "solid-js";
 
 // ---------------------------------------------------------------------------
@@ -44,12 +45,7 @@ export function mockClaudeMetrics(
 
 /** Create a mock Codex MetricsDict with configurable usage percentages. */
 export function mockCodexMetrics(
-  overrides: {
-    fiveHourPct?: number;
-    weeklyPct?: number;
-    subscriptionType?: string;
-    resets?: string;
-  } = {},
+  overrides: { fiveHourPct?: number; weeklyPct?: number; subscriptionType?: string; resets?: string } = {},
 ): MetricsDict {
   const resets = overrides.resets ?? "Feb 18 at 4:00am";
   return {
@@ -122,6 +118,25 @@ export function mockProjectUsage(
   }));
 }
 
+export function mockHistoryEntries(
+  entries: Array<{ minutesAgo: number; usedPct: number }>,
+  nowMs: number = Date.now(),
+): HistoryEntry[] {
+  return entries
+    .map((entry) => ({
+      timestamp: new Date(nowMs - entry.minutesAgo * 60_000).toISOString(),
+      used_pct: entry.usedPct,
+    }))
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+}
+
+export function createMockGraphStore(historyByMetric: Partial<Record<string, HistoryEntry[]>> = {}) {
+  return {
+    getHistory: (_service: string, metricName: string) => historyByMetric[metricName] ?? [],
+    close: () => {},
+  };
+}
+
 // ---------------------------------------------------------------------------
 // testRender wrappers
 // ---------------------------------------------------------------------------
@@ -134,10 +149,7 @@ export const DEFAULT_HEIGHT = 40;
  * Render a component with test renderer at default 120x40 dimensions.
  * Calls renderOnce() so the component is fully initialized.
  */
-export async function renderComponent(
-  component: () => JSX.Element,
-  options: { width?: number; height?: number } = {},
-) {
+export async function renderComponent(component: () => JSX.Element, options: { width?: number; height?: number } = {}) {
   const { width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT } = options;
   const result = await testRender(component, { width, height });
   await result.renderOnce();
@@ -155,17 +167,9 @@ export async function renderComponent(
 export function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace("#", "");
   if (clean.length === 3) {
-    return [
-      parseInt(clean[0] + clean[0], 16),
-      parseInt(clean[1] + clean[1], 16),
-      parseInt(clean[2] + clean[2], 16),
-    ];
+    return [parseInt(clean[0] + clean[0], 16), parseInt(clean[1] + clean[1], 16), parseInt(clean[2] + clean[2], 16)];
   }
-  return [
-    parseInt(clean.slice(0, 2), 16),
-    parseInt(clean.slice(2, 4), 16),
-    parseInt(clean.slice(4, 6), 16),
-  ];
+  return [parseInt(clean.slice(0, 2), 16), parseInt(clean.slice(2, 4), 16), parseInt(clean.slice(4, 6), 16)];
 }
 
 /**
@@ -204,15 +208,12 @@ export function assertSpanFgColor(
   const [er, eg, eb] = hexToRgb(expectedHex);
   const [ar, ag, ab] = span.fg.toInts().slice(0, 3) as [number, number, number];
   const tolerance = 2;
-  const mismatch =
-    Math.abs(ar - er) > tolerance ||
-    Math.abs(ag - eg) > tolerance ||
-    Math.abs(ab - eb) > tolerance;
+  const mismatch = Math.abs(ar - er) > tolerance || Math.abs(ag - eg) > tolerance || Math.abs(ab - eb) > tolerance;
   if (mismatch) {
     throw new Error(
       `${label ?? "Span"} fg color mismatch: ` +
-      `expected rgb(${er},${eg},${eb}) got rgb(${ar},${ag},${ab}) ` +
-      `from hex ${expectedHex}`,
+        `expected rgb(${er},${eg},${eb}) got rgb(${ar},${ag},${ab}) ` +
+        `from hex ${expectedHex}`,
     );
   }
 }

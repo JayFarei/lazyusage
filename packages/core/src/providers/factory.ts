@@ -5,16 +5,11 @@
 
 import { ClaudeAPIProvider } from "./api-claude.js";
 import { CodexAPIProvider } from "./api-codex.js";
+import { FallbackChain, PersistentFallbackChain } from "./chain.js";
+import { ClaudeCredentialStore, CodexCredentialStore } from "./credentials.js";
+import { ClaudePersistentPTYProvider, ClaudePTYProvider, CodexPersistentPTYProvider, CodexPTYProvider } from "./pty.js";
 import { CodexSessionProvider } from "./session-codex.js";
 import { ClaudeWebProvider } from "./web-claude.js";
-import { FallbackChain, PersistentFallbackChain } from "./chain.js";
-import {
-  ClaudePTYProvider,
-  ClaudePersistentPTYProvider,
-  CodexPTYProvider,
-  CodexPersistentPTYProvider,
-} from "./pty.js";
-import { ClaudeCredentialStore, CodexCredentialStore } from "./credentials.js";
 
 /** Create Claude provider fallback chain */
 export function createClaudeChain(persistent: boolean = false): FallbackChain | PersistentFallbackChain {

@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { detectAvailableServices, validateService } from "../../packages/cli/src/commands/usage-check.js";
 
 describe("detectAvailableServices", () => {

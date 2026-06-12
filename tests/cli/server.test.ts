@@ -3,7 +3,7 @@
  * Tests the HTTP layer directly. Without real credentials, the chain
  * returns fallback data, which is sufficient to test routing and response shape.
  */
-import { describe, test, expect, afterEach } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { startServer } from "../../packages/cli/src/server/index.js";
 
 // ---------------------------------------------------------------------------
@@ -110,7 +110,11 @@ describe("Server - SSE /stream", () => {
       expect(resp.status).toBe(200);
       expect(resp.headers.get("Content-Type")).toBe("text/event-stream");
 
-      const reader = resp.body!.getReader();
+      const reader = resp.body?.getReader();
+      if (!reader) {
+        throw new Error("Expected SSE response body");
+      }
+
       const decoder = new TextDecoder();
       let accumulated = "";
 

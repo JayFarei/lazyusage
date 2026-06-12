@@ -3,9 +3,9 @@
  * Port of src/providers/credentials.py
  */
 
-import { homedir } from "os";
-import { join } from "path";
-import { existsSync, readFileSync, chmodSync } from "fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { API_TIMEOUT_MS } from "../constants.js";
 import type { ClaudeCredentials, CodexCredentials } from "../types.js";
 
@@ -15,7 +15,7 @@ import type { ClaudeCredentials, CodexCredentials } from "../types.js";
  * Terminal blocking for invalid_grant that auto-heals when credentials change on disk.
  */
 export class RefreshFailureGate {
-  private static readonly BASE_BACKOFF_MS = 5 * 60_000;  // 5 minutes
+  private static readonly BASE_BACKOFF_MS = 5 * 60_000; // 5 minutes
   private static readonly MAX_BACKOFF_MS = 6 * 3600_000; // 6 hours
 
   private _consecutiveFailures = 0;
@@ -52,7 +52,7 @@ export class RefreshFailureGate {
 
     this._consecutiveFailures++;
     const backoff = Math.min(
-      RefreshFailureGate.BASE_BACKOFF_MS * Math.pow(2, this._consecutiveFailures - 1),
+      RefreshFailureGate.BASE_BACKOFF_MS * 2 ** (this._consecutiveFailures - 1),
       RefreshFailureGate.MAX_BACKOFF_MS,
     );
     this._blockedUntil = Date.now() + backoff;
@@ -157,6 +157,8 @@ export class ClaudeCredentialStore {
         body: JSON.stringify({
           grant_type: "refresh_token",
           refresh_token: creds.refreshToken,
+          // The Claude CLI's public OAuth client_id (not a secret; shipped in
+          // the official CLI). Required for the refresh_token grant.
           client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
         }),
         signal: AbortSignal.timeout(API_TIMEOUT_MS),
@@ -166,12 +168,12 @@ export class ClaudeCredentialStore {
         this._refreshGate.recordFailure(errorText);
         return false;
       }
-      const data = await resp.json() as Record<string, unknown>;
+      const data = (await resp.json()) as Record<string, unknown>;
       this._credentials = {
         ...creds,
         accessToken: data.access_token as string,
         refreshToken: data.refresh_token as string,
-        expiresAt: Date.now() + ((data.expires_in as number) * 1000),
+        expiresAt: Date.now() + (data.expires_in as number) * 1000,
       };
       this._lastReadAt = Date.now();
       this._refreshGate.recordSuccess();
@@ -180,8 +182,9 @@ export class ClaudeCredentialStore {
     } catch (e) {
       this._refreshGate.recordFailure(e instanceof Error ? e.message : "unknown");
       return false;
+    } finally {
+      this._refreshInProgress = false;
     }
-    finally { this._refreshInProgress = false; }
   }
 
   /**
@@ -227,14 +230,20 @@ export class ClaudeCredentialStore {
     // Try Keychain
     try {
       const proc = Bun.spawnSync([
-        "/usr/bin/security", "add-generic-password",
-        "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
-        "-a", ClaudeCredentialStore.KEYCHAIN_SERVICE,
-        "-w", payload,
+        "/usr/bin/security",
+        "add-generic-password",
+        "-s",
+        ClaudeCredentialStore.KEYCHAIN_SERVICE,
+        "-a",
+        ClaudeCredentialStore.KEYCHAIN_SERVICE,
+        "-w",
+        payload,
         "-U",
       ]);
       if (proc.exitCode === 0) return;
-    } catch { /* fall through to file */ }
+    } catch {
+      /* fall through to file */
+    }
 
     // Fall back to credentials file
     await Bun.write(ClaudeCredentialStore.CREDENTIALS_FILE, payload);
@@ -246,8 +255,10 @@ export class ClaudeCredentialStore {
   private _getFromKeychain(): ClaudeCredentials | null {
     try {
       const proc = Bun.spawnSync([
-        "/usr/bin/security", "find-generic-password",
-        "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
+        "/usr/bin/security",
+        "find-generic-password",
+        "-s",
+        ClaudeCredentialStore.KEYCHAIN_SERVICE,
         "-w",
       ]);
 
@@ -269,11 +280,10 @@ export class ClaudeCredentialStore {
    */
   async _getFromKeychainAsync(): Promise<ClaudeCredentials | null> {
     try {
-      const proc = Bun.spawn([
-        "/usr/bin/security", "find-generic-password",
-        "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE,
-        "-w",
-      ], { stdout: "pipe", stderr: "ignore" });
+      const proc = Bun.spawn(
+        ["/usr/bin/security", "find-generic-password", "-s", ClaudeCredentialStore.KEYCHAIN_SERVICE, "-w"],
+        { stdout: "pipe", stderr: "ignore" },
+      );
 
       const timeout = Bun.sleep(ClaudeCredentialStore.KEYCHAIN_TIMEOUT_MS).then(() => {
         proc.kill();
@@ -301,12 +311,14 @@ export class ClaudeCredentialStore {
    * Populates the in-memory cache without blocking the caller.
    */
   refreshKeychainInBackground(): void {
-    this._getFromKeychainAsync().then((creds) => {
-      if (creds !== null) {
-        this._credentials = creds;
-        this._lastReadAt = Date.now();
-      }
-    }).catch(() => {});
+    this._getFromKeychainAsync()
+      .then((creds) => {
+        if (creds !== null) {
+          this._credentials = creds;
+          this._lastReadAt = Date.now();
+        }
+      })
+      .catch(() => {});
   }
 
   private _getFromFile(): ClaudeCredentials | null {

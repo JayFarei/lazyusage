@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useUsageStream } from "./hooks/useUsageStream";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { ServiceCard } from "./components/ServiceCard";
+import { useUsageStream } from "./hooks/useUsageStream";
 
 function getDefaultPort(): number {
   const params = new URLSearchParams(window.location.search);
   const p = parseInt(params.get("port") ?? "8080", 10);
-  return isNaN(p) || p <= 0 ? 8080 : p;
+  return Number.isNaN(p) || p <= 0 ? 8080 : p;
 }
 
 export default function App() {
@@ -18,18 +18,11 @@ export default function App() {
       <header className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">lazyusage dashboard</h1>
         {data && (
-          <span className="text-xs text-gray-500">
-            Last updated: {new Date(data.timestamp).toLocaleTimeString()}
-          </span>
+          <span className="text-xs text-gray-500">Last updated: {new Date(data.timestamp).toLocaleTimeString()}</span>
         )}
       </header>
 
-      <ConnectionBanner
-        status={status}
-        error={error}
-        port={port}
-        onPortChange={setPort}
-      />
+      <ConnectionBanner status={status} error={error} port={port} onPortChange={setPort} />
 
       <main className="flex-1 p-6">
         {(status === "connecting" || status === "connected") && !data && (
@@ -45,7 +38,8 @@ export default function App() {
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
             <p className="text-red-400 font-medium">Could not connect to lazyusage server</p>
             <p className="text-gray-500 text-sm">
-              Make sure it's running: <code className="bg-gray-800 px-1.5 py-0.5 rounded">lazyusage --serve --port {port}</code>
+              Make sure it's running:{" "}
+              <code className="bg-gray-800 px-1.5 py-0.5 rounded">lazyusage --serve --port {port}</code>
             </p>
           </div>
         )}

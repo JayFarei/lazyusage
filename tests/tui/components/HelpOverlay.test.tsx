@@ -1,15 +1,16 @@
 /**
  * Visual snapshot tests for HelpOverlay component.
  */
-import { describe, test, expect } from "bun:test";
-import { renderComponent } from "../helpers.js";
+import { describe, expect, test } from "bun:test";
 import { HelpOverlay } from "../../../packages/cli/src/tui/components/HelpOverlay.js";
+import { renderComponent } from "../helpers.js";
 
 describe("HelpOverlay - visibility", () => {
   test("visible=true renders keybinding content", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <HelpOverlay visible={true} onClose={() => {}} />
-    ), { width: 80, height: 25 });
+    const { captureCharFrame } = await renderComponent(() => <HelpOverlay visible={true} onClose={() => {}} />, {
+      width: 80,
+      height: 25,
+    });
     const frame = captureCharFrame();
     expect(frame).toContain("Keyboard Shortcuts");
     expect(frame).toContain("j/k");
@@ -19,9 +20,10 @@ describe("HelpOverlay - visibility", () => {
   });
 
   test("visible=false renders nothing (empty frame)", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <HelpOverlay visible={false} onClose={() => {}} />
-    ), { width: 80, height: 25 });
+    const { captureCharFrame } = await renderComponent(() => <HelpOverlay visible={false} onClose={() => {}} />, {
+      width: 80,
+      height: 25,
+    });
     const frame = captureCharFrame();
     // Frame should not contain help content
     expect(frame).not.toContain("Keyboard Shortcuts");
@@ -29,9 +31,10 @@ describe("HelpOverlay - visibility", () => {
   });
 
   test("contains all keybinding labels", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <HelpOverlay visible={true} onClose={() => {}} />
-    ), { width: 80, height: 25 });
+    const { captureCharFrame } = await renderComponent(() => <HelpOverlay visible={true} onClose={() => {}} />, {
+      width: 80,
+      height: 25,
+    });
     const frame = captureCharFrame();
     // Check all documented keybindings are present
     expect(frame).toContain("1/2");
@@ -46,9 +49,10 @@ describe("HelpOverlay - visibility", () => {
   });
 
   test("snapshot when visible", async () => {
-    const { captureCharFrame } = await renderComponent(() => (
-      <HelpOverlay visible={true} onClose={() => {}} />
-    ), { width: 80, height: 25 });
+    const { captureCharFrame } = await renderComponent(() => <HelpOverlay visible={true} onClose={() => {}} />, {
+      width: 80,
+      height: 25,
+    });
     expect(captureCharFrame()).toMatchSnapshot();
   });
 });

@@ -2,12 +2,14 @@
  * Fullscreen overlay for the stats/ledger panel.
  * Reuses LedgerContent at full terminal width.
  */
-import { Show } from "solid-js";
-import { useTheme } from "../theme.js";
-import { LedgerContent } from "./LedgerContent.js";
-import type { ContentTab } from "../hooks/useViewMode.js";
+
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import { Show } from "solid-js";
+import type { ContentTab } from "../hooks/useViewMode.js";
+import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
+import { useTheme } from "../theme.js";
 import type { SortState } from "./DataTable.js";
+import { LedgerContent } from "./LedgerContent.js";
 
 const TABS: ContentTab[] = ["daily", "weekly", "monthly"];
 
@@ -39,8 +41,7 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
       return isActive ? `\u2501 ${label} \u2501` : `  ${label}  `;
     }).join(" ");
 
-  const hasAnyData = () =>
-    !!(props.daily || props.weekly || props.monthly);
+  const hasAnyData = () => !!(props.daily || props.weekly || props.monthly);
 
   return (
     <box
@@ -50,7 +51,7 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
       width="100%"
       height="100%"
       flexDirection="column"
-      borderStyle={"rounded" as any}
+      borderStyle={ROUNDED_BORDER_STYLE}
       borderColor={theme.cyan}
       title={` ${tabHeader()} `}
       titleAlignment="left"
@@ -74,7 +75,13 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.daily} service={props.service} title="Today" sortState={props.sortState} onSort={props.onSort} />
+          <LedgerContent
+            data={props.daily}
+            service={props.service}
+            title="Today"
+            sortState={props.sortState}
+            onSort={props.onSort}
+          />
         </scrollbox>
       </Show>
 
@@ -88,7 +95,13 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.weekly} service={props.service} title="Last 7 Days" sortState={props.sortState} onSort={props.onSort} />
+          <LedgerContent
+            data={props.weekly}
+            service={props.service}
+            title="Last 7 Days"
+            sortState={props.sortState}
+            onSort={props.onSort}
+          />
         </scrollbox>
       </Show>
 
@@ -102,7 +115,13 @@ export function FullscreenStatsView(props: FullscreenStatsViewProps) {
             trackOptions: { backgroundColor: theme.surface0 },
           }}
         >
-          <LedgerContent data={props.monthly} service={props.service} title="Last 28 Days" sortState={props.sortState} onSort={props.onSort} />
+          <LedgerContent
+            data={props.monthly}
+            service={props.service}
+            title="Last 28 Days"
+            sortState={props.sortState}
+            onSort={props.onSort}
+          />
         </scrollbox>
       </Show>
 

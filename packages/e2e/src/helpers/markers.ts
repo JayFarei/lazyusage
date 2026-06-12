@@ -71,21 +71,26 @@ export function extractAllMarkers(frame: string): Array<{
   return results;
 }
 
-/** Count bar-fill characters (▓ U+2593 and ░ U+2591) in a line. */
-export function countBarChars(line: string): { filled: number; empty: number; total: number } {
+/** Count bar-fill characters in a line.
+ * Prediction bars use ▒ for the projected segment, which still contributes to total width.
+ */
+export function countBarChars(line: string): { filled: number; projected: number; empty: number; total: number } {
   let filled = 0;
+  let projected = 0;
   let empty = 0;
   for (const c of line) {
     if (c === "\u2593") filled++;
+    else if (c === "\u2592") projected++;
     else if (c === "\u2591") empty++;
   }
-  return { filled, empty, total: filled + empty };
+  return { filled, projected, empty, total: filled + projected + empty };
 }
 
 /** Find all lines containing bar chars and return their widths. */
 export function extractBarWidths(frame: string): Array<{
   lineIndex: number;
   filled: number;
+  projected: number;
   empty: number;
   total: number;
 }> {
@@ -99,6 +104,7 @@ export function extractBarWidths(frame: string): Array<{
     .filter(Boolean) as Array<{
     lineIndex: number;
     filled: number;
+    projected: number;
     empty: number;
     total: number;
   }>;
@@ -109,13 +115,15 @@ export function extractBarWidths(frame: string): Array<{
  * A "prediction bar" line contains ▒ (medium shade) which normal bars never use.
  */
 export function countPredictionBarChars(line: string): {
-  used: number;     // ▓ count
+  used: number; // ▓ count
   predicted: number; // ▒ count
-  spare: number;    // ░ count
+  spare: number; // ░ count
   total: number;
   isPredictionBar: boolean;
 } {
-  let used = 0, predicted = 0, spare = 0;
+  let used = 0,
+    predicted = 0,
+    spare = 0;
   for (const c of line) {
     if (c === "\u2593") used++;
     else if (c === "\u2592") predicted++;

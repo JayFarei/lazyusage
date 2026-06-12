@@ -8,41 +8,54 @@
  * Uses a seeded UsageStore database (via LAZYUSAGE_DB_PATH) to ensure
  * the prediction engine has history data to produce meaningful output.
  */
-import { describe, test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 
 // E2E TUI tests need long timeouts for metrics collection
 setDefaultTimeout(60_000);
-import { join } from "path";
-import {
-  isTmuxAvailable,
-  createTestSession,
-  launchTUI,
-  captureFrame,
-  waitForContent,
-  killSession,
-  sendKey,
-  resizeSession,
-} from "../helpers/tmux.js";
+
+import { join } from "node:path";
 import {
   assertLayoutIntact,
-  assertStatusBarPresent,
   assertNoCrash,
-  assertContains,
-  assertNotContains,
+  assertPredictionBarSegmentsValid,
   assertPredictionBarsPresent,
   assertPredictionBarWidthsConsistent,
-  assertPredictionBarSegmentsValid,
   assertPredictionLabelsPresent,
-  assertBarWidthsConsistent,
-  assertMarkersEquidistant,
+  assertStatusBarPresent,
 } from "../helpers/assertions.js";
-import { extractPredictionBars, extractBarWidths } from "../helpers/markers.js";
-import { createSeededDatabase, SEED_DB_PATH } from "../helpers/seed-db.js";
+import { extractPredictionBars } from "../helpers/markers.js";
+import { createSeededDatabase } from "../helpers/seed-db.js";
+import {
+  captureFrame,
+  createTestSession,
+  isTmuxAvailable,
+  killSession,
+  launchTUI,
+  resizeSession,
+  sendKey,
+  waitForContent,
+} from "../helpers/tmux.js";
 
 const SESSION_PREFIX = "e2e-pred";
 const ROOT = join(import.meta.dir, "../../../..");
 const CLI_SCRIPT = join(ROOT, "packages/cli/src/index.ts");
-const PRELOAD = join(ROOT, "packages/cli/node_modules/@opentui/solid/scripts/preload.ts");
+const _PRELOAD = join(ROOT, "packages/cli/node_modules/@opentui/solid/scripts/preload.ts");
+
+interface JsonPredictionMetric {
+  predicted_spare: number;
+  over_budget: boolean;
+  confidence: string;
+  average_rate: number;
+  remaining_days: number;
+}
+
+interface JsonPredictionService {
+  prediction?: Record<string, JsonPredictionMetric> | null;
+}
+
+interface JsonPredictionResponse {
+  services: JsonPredictionService[];
+}
 
 let tmuxAvailable = false;
 let seededDbPath: string;
@@ -56,10 +69,17 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sessions = [
-    "120x40", "120x40-labels", "120x40-widths", "120x40-segments",
-    "80x24", "80x24-compact", "70x35",
-    "200x60", "200x60-bars",
-    "resize", "keybinds",
+    "120x40",
+    "120x40-labels",
+    "120x40-widths",
+    "120x40-segments",
+    "80x24",
+    "80x24-compact",
+    "70x35",
+    "200x60",
+    "200x60-bars",
+    "resize",
+    "keybinds",
   ];
   for (const s of sessions) {
     await killSession(`${SESSION_PREFIX}-${s}`);
@@ -86,9 +106,22 @@ async function runCLICommand(args: string): Promise<string> {
     env: { ...process.env, LAZYUSAGE_DB_PATH: seededDbPath },
     cwd: ROOT,
   });
-  const stdout = await new Response(proc.stdout!).text();
-  const exitCode = await proc.exited;
+  if (!proc.stdout) {
+    throw new Error("CLI process did not expose stdout");
+  }
+
+  const stdout = await new Response(proc.stdout).text();
+  await proc.exited;
   return stdout;
+}
+
+function parsePredictionJson(output: string): JsonPredictionResponse {
+  const parsed: unknown = JSON.parse(output);
+  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { services?: unknown }).services)) {
+    throw new Error(`--predict --json output is not valid JSON: ${output.slice(0, 200)}`);
+  }
+
+  return parsed as JsonPredictionResponse;
 }
 
 /** Check if a frame has prediction bar content (▒ chars or prediction labels). */
@@ -106,7 +139,7 @@ describe("Prediction bar at 120x40", () => {
     try {
       await createTestSession(session, 120, 40);
       await launchTUI(session, [], dbEnv());
-      const frame = await waitForContent(session, "Claude CLI", 25000);
+      const _frame = await waitForContent(session, "Claude CLI", 25000);
       // Wait for prediction to compute (needs a tick)
       await Bun.sleep(5000);
       const fullFrame = await captureFrame(session);
@@ -191,7 +224,7 @@ describe("Prediction in compact mode (80x24)", () => {
     try {
       await createTestSession(session, 80, 24);
       await launchTUI(session, [], dbEnv());
-      const frame = await waitForContent(session, "Claude CLI", 25000);
+      const _frame = await waitForContent(session, "Claude CLI", 25000);
       await Bun.sleep(5000);
       const fullFrame = await captureFrame(session);
 
@@ -214,7 +247,7 @@ describe("Prediction in compact mode (80x24)", () => {
 
       // In collapsed mode, prediction shows as " → N% spare" or " → OVER BUDGET"
       // The arrow character (→ U+2192) should be present for at least one collapsed metric
-      const hasArrow = frame.includes("\u2192");
+      const _hasArrow = frame.includes("\u2192");
       // At minimum the frame should not crash and should have some metric data
       assertNoCrash(frame);
       // If panel is in compact mode, the arrow suffix should appear
@@ -232,7 +265,7 @@ describe("Prediction at 70x35 (minimum supported)", () => {
     try {
       await createTestSession(session, 70, 35);
       await launchTUI(session, [], dbEnv());
-      const frame = await waitForContent(session, "Claude CLI", 25000);
+      const _frame = await waitForContent(session, "Claude CLI", 25000);
       await Bun.sleep(5000);
       const fullFrame = await captureFrame(session);
 
@@ -254,7 +287,7 @@ describe("Prediction at 200x60 (large terminal)", () => {
     try {
       await createTestSession(session, 200, 60);
       await launchTUI(session, [], dbEnv());
-      const frame = await waitForContent(session, "Claude CLI", 25000);
+      const _frame = await waitForContent(session, "Claude CLI", 25000);
       await Bun.sleep(5000);
       const fullFrame = await captureFrame(session);
 
@@ -375,9 +408,9 @@ describe("CLI --predict flag", () => {
     const output = await runCLICommand("usage --predict --json");
 
     // Should be valid JSON
-    let parsed: any;
+    let parsed: JsonPredictionResponse;
     try {
-      parsed = JSON.parse(output);
+      parsed = parsePredictionJson(output);
     } catch {
       throw new Error(`--predict --json output is not valid JSON: ${output.slice(0, 200)}`);
     }
@@ -387,14 +420,14 @@ describe("CLI --predict flag", () => {
     expect(Array.isArray(parsed.services)).toBe(true);
 
     // At least one service should have a prediction block
-    const hasPrediction = parsed.services.some((s: any) => s.prediction);
+    const hasPrediction = parsed.services.some((service) => service.prediction);
     expect(hasPrediction).toBe(true);
 
     // Prediction block should have required fields
-    const svcWithPred = parsed.services.find((s: any) => s.prediction);
+    const svcWithPred = parsed.services.find((service) => service.prediction);
     if (svcWithPred) {
       const pred = svcWithPred.prediction;
-      const metricPreds = Object.values(pred) as any[];
+      const metricPreds = pred ? Object.values(pred) : [];
       if (metricPreds.length > 0) {
         const p = metricPreds[0];
         expect(typeof p.predicted_spare).toBe("number");

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Headless soak test for the usage fetch chain.
  * Runs PersistentFallbackChain.start() + .refresh() in a loop for N minutes,
@@ -15,18 +16,18 @@
  *   stdout                          — human-readable summary
  */
 
-import { parseArgs } from "util";
-import { writeFileSync, appendFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "node:fs";
+import { parseArgs } from "node:util";
 import {
-  createClaudeChain,
-  createCodexChain,
-  PersistentFallbackChain,
-  setChainDiagnosticListener,
+  type ChainDiagnosticEvent,
   ClaudeAPIProvider,
   CodexAPIProvider,
-  type ChainDiagnosticEvent,
+  createClaudeChain,
+  createCodexChain,
   type FetchResult,
   type MetricData,
+  type PersistentFallbackChain,
+  setChainDiagnosticListener,
 } from "../packages/core/src/index.js";
 
 // -- CLI args --
@@ -41,8 +42,8 @@ const { values: args } = parseArgs({
   },
 });
 
-const DURATION_MIN = parseInt(args.duration!, 10);
-const INTERVAL_SEC = parseInt(args.interval!, 10);
+const DURATION_MIN = parseInt(args.duration ?? "5", 10);
+const INTERVAL_SEC = parseInt(args.interval ?? "30", 10);
 const SERVICE_FILTER = args.service as "claude" | "codex" | "all";
 const DURATION_MS = DURATION_MIN * 60_000;
 const INTERVAL_MS = INTERVAL_SEC * 1000;
@@ -55,7 +56,7 @@ const logFile = args.output ?? `.soak-chain-${timestamp}.jsonl`;
 let eventCount = 0;
 
 function logEvent(event: Record<string, unknown>): void {
-  appendFileSync(logFile, JSON.stringify(event) + "\n");
+  appendFileSync(logFile, `${JSON.stringify(event)}\n`);
   eventCount++;
 }
 
@@ -158,8 +159,8 @@ async function run() {
 
   logEvent({ type: "summary", stats, ts: new Date().toISOString() });
   logLine(`\n${eventCount} diagnostic events written to ${logFile}`);
-  logLine("Analyze with: cat " + logFile + " | bun -e 'for await (const l of console) console.log(JSON.parse(l))'");
-  logLine("Or: grep '\"step\":\"reuse-last-result\"' " + logFile + " | wc -l");
+  logLine(`Analyze with: cat ${logFile} | bun -e 'for await (const l of console) console.log(JSON.parse(l))'`);
+  logLine(`Or: grep '"step":"reuse-last-result"' ${logFile} | wc -l`);
 }
 
 function recordResult(

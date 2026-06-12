@@ -5,20 +5,26 @@
  * Creates 14 days of snapshots for Claude (week_all, week_sonnet, session)
  * and Codex (weekly, 5h) with realistic daily deltas and a window reset mid-period.
  */
+
+import type { Database } from "bun:sqlite";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { UsageStore } from "@lazyusage/core";
-import { join } from "path";
-import { mkdirSync, existsSync, unlinkSync } from "fs";
 
 const SEED_DB_DIR = join(import.meta.dir, "../../.test-data");
 const SEED_DB_PATH = join(SEED_DB_DIR, "seeded-usage.db");
+
+function getInternalDb(store: UsageStore): Database {
+  return (store as unknown as { db: Database }).db;
+}
 
 /** Daily consumption pattern (% per day) for 14 days */
 const DAILY_PATTERN = [8, 14, 2, 16, 5, 11, 18, 4, 12, 7, 3, 10, 6, 9];
 
 /** Generate snapshots for a service/metric pair across 14 days */
 function generateSnapshots(
-  service: "claude" | "codex",
-  metricName: string,
+  _service: "claude" | "codex",
+  _metricName: string,
   baseTimestamp: number,
 ): Array<{
   timestamp: string;
@@ -133,7 +139,7 @@ export function createSeededDatabase(): string {
   for (const metric of ["week_all", "week_sonnet", "session"]) {
     const snapshots = generateSnapshots("claude", metric, baseTimestamp);
     for (const snap of snapshots) {
-      const metrics: Record<string, unknown> = {
+      const _metrics: Record<string, unknown> = {
         [metric]: {
           used_pct: snap.usedPct,
           remaining_pct: snap.remainingPct,
@@ -142,12 +148,22 @@ export function createSeededDatabase(): string {
         subscription_type: "max",
       };
       // Use internal db to insert with specific timestamp and resets_at
-      (store as any).db.run(
+      getInternalDb(store).run(
         `INSERT INTO usage_snapshots
           (timestamp, service, metric_name, used_pct, remaining_pct, resets, resets_at, subscription_type, source, collection_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [snap.timestamp, "claude", metric, snap.usedPct, snap.remainingPct,
-         snap.resets, snap.resetsAt, "max", "test", crypto.randomUUID()],
+        [
+          snap.timestamp,
+          "claude",
+          metric,
+          snap.usedPct,
+          snap.remainingPct,
+          snap.resets,
+          snap.resetsAt,
+          "max",
+          "test",
+          crypto.randomUUID(),
+        ],
       );
     }
   }
@@ -156,12 +172,22 @@ export function createSeededDatabase(): string {
   for (const metric of ["weekly", "5h"]) {
     const snapshots = generateSnapshots("codex", metric, baseTimestamp);
     for (const snap of snapshots) {
-      (store as any).db.run(
+      getInternalDb(store).run(
         `INSERT INTO usage_snapshots
           (timestamp, service, metric_name, used_pct, remaining_pct, resets, resets_at, subscription_type, source, collection_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [snap.timestamp, "codex", metric, snap.usedPct, snap.remainingPct,
-         snap.resets, snap.resetsAt, "pro", "test", crypto.randomUUID()],
+        [
+          snap.timestamp,
+          "codex",
+          metric,
+          snap.usedPct,
+          snap.remainingPct,
+          snap.resets,
+          snap.resetsAt,
+          "pro",
+          "test",
+          crypto.randomUUID(),
+        ],
       );
     }
   }

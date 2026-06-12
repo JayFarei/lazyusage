@@ -1,7 +1,7 @@
 /**
  * Tmux session management for E2E TUI tests.
  */
-import { join } from "path";
+import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "../../../..");
 const PRELOAD = join(ROOT, "packages/cli/node_modules/@opentui/solid/scripts/preload.ts");
@@ -22,24 +22,16 @@ async function runTmux(
     stdout: opts.capture ? "pipe" : "ignore",
     stderr: opts.suppressErrors ? "ignore" : "pipe",
   });
-  const stdout =
-    opts.capture && proc.stdout ? await new Response(proc.stdout).text() : "";
+  const stdout = opts.capture && proc.stdout ? await new Response(proc.stdout).text() : "";
   const exitCode = await proc.exited;
   return { exitCode, stdout };
 }
 
 /** Create a new detached tmux session at the specified dimensions. */
-export async function createTestSession(
-  name: string,
-  width: number,
-  height: number,
-): Promise<void> {
+export async function createTestSession(name: string, width: number, height: number): Promise<void> {
   // Kill any existing session with this name
   await runTmux(["kill-session", "-t", name], { suppressErrors: true });
-  await runTmux([
-    "new-session", "-d", "-s", name,
-    "-x", String(width), "-y", String(height),
-  ]);
+  await runTmux(["new-session", "-d", "-s", name, "-x", String(width), "-y", String(height)]);
 }
 
 /**
@@ -54,24 +46,18 @@ export async function createDirectTUISession(
   args: string[] = [],
 ): Promise<void> {
   await runTmux(["kill-session", "-t", name], { suppressErrors: true });
-  const argStr = args.length > 0 ? " " + args.join(" ") : "";
+  const argStr = args.length > 0 ? ` ${args.join(" ")}` : "";
   const cmd = `bun --preload=${PRELOAD} ${TUI_SCRIPT} usage${argStr}`;
-  await runTmux([
-    "new-session", "-d", "-s", name,
-    "-x", String(width), "-y", String(height),
-    cmd,
-  ]);
+  await runTmux(["new-session", "-d", "-s", name, "-x", String(width), "-y", String(height), cmd]);
 }
 
 /** Launch the TUI in a tmux session. */
-export async function launchTUI(
-  sessionName: string,
-  args: string[] = [],
-  env?: Record<string, string>,
-): Promise<void> {
-  const argStr = args.length > 0 ? " " + args.join(" ") : "";
+export async function launchTUI(sessionName: string, args: string[] = [], env?: Record<string, string>): Promise<void> {
+  const argStr = args.length > 0 ? ` ${args.join(" ")}` : "";
   const envPrefix = env
-    ? Object.entries(env).map(([k, v]) => `${k}=${v}`).join(" ") + " "
+    ? `${Object.entries(env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(" ")} `
     : "";
   const cmd = `${envPrefix}bun --preload=${PRELOAD} ${TUI_SCRIPT} usage${argStr}`;
   await runTmux(["send-keys", "-t", sessionName, cmd, "Enter"]);
@@ -79,10 +65,7 @@ export async function launchTUI(
 
 /** Capture the current frame from a tmux session. */
 export async function captureFrame(sessionName: string): Promise<string> {
-  const { stdout } = await runTmux(
-    ["capture-pane", "-t", sessionName, "-p"],
-    { capture: true, suppressErrors: true },
-  );
+  const { stdout } = await runTmux(["capture-pane", "-t", sessionName, "-p"], { capture: true, suppressErrors: true });
   return stdout;
 }
 
@@ -111,19 +94,12 @@ export async function killSession(sessionName: string): Promise<void> {
 
 /** Check if a tmux session exists. */
 export async function sessionExists(sessionName: string): Promise<boolean> {
-  const { exitCode } = await runTmux(
-    ["has-session", "-t", sessionName],
-    { suppressErrors: true },
-  );
+  const { exitCode } = await runTmux(["has-session", "-t", sessionName], { suppressErrors: true });
   return exitCode === 0;
 }
 
 /** Resize a tmux session window. */
-export async function resizeSession(
-  sessionName: string,
-  width: number,
-  height: number,
-): Promise<void> {
+export async function resizeSession(sessionName: string, width: number, height: number): Promise<void> {
   await runTmux(["resize-window", "-t", sessionName, "-x", String(width), "-y", String(height)]);
 }
 
@@ -152,11 +128,7 @@ export async function waitForContent(
  * Wait for a session to disappear (e.g., after `q` to quit).
  * Returns true if session is gone within timeout.
  */
-export async function waitForSessionExit(
-  sessionName: string,
-  timeoutMs = 5000,
-  intervalMs = 200,
-): Promise<boolean> {
+export async function waitForSessionExit(sessionName: string, timeoutMs = 5000, intervalMs = 200): Promise<boolean> {
   let elapsed = 0;
   while (elapsed < timeoutMs) {
     await Bun.sleep(intervalMs);
@@ -168,12 +140,12 @@ export async function waitForSessionExit(
 
 /** Get the PID of the process running in a tmux session pane. */
 export async function getPanePid(sessionName: string): Promise<number | null> {
-  const { stdout } = await runTmux(
-    ["list-panes", "-t", sessionName, "-F", "#{pane_pid}"],
-    { capture: true, suppressErrors: true },
-  );
+  const { stdout } = await runTmux(["list-panes", "-t", sessionName, "-F", "#{pane_pid}"], {
+    capture: true,
+    suppressErrors: true,
+  });
   const pid = parseInt(stdout.trim(), 10);
-  return isNaN(pid) ? null : pid;
+  return Number.isNaN(pid) ? null : pid;
 }
 
 /** Get process RSS (KB) for a given PID. Returns null if process not found. */
@@ -181,5 +153,5 @@ export async function getProcessRSS(pid: number): Promise<number | null> {
   const proc = Bun.spawnSync(["ps", "-o", "rss=", "-p", String(pid)]);
   if (proc.exitCode !== 0) return null;
   const rss = parseInt(proc.stdout.toString().trim(), 10);
-  return isNaN(rss) ? null : rss;
+  return Number.isNaN(rss) ? null : rss;
 }

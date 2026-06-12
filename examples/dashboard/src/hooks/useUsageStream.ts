@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UsageSnapshot } from "../types";
 
 type Status = "connecting" | "connected" | "error" | "closed";

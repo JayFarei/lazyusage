@@ -4,29 +4,27 @@
  *
  * Requires tmux - skips all tests if tmux is unavailable.
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import {
-  isTmuxAvailable,
-  createTestSession,
-  createDirectTUISession,
-  launchTUI,
-  captureFrame,
-  waitForContent,
-  waitForSessionExit,
-  killSession,
-  sendKey,
-  resizeSession,
-} from "../helpers/tmux.js";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { BAR_WIDTH_STEP, MIN_BAR_WIDTH } from "@lazyusage/core/utils/bars.js";
 import {
   assertLayoutIntact,
-  assertStatusBarPresent,
   assertMarkersEquidistant,
   assertNoCrash,
-  assertContains,
-  assertNotContains,
+  assertStatusBarPresent,
 } from "../helpers/assertions.js";
 import { extractBarWidths } from "../helpers/markers.js";
-import { calculateBarWidth, MIN_BAR_WIDTH, BAR_WIDTH_STEP } from "@lazyusage/core/utils/bars.js";
+import {
+  captureFrame,
+  createDirectTUISession,
+  createTestSession,
+  isTmuxAvailable,
+  killSession,
+  launchTUI,
+  resizeSession,
+  sendKey,
+  waitForContent,
+  waitForSessionExit,
+} from "../helpers/tmux.js";
 
 // Session name prefix for this test file
 const SESSION_PREFIX = "e2e-res";
@@ -53,7 +51,7 @@ function skipIfNoTmux() {
 }
 
 // Helper to compute expected bar width for a given terminal width
-function expectedBarWidth(terminalWidth: number): number {
+function _expectedBarWidth(terminalWidth: number): number {
   const panelCols = Math.floor(terminalWidth * 0.4) - 4;
   const overhead = 12;
   const raw = panelCols - overhead;
@@ -171,7 +169,7 @@ describe("Resolution 120x40 (medium)", () => {
     try {
       await createTestSession(session, 120, 40);
       await launchTUI(session);
-      const frame = await waitForContent(session, "Claude CLI", 20000);
+      const _frame = await waitForContent(session, "Claude CLI", 20000);
       // Wait extra time for metrics to load and bars to render
       await Bun.sleep(3000);
       const fullFrame = await captureFrame(session);
@@ -288,12 +286,13 @@ describe("Resolution 60x20 (below minimum)", () => {
       // Wait 8 seconds - process should survive
       await Bun.sleep(8000);
       // Session should still exist (process alive)
-      const { exitCode } = await Bun.spawn(
-        ["tmux", "has-session", "-t", session],
-        { stdout: "ignore", stderr: "ignore" },
-      ).exited.then((code) => ({ exitCode: code }));
+      const exitCode = await Bun.spawn(["tmux", "has-session", "-t", session], {
+        stdout: "ignore",
+        stderr: "ignore",
+      }).exited;
       // If session still exists, no crash
       // (TUI may render garbage at this size but must not crash)
+      expect(exitCode).toBe(0);
     } finally {
       await killSession(session);
     }

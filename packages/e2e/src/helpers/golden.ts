@@ -40,11 +40,7 @@ interface StructuralInvariants {
  * Extract structural invariants from a raw tmux capture string.
  * Strips data-dependent values (percentages, times) and keeps layout structure.
  */
-export function extractStructuralInvariants(
-  frame: string,
-  width: number,
-  height: number,
-): StructuralInvariants {
+export function extractStructuralInvariants(frame: string, width: number, height: number): StructuralInvariants {
   const lines = frame.split("\n");
 
   // Detect presence of panel titles
@@ -113,29 +109,19 @@ async function runTmux(
     stdout: opts.capture ? "pipe" : "ignore",
     stderr: opts.suppressErrors ? "ignore" : "pipe",
   });
-  const stdout = opts.capture && proc.stdout
-    ? await new Response(proc.stdout).text()
-    : "";
+  const stdout = opts.capture && proc.stdout ? await new Response(proc.stdout).text() : "";
   const exitCode = await proc.exited;
   return { exitCode, stdout };
 }
 
 /** Poll tmux session until the frame contains the marker text, or timeout. */
-async function waitForContent(
-  session: string,
-  marker: string,
-  timeoutMs = 20000,
-  intervalMs = 500,
-): Promise<string> {
+async function waitForContent(session: string, marker: string, timeoutMs = 20000, intervalMs = 500): Promise<string> {
   let elapsed = 0;
   let frame = "";
   while (elapsed < timeoutMs) {
     await Bun.sleep(intervalMs);
     elapsed += intervalMs;
-    const { stdout } = await runTmux(
-      ["capture-pane", "-t", session, "-p"],
-      { capture: true, suppressErrors: true },
-    );
+    const { stdout } = await runTmux(["capture-pane", "-t", session, "-p"], { capture: true, suppressErrors: true });
     frame = stdout;
     if (frame.includes(marker)) return frame;
   }
@@ -165,10 +151,7 @@ export async function captureAtResolution(
   await runTmux(["kill-session", "-t", session], { suppressErrors: true });
 
   // Create new session at target size
-  await runTmux([
-    "new-session", "-d", "-s", session,
-    "-x", String(width), "-y", String(height),
-  ]);
+  await runTmux(["new-session", "-d", "-s", session, "-x", String(width), "-y", String(height)]);
 
   // Send TUI launch command
   await runTmux(["send-keys", "-t", session, tuiCommand, "Enter"]);
@@ -180,10 +163,10 @@ export async function captureAtResolution(
   await Bun.sleep(3000);
 
   // Final capture
-  const { stdout: finalFrame } = await runTmux(
-    ["capture-pane", "-t", session, "-p"],
-    { capture: true, suppressErrors: true },
-  );
+  const { stdout: finalFrame } = await runTmux(["capture-pane", "-t", session, "-p"], {
+    capture: true,
+    suppressErrors: true,
+  });
 
   const textFrame = finalFrame || frame;
   const invariants = extractStructuralInvariants(textFrame, width, height);
@@ -220,16 +203,13 @@ export async function captureGoldenFrames(
       await Bun.write(`${outputDir}/${width}x${height}.txt`, result.textFrame);
 
       // Write structural invariants as JSON
-      await Bun.write(
-        `${outputDir}/${width}x${height}.json`,
-        JSON.stringify(result.invariants, null, 2),
-      );
+      await Bun.write(`${outputDir}/${width}x${height}.json`, JSON.stringify(result.invariants, null, 2));
 
       console.log(
         `    hasClaude=${result.invariants.hasClaude} ` +
-        `hasBars=${result.invariants.hasBars} ` +
-        `markerLines=${result.invariants.markerLines.length} ` +
-        `barLines=${result.invariants.barLines.length}`,
+          `hasBars=${result.invariants.hasBars} ` +
+          `markerLines=${result.invariants.markerLines.length} ` +
+          `barLines=${result.invariants.barLines.length}`,
       );
     } catch (err) {
       console.error(`  Failed to capture ${width}x${height}: ${err}`);

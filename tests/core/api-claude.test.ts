@@ -2,10 +2,10 @@
  * Unit tests for ClaudeAPIProvider.
  * Mocks globalThis.fetch to test API interaction and response parsing.
  */
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
-import { writeFileSync, rmSync, mkdirSync } from "fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ClaudeAPIProvider } from "../../packages/core/src/providers/api-claude.js";
 import { ClaudeCredentialStore } from "../../packages/core/src/providers/credentials.js";
 import { DataSource } from "../../packages/core/src/types.js";
@@ -16,6 +16,7 @@ import { DataSource } from "../../packages/core/src/types.js";
 
 const originalFetch = globalThis.fetch;
 let tempCredsPath: string;
+type ClaudeApiProviderTestStatics = { _rateLimitedUntil: number };
 
 function makeTempCredsPath(): string {
   return join(tmpdir(), `test-creds-claude-api-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
@@ -32,6 +33,10 @@ function writeCredsFile(path: string): void {
     },
   };
   writeFileSync(path, JSON.stringify(creds));
+}
+
+function setClaudeApiRateLimit(value: number): void {
+  (ClaudeAPIProvider as unknown as ClaudeApiProviderTestStatics)._rateLimitedUntil = value;
 }
 
 function makeApiResponse(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -54,7 +59,7 @@ function makeApiResponse(overrides: Record<string, unknown> = {}): Record<string
 
 beforeEach(() => {
   // Reset static rate limit state
-  (ClaudeAPIProvider as any)._rateLimitedUntil = 0;
+  setClaudeApiRateLimit(0);
   tempCredsPath = makeTempCredsPath();
   process.env.CLAUDE_CREDENTIALS_FILE = tempCredsPath;
 });
@@ -91,17 +96,17 @@ describe("ClaudeAPIProvider - successful fetch + parse", () => {
     expect(result.source).toBe(DataSource.API);
     expect(result.metrics).not.toBeNull();
 
-    const session = result.metrics!.session as { used_pct: number; remaining_pct: number };
+    const session = result.metrics?.session as { used_pct: number; remaining_pct: number };
     expect(session.used_pct).toBe(42);
     expect(session.remaining_pct).toBe(58);
 
-    const weekAll = result.metrics!.week_all as { used_pct: number };
+    const weekAll = result.metrics?.week_all as { used_pct: number };
     expect(weekAll.used_pct).toBe(25);
 
-    const weekSonnet = result.metrics!.week_sonnet as { used_pct: number };
+    const weekSonnet = result.metrics?.week_sonnet as { used_pct: number };
     expect(weekSonnet.used_pct).toBe(10);
 
-    expect(result.metrics!.subscription_type).toBe("max");
+    expect(result.metrics?.subscription_type).toBe("max");
   });
 });
 
@@ -112,14 +117,11 @@ describe("ClaudeAPIProvider - rate limit (429)", () => {
     const provider = new ClaudeAPIProvider(credStore);
 
     globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_error" } }),
-        {
-          status: 429,
-          statusText: "Too Many Requests",
-          headers: { "Retry-After": "120" },
-        },
-      )) as unknown as typeof fetch;
+      new Response(JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_error" } }), {
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: { "Retry-After": "120" },
+      })) as unknown as typeof fetch;
 
     const result = await provider.fetch();
 
@@ -167,7 +169,7 @@ describe("ClaudeAPIProvider - malformed response", () => {
 
     expect(result.error).toBeNull();
     expect(result.metrics).not.toBeNull();
-    const session = result.metrics!.session as { used_pct: number };
+    const session = result.metrics?.session as { used_pct: number };
     expect(session.used_pct).toBe(0);
   });
 });

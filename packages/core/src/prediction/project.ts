@@ -3,8 +3,9 @@
  * Projects forward from current usage using average daily consumption rate,
  * with optional supervised mark overrides.
  */
+
+import { COLD_START_RATE, REGIME_RATES } from "../constants.js";
 import type { CapacityPrediction, DailyDelta, SupervisedMark } from "../types.js";
-import { REGIME_RATES, COLD_START_RATE } from "../constants.js";
 
 /** Format a Date as YYYY-MM-DD in local timezone */
 function localDateStr(d: Date): string {

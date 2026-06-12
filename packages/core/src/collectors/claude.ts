@@ -3,9 +3,9 @@
  * Port of src/collectors/claude.py
  */
 
-import type { MetricsDict, EphemeralCollector, PersistentCollector } from "../types.js";
-import { EphemeralSession, PersistentSession } from "../utils/tmux.js";
 import { parseClaudeOutput } from "../parsers/claude.js";
+import type { EphemeralCollector, MetricsDict, PersistentCollector } from "../types.js";
+import { EphemeralSession, PersistentSession } from "../utils/tmux.js";
 
 /** Ephemeral collector for Claude CLI (single-shot usage) */
 export class ClaudeEphemeralCollector implements EphemeralCollector {
@@ -32,7 +32,7 @@ export class ClaudeEphemeralCollector implements EphemeralCollector {
       const usageOutput = await session.waitForContent("% used", 8000);
 
       // Combine landing + usage for full parsing
-      const combinedOutput = landingOutput + "\n" + usageOutput;
+      const combinedOutput = `${landingOutput}\n${usageOutput}`;
 
       return parseClaudeOutput(combinedOutput);
     } finally {
@@ -68,7 +68,7 @@ export class ClaudePersistentCollector implements PersistentCollector {
     // Poll until usage output appears
     const usageOutput = await this.session.waitForContent("% used", 8000);
 
-    const combinedOutput = (this.landingOutput ?? "") + "\n" + usageOutput;
+    const combinedOutput = `${this.landingOutput ?? ""}\n${usageOutput}`;
     const metrics = parseClaudeOutput(combinedOutput);
 
     if (this._hasRealData(metrics)) {
@@ -100,7 +100,7 @@ export class ClaudePersistentCollector implements PersistentCollector {
     // Poll until usage output appears
     const usageOutput = await this.session.waitForContent("% used", 8000);
 
-    const combinedOutput = (this.landingOutput ?? "") + "\n" + usageOutput;
+    const combinedOutput = `${this.landingOutput ?? ""}\n${usageOutput}`;
     const metrics = parseClaudeOutput(combinedOutput);
 
     if (this._hasRealData(metrics)) {

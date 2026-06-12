@@ -3,11 +3,11 @@
  * Port of ClaudeAPIProvider from src/providers/api.py
  */
 
-import { DataSource } from "../types.js";
-import type { FetchResult, UsageProvider, MetricsDict } from "../types.js";
-import { ClaudeCredentialStore } from "./credentials.js";
-import { formatResetFromIso } from "../utils/time.js";
 import { API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
+import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
+import { DataSource } from "../types.js";
+import { formatResetFromIso } from "../utils/time.js";
+import { ClaudeCredentialStore } from "./credentials.js";
 
 const PACKAGE_VERSION = "0.1.0"; // from @lazyusage/core package.json
 
@@ -42,7 +42,7 @@ export class ClaudeAPIProvider implements UsageProvider {
     }
 
     try {
-      let response = await this._fetchWithRetry(creds.accessToken);
+      const response = await this._fetchWithRetry(creds.accessToken);
 
       if (!response.ok) {
         return {
@@ -94,10 +94,10 @@ export class ClaudeAPIProvider implements UsageProvider {
     // Skip if we know we're still rate-limited
     if (Date.now() < ClaudeAPIProvider._rateLimitedUntil) {
       const secsLeft = Math.ceil((ClaudeAPIProvider._rateLimitedUntil - Date.now()) / 1000);
-      return new Response(
-        JSON.stringify({ error: { message: "Rate limited (cached)", type: "rate_limit_error" } }),
-        { status: 429, statusText: `Too Many Requests (retry in ${secsLeft}s)` },
-      );
+      return new Response(JSON.stringify({ error: { message: "Rate limited (cached)", type: "rate_limit_error" } }), {
+        status: 429,
+        statusText: `Too Many Requests (retry in ${secsLeft}s)`,
+      });
     }
 
     const response = await globalThis.fetch(ClaudeAPIProvider.API_URL, {
@@ -118,12 +118,13 @@ export class ClaudeAPIProvider implements UsageProvider {
       const parsed = parseInt(rawHeader ?? "", 10);
       // Exponential backoff when header is missing/zero (API sends Retry-After: 0).
       // Base = 240s, doubles per consecutive 429, capped at 20 min.
-      const backoff = parsed > 0
-        ? parsed
-        : Math.min(
-            RATE_LIMIT_DEFAULT_SECONDS * Math.pow(2, ClaudeAPIProvider._consecutive429s - 1),
-            ClaudeAPIProvider.MAX_BACKOFF_SECONDS,
-          );
+      const backoff =
+        parsed > 0
+          ? parsed
+          : Math.min(
+              RATE_LIMIT_DEFAULT_SECONDS * 2 ** (ClaudeAPIProvider._consecutive429s - 1),
+              ClaudeAPIProvider.MAX_BACKOFF_SECONDS,
+            );
       ClaudeAPIProvider._rateLimitedUntil = Date.now() + backoff * 1000;
     } else if (response.ok) {
       ClaudeAPIProvider._consecutive429s = 0;

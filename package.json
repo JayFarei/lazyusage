@@ -29,7 +29,7 @@
     "test:smoke": "bun run build && bun packages/cli/dist/cli.js --help >/dev/null && bun packages/cli/dist/cli.js usage-check --help >/dev/null"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
+    "@biomejs/biome": "^2.4.7",
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
     "@opentui/core": "0.1.77",

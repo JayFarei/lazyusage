@@ -1,10 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import {
-  formatClaudeText,
-  formatCodexText,
-  formatWithAvailability,
-  type MetricsDict,
-} from "@lazyusage/core";
+import { describe, expect, test } from "bun:test";
+import { formatClaudeText, formatCodexText, formatWithAvailability, type MetricsDict } from "@lazyusage/core";
 
 describe("formatClaudeText", () => {
   test("formats claude metrics correctly", () => {

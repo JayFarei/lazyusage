@@ -7,9 +7,10 @@
  *
  * 30s throttled refresh, independent of rate-limit polling.
  */
-import { createSignal, type Accessor } from "solid-js";
-import { existsSync } from "fs";
+
+import { existsSync } from "node:fs";
 import type { ProjectUsage } from "@lazyusage/core/parsers/types";
+import { type Accessor, createSignal } from "solid-js";
 
 export interface LedgerHook {
   claudeDaily: Accessor<ProjectUsage[] | null>;
@@ -116,7 +117,9 @@ export function useLedgerData(): LedgerHook {
 
   function killAll() {
     for (const proc of activeProcs) {
-      try { proc.kill(); } catch {}
+      try {
+        proc.kill();
+      } catch {}
     }
     activeProcs.clear();
   }

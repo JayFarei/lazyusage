@@ -75,9 +75,7 @@ export async function pollStatusPage(provider: string): Promise<StatusPageResult
  * Poll all known status pages concurrently.
  */
 export async function pollAllStatusPages(): Promise<StatusPageResult[]> {
-  return Promise.all(
-    Object.keys(STATUS_PAGES).map((provider) => pollStatusPage(provider)),
-  );
+  return Promise.all(Object.keys(STATUS_PAGES).map((provider) => pollStatusPage(provider)));
 }
 
 /**
@@ -88,6 +86,9 @@ export function statusToWarningMessage(results: StatusPageResult[]): string | nu
   if (degraded.length === 0) return null;
 
   return degraded
-    .map((r) => `${r.provider}: ${r.status === "major_outage" ? "major outage" : "degraded"}${r.description ? ` - ${r.description}` : ""}`)
+    .map(
+      (r) =>
+        `${r.provider}: ${r.status === "major_outage" ? "major outage" : "degraded"}${r.description ? ` - ${r.description}` : ""}`,
+    )
     .join("; ");
 }
