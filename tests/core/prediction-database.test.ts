@@ -1,6 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { UsageStore } from "../../packages/core/src/storage/database.js";
 import type { Regime } from "../../packages/core/src/types.js";
+
+function getInternalDb(store: UsageStore): Database {
+  return (store as unknown as { db: Database }).db;
+}
 
 describe("UsageStore prediction features", () => {
   let store: UsageStore;
@@ -21,7 +26,7 @@ describe("UsageStore prediction features", () => {
     resetsAt: string | null = null,
   ) {
     // Use the internal db to insert test data directly
-    const db = (store as any).db;
+    const db = getInternalDb(store);
     db.run(
       `INSERT INTO usage_snapshots (timestamp, service, metric_name, used_pct, remaining_pct, resets_at, source, collection_id)
        VALUES (?, ?, ?, ?, ?, ?, 'test', ?)`,
@@ -30,37 +35,47 @@ describe("UsageStore prediction features", () => {
   }
 
   describe("getDailyBoundaries", () => {
+    // getDailyBoundaries filters to the last N days relative to Date.now(),
+    // so fixtures must use recent timestamps rather than fixed dates.
+    function isoAt(daysAgo: number, hourUtc: number): string {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - daysAgo);
+      d.setUTCHours(hourUtc, 0, 0, 0);
+      return d.toISOString();
+    }
+    const dayOf = (iso: string) => iso.slice(0, 10);
+
     test("returns correct first/last per day", () => {
-      insertSnapshot("claude", "week_all", 30, "2026-03-20T08:00:00Z");
-      insertSnapshot("claude", "week_all", 35, "2026-03-20T12:00:00Z");
-      insertSnapshot("claude", "week_all", 45, "2026-03-20T18:00:00Z");
+      insertSnapshot("claude", "week_all", 30, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 35, isoAt(5, 12));
+      insertSnapshot("claude", "week_all", 45, isoAt(5, 18));
 
       const boundaries = store.getDailyBoundaries("claude", "week_all", 30);
       expect(boundaries).toHaveLength(1);
-      expect(boundaries[0].date).toBe("2026-03-20");
+      expect(boundaries[0].date).toBe(dayOf(isoAt(5, 8)));
       expect(boundaries[0].firstUsedPct).toBe(30);
       expect(boundaries[0].lastUsedPct).toBe(45);
       expect(boundaries[0].sampleCount).toBe(3);
     });
 
     test("handles sparse data: only days with snapshots", () => {
-      insertSnapshot("claude", "week_all", 30, "2026-03-20T08:00:00Z");
-      insertSnapshot("claude", "week_all", 45, "2026-03-20T18:00:00Z");
-      // No data for 2026-03-21
-      insertSnapshot("claude", "week_all", 50, "2026-03-22T08:00:00Z");
-      insertSnapshot("claude", "week_all", 55, "2026-03-22T18:00:00Z");
+      insertSnapshot("claude", "week_all", 30, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 45, isoAt(5, 18));
+      // No data 4 days ago
+      insertSnapshot("claude", "week_all", 50, isoAt(3, 8));
+      insertSnapshot("claude", "week_all", 55, isoAt(3, 18));
 
       const boundaries = store.getDailyBoundaries("claude", "week_all", 30);
       expect(boundaries).toHaveLength(2);
-      expect(boundaries[0].date).toBe("2026-03-20");
-      expect(boundaries[1].date).toBe("2026-03-22");
+      expect(boundaries[0].date).toBe(dayOf(isoAt(5, 8)));
+      expect(boundaries[1].date).toBe(dayOf(isoAt(3, 8)));
     });
 
     test("filters by metric name", () => {
-      insertSnapshot("claude", "week_all", 30, "2026-03-20T08:00:00Z");
-      insertSnapshot("claude", "week_all", 45, "2026-03-20T18:00:00Z");
-      insertSnapshot("claude", "week_sonnet", 20, "2026-03-20T08:00:00Z");
-      insertSnapshot("claude", "week_sonnet", 25, "2026-03-20T18:00:00Z");
+      insertSnapshot("claude", "week_all", 30, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 45, isoAt(5, 18));
+      insertSnapshot("claude", "week_sonnet", 20, isoAt(5, 8));
+      insertSnapshot("claude", "week_sonnet", 25, isoAt(5, 18));
 
       const weekAll = store.getDailyBoundaries("claude", "week_all", 30);
       expect(weekAll).toHaveLength(1);
@@ -72,11 +87,12 @@ describe("UsageStore prediction features", () => {
     });
 
     test("includes resets_at from last snapshot", () => {
-      insertSnapshot("claude", "week_all", 80, "2026-03-20T08:00:00Z");
-      insertSnapshot("claude", "week_all", 16, "2026-03-20T18:00:00Z", "2026-03-20T14:00:00Z");
+      const resetsAt = isoAt(5, 14);
+      insertSnapshot("claude", "week_all", 80, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 16, isoAt(5, 18), resetsAt);
 
       const boundaries = store.getDailyBoundaries("claude", "week_all", 30);
-      expect(boundaries[0].resetsAt).toBe("2026-03-20T14:00:00Z");
+      expect(boundaries[0].resetsAt).toBe(resetsAt);
     });
 
     test("empty database returns empty array", () => {
@@ -142,10 +158,7 @@ describe("UsageStore prediction features", () => {
 
     test("regime CHECK constraint rejects invalid values", () => {
       expect(() => {
-        (store as any).db.run(
-          `INSERT INTO capacity_marks (date, regime) VALUES (?, ?)`,
-          ["2026-03-26", "X"],
-        );
+        getInternalDb(store).run(`INSERT INTO capacity_marks (date, regime) VALUES (?, ?)`, ["2026-03-26", "X"]);
       }).toThrow();
     });
   });

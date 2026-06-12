@@ -3,72 +3,59 @@
     "width": 80,
     "height": 24
   },
-  "capturedAt": "2026-02-17T22:52:59.026Z",
+  "capturedAt": "2026-04-10T09:30:20.568Z",
   "hasClaude": true,
-  "hasCodex": false,
+  "hasCodex": true,
   "hasStatusBar": true,
   "hasTimerMarkers": true,
-  "hasBars": false,
+  "hasBars": true,
   "markerLines": [
     {
       "lineIndex": 3,
       "positions": [
-        11,
-        18,
-        25
-      ],
-      "gap": 7,
-      "valid": true
-    },
-    {
-      "lineIndex": 6,
-      "positions": [
-        9,
+        6,
+        8,
+        10,
+        12,
         14,
-        19,
-        24,
-        29
+        16
       ],
-      "gap": 5,
-      "valid": true
-    },
-    {
-      "lineIndex": 9,
-      "positions": [
-        9,
-        14,
-        19,
-        24,
-        29
-      ],
-      "gap": 5,
+      "gap": 2,
       "valid": true
     },
     {
       "lineIndex": 14,
       "positions": [
-        11,
-        18,
-        25
-      ],
-      "gap": 7,
-      "valid": true
-    },
-    {
-      "lineIndex": 19,
-      "positions": [
-        9,
+        6,
+        8,
+        10,
+        12,
         14,
-        19,
-        24,
-        29
+        16
       ],
-      "gap": 5,
+      "gap": 2,
       "valid": true
     }
   ],
-  "barLines": [],
-  "structuralLineCount": 22,
+  "barLines": [
+    {
+      "lineIndex": 2,
+      "total": 16
+    },
+    {
+      "lineIndex": 4,
+      "total": 16
+    },
+    {
+      "lineIndex": 13,
+      "total": 16
+    },
+    {
+      "lineIndex": 15,
+      "total": 16
+    }
+  ],
+  "structuralLineCount": 21,
   "borderCharsFound": [
     "│",
     "─",
@@ -78,6 +65,7 @@
     "╯"
   ],
   "panelTitleLines": [
-    0
+    0,
+    11
   ]
 }

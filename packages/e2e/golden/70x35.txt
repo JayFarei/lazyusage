@@ -1,35 +1,34 @@
-╭─ [1] Claude CLI - max ───╮╭─ ━ Daily ━   Weekly     Monthly   ─────╮
-│ ▸ Session (5h)           ││  Loading ledger data...                │
+╭─ [1] Claude CLI - max ───╮╭─ [3] ━ Daily ━   Weekly     Monthly   ─╮
+│ ▸ Weekly (All)           ││                                        │
+│   ▓▓▓▓▓▓▓▓▓▓▓▓           ││  Today                                 │
+│    ┃┃┃┃┃┃                ││                                        │
+│   ▓▓▓▓▓▓▓▓▓▓▓▓ ⏱ 97%     ││  No usage data available               │
 │                          ││                                        │
-│          ┃      ┃      ┃ ││                                        │
+│   Resets: 3:59pm (5h 28m)││                                        │
+│   ⚡ OVER BUDGET -2%     ││                                        │
 │                          ││                                        │
-│     Resets: Feb 18 at 3: ││                                        │
-│   Weekly (All)           ││                                        │
+│   Weekly (Sonnet) 51%    ││                                        │
+│   Session (5h) 3%        ││                                        │
 │                          ││                                        │
-│        ┃    ┃    ┃    ┃  ││                                        │
-│                          ││                                        │
-│     Resets: Feb 18 at 11:││                                        │
-│   Weekly (Sonnet)        ││                                        │
-│                          ││                                        │
-│        ┃    ┃    ┃    ┃  ││                                        │
-│                          ││                                        │
-│     Resets: Feb 18 at 11:││                                        │
-╰──────────────────────────╯╰────────────────────────────────────────╯
-╭─ [2] Codex CLI - Plus ───╮╭─ ━ Daily ━   Weekly     Monthly   ─────╮
-│   Session (5h)           ││  Loading ledger data...                │
-│                          ││                                        │
-│          ┃      ┃      ┃ ││                                        │
-│                          ││                                        │
-│     Resets: Feb 18 at 4: ││                                        │
-│                          ││                                        │
-│   Weekly                 ││                                        │
-│                          ││                                        │
-│        ┃    ┃    ┃    ┃  ││                                        │
-│                          ││                                        │
-│     Resets: Feb 23 at 9: ││                                        │
 │                          ││                                        │
 │                          ││                                        │
 │                          ││                                        │
 ╰──────────────────────────╯╰────────────────────────────────────────╯
- 11:52:54 PM | Last updated: 11:52:54 PM | Auto-refresh: ON (10s) |
- [1]Claude  [2]Codex  j/k=Navigate  [/]=Stats Tab  r=Refresh  p=Pause
+╭─ [2] Codex CLI - Plus ───╮╭─ [4] ━ Daily ━   Weekly     Monthly   ─╮
+│ ▸ Weekly                 ││  Codex token stats not available       │
+│   ▓▓▓▓▓▒▒▒▒▒▒▒           ││                                        │
+│    ┃┃┃┃┃┃                ││                                        │
+│   ▓░░░░░░░░░░░ ⏱ 10%     ││                                        │
+│                          ││                                        │
+│   Resets: Apr 16 at 5:   ││                                        │
+│   ⚡ OVER BUDGET -42%    ││                                        │
+│   Session (5h)           ││                                        │
+│   ▓▓▓▓▓▓▓▓▓░░░ ◆ 76%     ││                                        │
+│     ┃ ┃ ┃ ┃              ││                                        │
+│   ▓▓▓▓░░░░░░░░ ⏱ 30%     ││                                        │
+│                          ││                                        │
+│   Resets: 2:00pm (3h 29m)││                                        │
+│                          ││                                        │
+╰──────────────────────────╯╰────────────────────────────────────────╯
+ 10:30:14 AM | Last updated: Never | Auto-refresh: ON (10s) | Source:
+ [1]Claude  [3]ClaudeStats  [2]Codex  [4]CodexStats  j/k=Navigate
