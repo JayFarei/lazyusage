@@ -6,7 +6,7 @@
 │                              ││                                              │
 │   Resets: 3:59pm (5h 28m)    ││                                              │
 │   ⚡ OVER BUDGET -2%         ││                                              │
-│   Weekly (Sonnet) ◆ 51% ⏱    ││                                              │
+│   Weekly (Fable) ◆ 51% ⏱     ││                                              │
 │   Session (5h) ◆ 3% ⏱ 50%    ││                                              │
 ╰──────────────────────────────╯╰──────────────────────────────────────────────╯
 ╭─ [2] Codex CLI - Plus ───────╮╭─ [4] ━ Daily ━   Weekly     Monthly   ───────╮

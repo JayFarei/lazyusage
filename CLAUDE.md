@@ -47,7 +47,7 @@ bun run lazyusage:dev
 bun run lazyusage:dev --text
 
 # Capacity-only snapshot (most compact agent output)
-# Format: "Session: +25% | Weekly: +18% | Sonnet: +22% [Subscription: max]"
+# Format: "Session: +25% | Weekly: +18% | Fable: +22% [Subscription: max]"
 # capacity remaining = time elapsed % - allowance used % (positive = ahead of pace)
 bun run lazyusage:dev --capacity
 bun run lazyusage:dev claude --capacity        # single service

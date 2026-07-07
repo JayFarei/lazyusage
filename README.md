@@ -154,7 +154,7 @@ What the text modes look like:
 
 ```text
 $ lazyusage --capacity
-Claude: Session: -5% | Weekly: -4% | Sonnet: +6% [Subscription: max]
+Claude: Session: -5% | Weekly: -4% | Fable: +6% [Subscription: max]
 Codex: Session: +19% | Weekly: +4% [Subscription: pro]
 
 $ lazyusage --text

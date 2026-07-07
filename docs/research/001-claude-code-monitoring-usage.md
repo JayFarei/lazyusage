@@ -155,7 +155,7 @@ The OTel integration provides rich data that lazyusage currently lacks (cost, LO
 |----------------|--------|-----------------|
 | `five_hour` utilization % | `api.anthropic.com/api/oauth/usage` | NONE |
 | `seven_day` utilization % | same | NONE |
-| `seven_day_sonnet` utilization | same | NONE |
+| `seven_day_fable` utilization (legacy fallback: `seven_day_sonnet`) | same | NONE |
 | Reset times | same | NONE |
 | Capacity remaining (computed) | time elapsed - allowance used | NONE |
 | Per-project token breakdown | JSONL parsing | NONE (no project-level grouping) |

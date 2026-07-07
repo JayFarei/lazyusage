@@ -19,12 +19,12 @@ export function formatClaudeText(metrics: MetricsDict): string {
   const subscription = metrics.subscription_type as string | null;
   const session = metrics.session as MetricEntry;
   const weekAll = metrics.week_all as MetricEntry;
-  const weekSonnet = metrics.week_sonnet as MetricEntry;
+  const weekModel = metrics.week_sonnet as MetricEntry;
 
   const base = [
     fmtMetric("Session", session, 5),
     fmtMetric("Weekly", weekAll, 168),
-    fmtMetric("Sonnet", weekSonnet, 168),
+    fmtMetric("Fable", weekModel, 168),
   ].join(" | ");
 
   if (subscription) {
@@ -61,12 +61,12 @@ export function formatClaudeCapacityText(metrics: MetricsDict): string {
   const subscription = metrics.subscription_type as string | null;
   const session = metrics.session as MetricEntry;
   const weekAll = metrics.week_all as MetricEntry;
-  const weekSonnet = metrics.week_sonnet as MetricEntry;
+  const weekModel = metrics.week_sonnet as MetricEntry;
 
   const base = [
     fmtCapacity("Session", session, 5),
     fmtCapacity("Weekly", weekAll, 168),
-    fmtCapacity("Sonnet", weekSonnet, 168),
+    fmtCapacity("Fable", weekModel, 168),
   ].join(" | ");
 
   return subscription ? `${base} [Subscription: ${subscription}]` : base;

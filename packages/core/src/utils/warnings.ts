@@ -75,7 +75,7 @@ const USAGE_DROP_THRESHOLD = 10;
 const METRIC_LABELS: Record<string, string> = {
   session: "session",
   week_all: "weekly",
-  week_sonnet: "weekly sonnet",
+  week_sonnet: "weekly fable",
   "5h": "session",
   weekly: "weekly",
 };

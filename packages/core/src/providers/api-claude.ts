@@ -134,19 +134,27 @@ export class ClaudeAPIProvider implements UsageProvider {
   }
 
   private _parseApiResponse(data: Record<string, unknown>, subscriptionType: string): MetricsDict {
-    const fiveHour = (data.five_hour ?? {}) as Record<string, unknown>;
-    const sevenDay = (data.seven_day ?? {}) as Record<string, unknown>;
-    const sevenDaySonnet = (data.seven_day_sonnet ?? {}) as Record<string, unknown>;
+    const limits = Array.isArray(data.limits) ? (data.limits as Array<Record<string, unknown>>) : [];
+    const limitByKind = (kind: string): Record<string, unknown> | undefined =>
+      limits.find((limit) => limit.kind === kind);
+    const scopedWeeklyLimits = limits.filter((limit) => limit.kind === "weekly_scoped" && limit.group === "weekly");
+    const scopedWeeklyLimit =
+      scopedWeeklyLimits.find((limit) => limit.is_active === true) ?? scopedWeeklyLimits[0] ?? undefined;
+
+    const fiveHour = limitByKind("session") ?? ((data.five_hour ?? {}) as Record<string, unknown>);
+    const sevenDay = limitByKind("weekly_all") ?? ((data.seven_day ?? {}) as Record<string, unknown>);
+    const sevenDayModel =
+      scopedWeeklyLimit ?? ((data.seven_day_fable ?? data.seven_day_sonnet ?? {}) as Record<string, unknown>);
 
     const getUtilization = (window: Record<string, unknown>): number => {
-      const util = window.utilization;
+      const util = window.utilization ?? window.percent;
       if (util === null || util === undefined) return 0;
       return Math.round(Number(util));
     };
 
     const sessionUsed = getUtilization(fiveHour);
     const weekAllUsed = getUtilization(sevenDay);
-    const weekSonnetUsed = getUtilization(sevenDaySonnet);
+    const weekModelUsed = getUtilization(sevenDayModel);
 
     return {
       subscription_type: subscriptionType,
@@ -161,9 +169,9 @@ export class ClaudeAPIProvider implements UsageProvider {
         resets: formatResetFromIso((sevenDay.resets_at as string) ?? ""),
       },
       week_sonnet: {
-        used_pct: weekSonnetUsed,
-        remaining_pct: 100 - weekSonnetUsed,
-        resets: formatResetFromIso((sevenDaySonnet.resets_at as string) ?? ""),
+        used_pct: weekModelUsed,
+        remaining_pct: 100 - weekModelUsed,
+        resets: formatResetFromIso((sevenDayModel.resets_at as string) ?? ""),
       },
     };
   }

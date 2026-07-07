@@ -43,16 +43,24 @@ export function parseWeekAll(output: string): {
   };
 }
 
-/** Parse weekly Sonnet-only metric from Claude /usage output */
+/** Parse weekly model-specific metric from Claude /usage output.
+ * The public key remains week_sonnet for backward compatibility, but Claude's
+ * UI now labels this budget Fable. Accept both labels so older CLI output and
+ * cached captures keep parsing.
+ */
 export function parseWeekSonnet(output: string): {
   used_pct: number | null;
   remaining_pct: number | null;
   resets: string | null;
 } {
-  const usedMatch = output.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)% used/);
+  const modelWeekPattern = /Current week \((?:Fable|Sonnet(?: only)?)\)/;
+  const modelWeekStart = output.match(modelWeekPattern);
+  const modelWeekOutput = modelWeekStart ? output.slice(modelWeekStart.index) : "";
+
+  const usedMatch = modelWeekOutput.match(/Current week \((?:Fable|Sonnet(?: only)?)\)[\s\S]*?(\d+)% used/);
   const usedPct = usedMatch ? parseInt(usedMatch[1], 10) : null;
 
-  const resetsMatch = output.match(/Current week \(Sonnet only\)[\s\S]*?Resets\s+([^(]+)/);
+  const resetsMatch = modelWeekOutput.match(/Current week \((?:Fable|Sonnet(?: only)?)\)[\s\S]*?Resets\s+([^(]+)/);
   const resets = resetsMatch ? resetsMatch[1].trim() : null;
 
   return {
@@ -70,9 +78,9 @@ export function parseSubscription(output: string): string | null {
     return dotMatch[1];
   }
 
-  // Priority 2: Look for subscription keywords near Claude/Sonnet
+  // Priority 2: Look for subscription keywords near Claude/model labels
   for (const line of output.split("\n")) {
-    if (line.includes("Claude") || line.includes("Sonnet")) {
+    if (line.includes("Claude") || line.includes("Fable") || line.includes("Sonnet")) {
       if (/\bMax\b/.test(line)) return "Max";
       if (/\bPro\b/.test(line)) return "Pro";
       if (/\bPlus\b/.test(line)) return "Plus";
@@ -113,7 +121,7 @@ export function applyFallbacks(
     metrics.week_all.resets = calculateFallbackTime(168, false);
   }
 
-  // Week (Sonnet only) fallbacks
+  // Week (model-specific) fallbacks
   if (metrics.week_sonnet.used_pct === null) {
     metrics.week_sonnet.used_pct = 0;
     metrics.week_sonnet.remaining_pct = 100;

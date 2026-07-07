@@ -24,7 +24,7 @@ import { useTheme } from "../theme.js";
 export const LABEL_MAP: Record<string, string> = {
   session: "Session (5h)",
   week_all: "Weekly (All)",
-  week_sonnet: "Weekly (Sonnet)",
+  week_sonnet: "Weekly (Fable)",
   "5h": "Session (5h)",
   weekly: "Weekly",
 };

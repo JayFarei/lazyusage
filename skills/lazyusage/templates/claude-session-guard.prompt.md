@@ -7,7 +7,7 @@ Important metric mapping:
 
 - Claude `session` = TUI `Session (5h)`
 - Claude `week_all` = TUI `Weekly (All)`
-- Claude `week_sonnet` = TUI `Weekly (Sonnet)`
+- Claude `week_sonnet` = TUI `Weekly (Fable)` (legacy key name)
 - Codex `5h` is not a Claude metric key
 
 ```text
@@ -29,7 +29,7 @@ Claude metric mapping:
 
   session      = Session (5h)
   week_all     = Weekly (All)
-  week_sonnet  = Weekly (Sonnet)
+  week_sonnet  = Weekly (Fable; legacy key name)
 
 For the 5-hour window guard, inspect the metric named "session":
 

@@ -11,7 +11,7 @@ Important metric mapping:
 
 - Claude `session` = TUI `Session (5h)`
 - Claude `week_all` = TUI `Weekly (All)`
-- Claude `week_sonnet` = TUI `Weekly (Sonnet)`
+- Claude `week_sonnet` = TUI `Weekly (Fable)` (legacy key name)
 
 ```text
 You are Claude working toward a goal over multiple iterations. You share this Claude subscription with a human, so you may only spend a fixed share of the remaining capacity: CAPACITY_BUDGET_SHARE = 0.4 (40% of what remains right now).

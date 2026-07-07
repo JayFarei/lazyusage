@@ -28,7 +28,7 @@ describe("formatClaudeText", () => {
     expect(result).toContain("Session: 0% allowance used");
   });
 
-  test("includes weekly and sonnet metrics", () => {
+  test("includes weekly and Fable metrics", () => {
     const metrics: MetricsDict = {
       subscription_type: "Pro",
       session: { used_pct: 50, remaining_pct: 50, resets: "3:00pm" },
@@ -37,7 +37,7 @@ describe("formatClaudeText", () => {
     };
     const result = formatClaudeText(metrics);
     expect(result).toContain("Weekly: 30% allowance used");
-    expect(result).toContain("Sonnet: 20% allowance used");
+    expect(result).toContain("Fable: 20% allowance used");
   });
 
   test("uses pipe separator between metrics", () => {
@@ -61,7 +61,7 @@ describe("formatClaudeText", () => {
     const result = formatClaudeText(metrics);
     expect(result).toContain("Session: 26% allowance used");
     expect(result).toContain("Weekly: 15% allowance used");
-    expect(result).toContain("Sonnet: 11% allowance used");
+    expect(result).toContain("Fable: 11% allowance used");
   });
 });
 

@@ -43,6 +43,7 @@ export interface ClaudeMetrics {
   subscription_type: string | null;
   session: MetricData;
   week_all: MetricData;
+  /** Legacy key for Claude's model-specific weekly budget, now displayed as Fable. */
   week_sonnet: MetricData;
 }
 

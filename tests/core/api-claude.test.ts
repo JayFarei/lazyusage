@@ -49,11 +49,43 @@ function makeApiResponse(overrides: Record<string, unknown> = {}): Record<string
       utilization: 25,
       resets_at: new Date(Date.now() + 86400_000 * 3).toISOString(),
     },
-    seven_day_sonnet: {
+    seven_day_fable: {
       utilization: 10,
       resets_at: new Date(Date.now() + 86400_000 * 3).toISOString(),
     },
     ...overrides,
+  };
+}
+
+function makeLimitsResponse(): Record<string, unknown> {
+  return {
+    limits: [
+      {
+        kind: "session",
+        group: "session",
+        percent: 10,
+        resets_at: new Date(Date.now() + 3600_000).toISOString(),
+      },
+      {
+        kind: "weekly_all",
+        group: "weekly",
+        percent: 77,
+        resets_at: new Date(Date.now() + 86400_000 * 3).toISOString(),
+      },
+      {
+        kind: "weekly_scoped",
+        group: "weekly",
+        percent: 86,
+        resets_at: new Date(Date.now() + 86400_000 * 3).toISOString(),
+        scope: {
+          model: {
+            id: null,
+            display_name: "Fable",
+          },
+        },
+        is_active: true,
+      },
+    ],
   };
 }
 
@@ -103,10 +135,58 @@ describe("ClaudeAPIProvider - successful fetch + parse", () => {
     const weekAll = result.metrics?.week_all as { used_pct: number };
     expect(weekAll.used_pct).toBe(25);
 
-    const weekSonnet = result.metrics?.week_sonnet as { used_pct: number };
-    expect(weekSonnet.used_pct).toBe(10);
+    const weekModel = result.metrics?.week_sonnet as { used_pct: number };
+    expect(weekModel.used_pct).toBe(10);
 
     expect(result.metrics?.subscription_type).toBe("max");
+  });
+
+  test("falls back to legacy seven_day_sonnet API field", async () => {
+    writeCredsFile(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
+    const provider = new ClaudeAPIProvider(credStore);
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify(
+          makeApiResponse({
+            seven_day_fable: undefined,
+            seven_day_sonnet: {
+              utilization: 12,
+              resets_at: new Date(Date.now() + 86400_000 * 3).toISOString(),
+            },
+          }),
+        ),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      )) as unknown as typeof fetch;
+
+    const result = await provider.fetch();
+
+    expect(result.error).toBeNull();
+    const weekModel = result.metrics?.week_sonnet as { used_pct: number };
+    expect(weekModel.used_pct).toBe(12);
+  });
+
+  test("parses current limits array response for Fable weekly usage", async () => {
+    writeCredsFile(tempCredsPath);
+    const credStore = new ClaudeCredentialStore();
+    const provider = new ClaudeAPIProvider(credStore);
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(makeLimitsResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+
+    const result = await provider.fetch();
+
+    expect(result.error).toBeNull();
+    expect((result.metrics?.session as { used_pct: number }).used_pct).toBe(10);
+    expect((result.metrics?.week_all as { used_pct: number }).used_pct).toBe(77);
+    expect((result.metrics?.week_sonnet as { used_pct: number }).used_pct).toBe(86);
   });
 });
 

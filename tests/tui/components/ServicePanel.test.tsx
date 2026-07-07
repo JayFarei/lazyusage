@@ -24,7 +24,7 @@ describe("ServicePanel - Claude metrics", () => {
     const frame = captureCharFrame();
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly (All)");
-    expect(frame).toContain("Weekly (Sonnet)");
+    expect(frame).toContain("Weekly (Fable)");
   });
 
   test("renders capacity bar chars (▓ / ░)", async () => {
@@ -184,8 +184,8 @@ describe("ServicePanel - Codex metrics", () => {
     const frame = captureCharFrame();
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly");
-    // Should NOT contain Sonnet which is Claude-specific
-    expect(frame).not.toContain("Weekly (Sonnet)");
+    // Should NOT contain Fable which is Claude-specific
+    expect(frame).not.toContain("Weekly (Fable)");
   });
 });
 

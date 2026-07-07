@@ -295,7 +295,7 @@ Predicted spare at window end: +30% (medium confidence, 25 days history)
 
 **Text output (`--predict --capacity`):**
 ```
-Session: +25% | Weekly: +18% | Sonnet: +22% | Predicted: +30% spare [Subscription: max]
+Session: +25% | Weekly: +18% | Fable: +22% | Predicted: +30% spare [Subscription: max]
 ```
 
 **Text output (over-budget):**

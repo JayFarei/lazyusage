@@ -61,7 +61,7 @@ describe("ServicePanel - service-specific rendering", () => {
     const frame = captureCharFrame();
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly (All)");
-    expect(frame).toContain("Weekly (Sonnet)");
+    expect(frame).toContain("Weekly (Fable)");
   });
 
   test("codex panel shows only Codex metric keys", async () => {
@@ -83,7 +83,7 @@ describe("ServicePanel - service-specific rendering", () => {
     expect(frame).toContain("Session (5h)");
     expect(frame).toContain("Weekly");
     expect(frame).not.toContain("Weekly (All)");
-    expect(frame).not.toContain("Weekly (Sonnet)");
+    expect(frame).not.toContain("Weekly (Fable)");
   });
 });
 
