@@ -1,6 +1,6 @@
 {
   "name": "lazyusage",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Terminal and JSON usage monitoring for Claude CLI and Codex CLI.",
   "type": "module",
   "main": "./dist/cli.js",

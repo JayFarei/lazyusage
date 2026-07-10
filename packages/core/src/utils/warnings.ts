@@ -19,6 +19,20 @@ const AUTH_ERROR_PATTERNS = [/401/i, /403/i, /unauthorized/i, /token.?expired/i,
  * Returns null if no warning is needed.
  */
 export function detectWarning(service: "claude" | "codex", result: FetchResult): ServiceWarning | null {
+  const loginCmd = service === "claude" ? "claude" : "codex login";
+
+  // A successful cache read can still contain usage from an expired window.
+  // Warn before inspecting provider errors because fallback chains intentionally
+  // return cache results with error=null.
+  if (result.stale) {
+    const dataLabel = result.source === DataSource.CACHE ? "cached data" : "data";
+    return {
+      service,
+      message: `${service} ${dataLabel} is stale`,
+      action: `retry; run \`${loginCmd}\` if it persists`,
+    };
+  }
+
   // No error and good source = no warning
   if (!result.error && result.source === DataSource.API) return null;
 
@@ -30,7 +44,6 @@ export function detectWarning(service: "claude" | "codex", result: FetchResult):
   const isAuthError = AUTH_ERROR_PATTERNS.some((p) => p.test(error));
 
   if (isAuthError) {
-    const loginCmd = service === "claude" ? "claude" : "codex login";
     return {
       service,
       message: `${service} auth expired`,
@@ -41,7 +54,6 @@ export function detectWarning(service: "claude" | "codex", result: FetchResult):
   // Degraded to cache/fallback with a non-auth error
   if (result.source === DataSource.CACHE || result.source === DataSource.FALLBACK) {
     if (error.includes("All providers failed")) {
-      const loginCmd = service === "claude" ? "claude" : "codex login";
       return {
         service,
         message: `${service} data unavailable`,

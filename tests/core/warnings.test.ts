@@ -108,6 +108,22 @@ describe("detectWarning", () => {
     };
     expect(detectWarning("claude", result)).toBeNull();
   });
+
+  test("warns when stale cached usage is displayed without a provider error", () => {
+    const result: FetchResult = {
+      metrics: { session: { used_pct: 83, remaining_pct: 17, resets: "Jul 9 at 10:00pm" } },
+      source: DataSource.CACHE,
+      timestamp: Date.now() / 1000 - 3 * 24 * 3600,
+      error: null,
+      stale: true,
+    };
+
+    const warning = detectWarning("claude", result);
+
+    expect(warning).not.toBeNull();
+    expect(warning?.message).toContain("cached data is stale");
+    expect(warning?.action).toContain("claude");
+  });
 });
 
 // ---------------------------------------------------------------------------
