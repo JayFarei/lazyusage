@@ -6,24 +6,27 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CODEX_PLAN_TYPE_MAP } from "../constants.js";
+import { buildCodexMetrics, type CodexRateWindow } from "../parsers/codex-rate-limits.js";
 import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
-import { formatResetFromIso } from "../utils/time.js";
+
+interface RateLimitWindow {
+  used_percent?: number | null;
+  window_minutes?: number | null;
+  resets_at?: number | null;
+}
 
 interface RateLimits {
-  limit_id?: string;
-  plan_type?: string;
-  primary?: {
-    used_percent: number;
-    window_minutes: number;
-    resets_at: number;
-  };
-  secondary?: {
-    used_percent: number;
-    window_minutes: number;
-    resets_at: number;
-  };
+  /** "codex" for the account-wide limit; per-model limits (e.g. Codex Spark) use other ids. */
+  limit_id?: string | null;
+  plan_type?: string | null;
+  primary?: RateLimitWindow | null;
+  secondary?: RateLimitWindow | null;
+}
+
+/** Account-wide limit events only; legacy events without a limit_id are accepted. */
+function isAccountLimit(rl: RateLimits): boolean {
+  return rl.limit_id === null || rl.limit_id === undefined || rl.limit_id === "codex";
 }
 
 interface TokenCountEvent {
@@ -142,7 +145,8 @@ export class CodexSessionProvider implements UsageProvider {
           event.type === "event_msg" &&
           event.payload?.type === "token_count" &&
           event.payload.rate_limits != null &&
-          event.payload.rate_limits.primary != null
+          event.payload.rate_limits.primary != null &&
+          isAccountLimit(event.payload.rate_limits)
         ) {
           return event.payload.rate_limits;
         }
@@ -155,32 +159,15 @@ export class CodexSessionProvider implements UsageProvider {
   }
 
   private _parseRateLimits(rl: RateLimits): MetricsDict {
-    const plan = rl.plan_type ?? "unknown";
+    const toWindow = (w: RateLimitWindow | null | undefined): CodexRateWindow | null =>
+      w
+        ? {
+            usedPercent: w.used_percent,
+            windowSeconds: w.window_minutes === null || w.window_minutes === undefined ? null : w.window_minutes * 60,
+            resetAtUnix: w.resets_at,
+          }
+        : null;
 
-    const primaryUsed = Math.round(rl.primary?.used_percent ?? 0);
-    const secondaryUsed = Math.round(rl.secondary?.used_percent ?? 0);
-
-    const unixToIso = (ts: number | undefined): string => {
-      if (ts === undefined) return "";
-      try {
-        return new Date(ts * 1000).toISOString();
-      } catch {
-        return "";
-      }
-    };
-
-    return {
-      subscription_type: CODEX_PLAN_TYPE_MAP[plan] ?? plan,
-      "5h": {
-        used_pct: primaryUsed,
-        remaining_pct: 100 - primaryUsed,
-        resets: formatResetFromIso(unixToIso(rl.primary?.resets_at)),
-      },
-      weekly: {
-        used_pct: secondaryUsed,
-        remaining_pct: 100 - secondaryUsed,
-        resets: formatResetFromIso(unixToIso(rl.secondary?.resets_at)),
-      },
-    };
+    return buildCodexMetrics(rl.plan_type, [toWindow(rl.primary), toWindow(rl.secondary)]);
   }
 }

@@ -150,10 +150,12 @@ export function ServicePanel(props: ServicePanelProps) {
       <Show when={props.metrics && !props.error}>
         <For each={metricEntries()}>
           {(entry, idx) => {
-            // Inactive panels (selectedIndex === -1) default to first metric open
+            // Inactive panels (selectedIndex === -1) default to first metric open.
+            // Clamp so a selection past the last present metric still highlights one.
             const isSelected = () => {
               const si = props.selectedIndex;
-              return idx() === (si === -1 ? 0 : si);
+              const last = metricEntries().length - 1;
+              return idx() === (si === -1 ? 0 : Math.min(si, last));
             };
             const mode = () => renderMode();
             const windowHrs = WINDOW_HOURS[entry.key] ?? 5;

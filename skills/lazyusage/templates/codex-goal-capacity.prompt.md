@@ -10,8 +10,8 @@ and preserves the rest for interactive work).
 
 Important metric mapping:
 
-- Codex `5h` = TUI `Session (5h)`
-- Codex `weekly` = TUI `Weekly`
+- Codex `weekly` = TUI `Weekly` (always present)
+- Codex `5h` = TUI `Session (5h)` (only on plans that still report a 5-hour window; current consumer plans report `weekly` only, so treat `5h` as optional)
 - Claude `session` / `week_all` are not Codex metric keys
 
 ```text
@@ -42,9 +42,10 @@ Capacity protocol:
    b. If SPENT >= BUDGET: stop working toward the goal. Write a short progress
       summary (what is done, what remains, where to resume) and end the run,
       reporting that the capacity budget for unsupervised work is exhausted.
-   c. If the metric named "5h" has used_pct >= 90: the 5-hour window is nearly
-      exhausted regardless of your budget. Sleep until the window reset time
-      (the "resets" field) plus a small buffer, then resume.
+   c. If a metric named "5h" is present and has used_pct >= 90: the 5-hour
+      window is nearly exhausted regardless of your budget. Sleep until the
+      window reset time (the "resets" field) plus a small buffer, then resume.
+      If no "5h" metric is present, skip this check.
    d. If SPENT >= 0.8 * BUDGET: you are near the budget. Prefer cheap,
       high-value steps; do not spawn sub-agents or start large refactors.
    e. Otherwise proceed normally.
@@ -56,6 +57,6 @@ Capacity protocol:
    resumable state and say exactly why you stopped (budget exhausted vs
    5-hour window vs unreliable data).
 
-For Codex, the 5-hour window metric key is "5h" and the weekly budget metric
-key is "weekly". Do not use the Claude keys "session" or "week_all".
+For Codex, the weekly budget metric key is "weekly" and the optional 5-hour
+window metric key is "5h". Do not use the Claude keys "session" or "week_all".
 ```

@@ -87,6 +87,15 @@ export function App(props: AppProps = {}) {
   const theme = useTheme();
   const { claudeMetrics, codexMetrics, claudeError, codexError, dataSources, warnings, updateMetrics, checkWarning } =
     useMetrics();
+  /** Metric keys the provider actually reported for a panel, so navigation skips absent bars (e.g. Codex 5h). */
+  const presentMetricKeys = (panel: "claude" | "codex"): string[] | null => {
+    const metrics = panel === "claude" ? claudeMetrics() : codexMetrics();
+    if (!metrics) return null;
+    return METRIC_KEYS[panel].filter((key) => {
+      const val = metrics[key];
+      return val !== null && typeof val === "object" && "used_pct" in val;
+    });
+  };
   const {
     activePanel,
     setActivePanel,
@@ -104,7 +113,7 @@ export function App(props: AppProps = {}) {
     sortState,
     cycleSortColumn,
     toggleSortDirection,
-  } = usePanelState();
+  } = usePanelState(presentMetricKeys);
   const [lastUpdated, setLastUpdated] = createSignal<string | null>(null);
   const [helpVisible, setHelpVisible] = createSignal(false);
   const [graphTabPanel, setGraphTabPanel] = createSignal<"claude" | "codex" | null>(null);

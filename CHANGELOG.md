@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-09-14
+
+### Fixed
+- Codex usage now follows the new rate-limit shape where the account-wide limit is a single weekly window (`primary_window` with `secondary_window: null`). Windows are classified by duration instead of position, so the weekly budget is no longer shown as the 5h session and weekly no longer reads 0%.
+- The Codex `5h` metric is only emitted when a plan actually reports a 5-hour window; CLI text/capacity output, JSON, the TUI bars and fullscreen graph, and metric navigation handle its absence.
+- Codex session-file provider ignores per-model limit events (e.g. `codex_bengalfox` / GPT-5.3-Codex-Spark) and only reads the account-wide `limit_id: "codex"` events.
+- Codex `/status` PTY parsing only reads the account-wide section (ignoring per-model blocks), accepts the weekly reset time on the same line, and parses multi-word plan names.
+- New `prolite` plan type is labelled "Pro Lite".
+
 ## [0.2.4] - 2026-07-10
 
 ### Fixed

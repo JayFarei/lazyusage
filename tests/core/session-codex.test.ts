@@ -169,6 +169,61 @@ describe("CodexSessionProvider - fetch", () => {
   });
 });
 
+describe("CodexSessionProvider - weekly-only and per-model limits", () => {
+  const weeklyOnly = {
+    limit_id: "codex",
+    plan_type: "prolite",
+    primary: { used_percent: 27, window_minutes: 10080, resets_at: 1789810379 },
+    secondary: null,
+  };
+  const sparkLimit = {
+    limit_id: "codex_bengalfox",
+    limit_name: "GPT-5.3-Codex-Spark",
+    plan_type: "prolite",
+    primary: { used_percent: 0, window_minutes: 300, resets_at: 1789412041 },
+    secondary: { used_percent: 0, window_minutes: 10080, resets_at: 1789998841 },
+  };
+
+  test("weekly-only rate_limits (2026 shape) yields weekly and no 5h", async () => {
+    const baseDir = makeTempCodexHome();
+    tempDirs.push(baseDir);
+    makeSessionFile(baseDir, "session-1.jsonl", [makeRateLimitEvent(weeklyOnly)]);
+
+    const provider = new CodexSessionProvider(baseDir);
+    const result = await provider.fetch();
+
+    expect(result.error).toBeNull();
+    expect(result.metrics?.["5h"]).toBeUndefined();
+    expect((result.metrics?.weekly as { used_pct: number }).used_pct).toBe(27);
+    expect(result.metrics?.subscription_type).toBe("Pro Lite");
+  });
+
+  test("prefers the account-wide limit over a newer per-model limit event", async () => {
+    const baseDir = makeTempCodexHome();
+    tempDirs.push(baseDir);
+    makeSessionFile(baseDir, "session-1.jsonl", [makeRateLimitEvent(weeklyOnly), makeRateLimitEvent(sparkLimit)]);
+
+    const provider = new CodexSessionProvider(baseDir);
+    const result = await provider.fetch();
+
+    expect(result.error).toBeNull();
+    expect(result.metrics?.["5h"]).toBeUndefined();
+    expect((result.metrics?.weekly as { used_pct: number }).used_pct).toBe(27);
+  });
+
+  test("returns error when only per-model limit events exist", async () => {
+    const baseDir = makeTempCodexHome();
+    tempDirs.push(baseDir);
+    makeSessionFile(baseDir, "session-1.jsonl", [makeRateLimitEvent(sparkLimit)]);
+
+    const provider = new CodexSessionProvider(baseDir);
+    const result = await provider.fetch();
+
+    expect(result.metrics).toBeNull();
+    expect(result.error).toContain("No rate_limits found");
+  });
+});
+
 describe("CodexSessionProvider - _parseRateLimits plan mapping", () => {
   test("maps 'pro' plan type to 'Pro'", async () => {
     const baseDir = makeTempCodexHome();

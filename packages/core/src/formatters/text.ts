@@ -8,6 +8,18 @@ import { calculateTimeProgress } from "../utils/time.js";
 
 type MetricEntry = { used_pct: number; remaining_pct: number; resets: string };
 
+function isMetricEntry(v: unknown): v is MetricEntry {
+  return v !== null && typeof v === "object" && "used_pct" in v;
+}
+
+/** Codex windows in display order; the 5h window is only present on plans that still report it. */
+function codexEntries(metrics: MetricsDict): Array<[label: string, m: MetricEntry, windowHours: number]> {
+  const entries: Array<[string, MetricEntry, number]> = [];
+  if (isMetricEntry(metrics["5h"])) entries.push(["Session", metrics["5h"], 5]);
+  entries.push(["Weekly", metrics.weekly as MetricEntry, 168]);
+  return entries;
+}
+
 function fmtMetric(label: string, m: MetricEntry, windowHours: number): string {
   const timeElapsed = Math.round(calculateTimeProgress(m.resets, windowHours));
   const capacityRemaining = Math.round(timeElapsed - m.used_pct);
@@ -36,10 +48,10 @@ export function formatClaudeText(metrics: MetricsDict): string {
 /** Format Codex metrics as text with subscription suffix */
 export function formatCodexText(metrics: MetricsDict): string {
   const subscription = metrics.subscription_type as string | null;
-  const fiveH = metrics["5h"] as MetricEntry;
-  const weekly = metrics.weekly as MetricEntry;
 
-  const base = [fmtMetric("Session", fiveH, 5), fmtMetric("Weekly", weekly, 168)].join(" | ");
+  const base = codexEntries(metrics)
+    .map(([label, m, hours]) => fmtMetric(label, m, hours))
+    .join(" | ");
 
   if (subscription) {
     return `${base} [Subscription: ${subscription}]`;
@@ -75,10 +87,10 @@ export function formatClaudeCapacityText(metrics: MetricsDict): string {
 /** Format Codex capacity deltas only */
 export function formatCodexCapacityText(metrics: MetricsDict): string {
   const subscription = metrics.subscription_type as string | null;
-  const fiveH = metrics["5h"] as MetricEntry;
-  const weekly = metrics.weekly as MetricEntry;
 
-  const base = [fmtCapacity("Session", fiveH, 5), fmtCapacity("Weekly", weekly, 168)].join(" | ");
+  const base = codexEntries(metrics)
+    .map(([label, m, hours]) => fmtCapacity(label, m, hours))
+    .join(" | ");
 
   return subscription ? `${base} [Subscription: ${subscription}]` : base;
 }
