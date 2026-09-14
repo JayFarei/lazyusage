@@ -50,7 +50,8 @@ export interface ClaudeMetrics {
 /** Codex service metrics */
 export interface CodexMetrics {
   subscription_type: string | null;
-  "5h": MetricData;
+  /** 5-hour window; absent on plans that only report a weekly limit (all consumer plans since mid-2026). */
+  "5h"?: MetricData;
   weekly: MetricData;
 }
 

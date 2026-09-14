@@ -123,10 +123,9 @@ export class FallbackChain {
         week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
       };
     }
-    // codex
+    // codex: only a weekly window is reported by current plans
     return {
       subscription_type: "Unknown",
-      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
       weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
     };
   }
@@ -427,9 +426,9 @@ export class PersistentFallbackChain {
         week_sonnet: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
       };
     }
+    // codex: only a weekly window is reported by current plans
     return {
       subscription_type: "Unknown",
-      "5h": { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(SESSION_WINDOW_HOURS, true) },
       weekly: { used_pct: 0, remaining_pct: 100, resets: calculateFallbackTime(WEEKLY_WINDOW_HOURS, false) },
     };
   }

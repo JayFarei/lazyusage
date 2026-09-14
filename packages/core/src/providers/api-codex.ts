@@ -3,11 +3,34 @@
  * Port of CodexAPIProvider from src/providers/api.py
  */
 
-import { API_TIMEOUT_MS, CODEX_PLAN_TYPE_MAP, CODEX_RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
+import { API_TIMEOUT_MS, CODEX_RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
+import { buildCodexMetrics, type CodexRateWindow } from "../parsers/codex-rate-limits.js";
 import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
-import { formatResetFromIso } from "../utils/time.js";
 import { CodexCredentialStore } from "./credentials.js";
+
+function toRateWindow(raw: unknown): CodexRateWindow | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const window = raw as Record<string, unknown>;
+  return {
+    usedPercent: window.used_percent as number | null | undefined,
+    windowSeconds: window.limit_window_seconds as number | null | undefined,
+    resetAtUnix: window.reset_at as number | null | undefined,
+  };
+}
+
+/**
+ * Parse the /wham/usage response body into a MetricsDict.
+ * Only the account-wide `rate_limit` is used; per-model entries in
+ * `additional_rate_limits` (e.g. Codex Spark) are ignored.
+ */
+export function parseCodexUsageResponse(data: Record<string, unknown>): MetricsDict {
+  const rateLimit = (data.rate_limit ?? {}) as Record<string, unknown>;
+  return buildCodexMetrics(data.plan_type as string | null | undefined, [
+    toRateWindow(rateLimit.primary_window),
+    toRateWindow(rateLimit.secondary_window),
+  ]);
+}
 
 export class CodexAPIProvider implements UsageProvider {
   static readonly API_URL = "https://chatgpt.com/backend-api/wham/usage";
@@ -59,7 +82,7 @@ export class CodexAPIProvider implements UsageProvider {
       }
 
       const data = await response.json();
-      const metrics = this._parseApiResponse(data as Record<string, unknown>);
+      const metrics = parseCodexUsageResponse(data as Record<string, unknown>);
 
       return {
         metrics,
@@ -105,45 +128,5 @@ export class CodexAPIProvider implements UsageProvider {
     }
 
     return response;
-  }
-
-  private _parseApiResponse(data: Record<string, unknown>): MetricsDict {
-    const rateLimit = (data.rate_limit ?? {}) as Record<string, unknown>;
-    const primary = (rateLimit.primary_window ?? {}) as Record<string, unknown>;
-    const secondary = (rateLimit.secondary_window ?? {}) as Record<string, unknown>;
-    const plan = (data.plan_type as string) ?? "unknown";
-
-    const getPercent = (window: Record<string, unknown>): number => {
-      const pct = window.used_percent;
-      if (pct === null || pct === undefined) return 0;
-      return Math.round(Number(pct));
-    };
-
-    const unixToIso = (timestamp: unknown): string => {
-      if (timestamp === null || timestamp === undefined) return "";
-      try {
-        const dt = new Date(Number(timestamp) * 1000);
-        return dt.toISOString();
-      } catch {
-        return "";
-      }
-    };
-
-    const fiveHourUsed = getPercent(primary);
-    const weeklyUsed = getPercent(secondary);
-
-    return {
-      subscription_type: CODEX_PLAN_TYPE_MAP[plan] ?? plan,
-      "5h": {
-        used_pct: fiveHourUsed,
-        remaining_pct: 100 - fiveHourUsed,
-        resets: formatResetFromIso(unixToIso(primary.reset_at)),
-      },
-      weekly: {
-        used_pct: weeklyUsed,
-        remaining_pct: 100 - weeklyUsed,
-        resets: formatResetFromIso(unixToIso(secondary.reset_at)),
-      },
-    };
   }
 }

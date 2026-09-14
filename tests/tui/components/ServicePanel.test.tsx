@@ -3,7 +3,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { ServicePanel } from "../../../packages/cli/src/tui/components/ServicePanel.js";
-import { mockClaudeMetrics, mockCodexMetrics, renderComponent } from "../helpers.js";
+import { mockClaudeMetrics, mockCodexMetrics, renderComponent, withFrozenTime } from "../helpers.js";
 
 describe("ServicePanel - Claude metrics", () => {
   test("renders all 3 Claude metric labels", async () => {
@@ -147,21 +147,24 @@ describe("ServicePanel - Claude metrics", () => {
   });
 
   test("snapshot with Claude metrics", async () => {
-    const { captureCharFrame } = await renderComponent(
-      () => (
-        <ServicePanel
-          service="claude"
-          title="Claude CLI"
-          metrics={mockClaudeMetrics({ sessionPct: 25, weekAllPct: 50, weekSonnetPct: 10 })}
-          error={null}
-          isActive={false}
-          selectedIndex={-1}
-          panelNumber={1}
-        />
-      ),
-      { width: 120, height: 40 },
-    );
-    expect(captureCharFrame()).toMatchSnapshot();
+    // Time-elapsed bars and countdowns depend on the clock; freeze it for a stable snapshot
+    await withFrozenTime(async () => {
+      const { captureCharFrame } = await renderComponent(
+        () => (
+          <ServicePanel
+            service="claude"
+            title="Claude CLI"
+            metrics={mockClaudeMetrics({ sessionPct: 25, weekAllPct: 50, weekSonnetPct: 10 })}
+            error={null}
+            isActive={false}
+            selectedIndex={-1}
+            panelNumber={1}
+          />
+        ),
+        { width: 120, height: 40 },
+      );
+      expect(captureCharFrame()).toMatchSnapshot();
+    });
   });
 });
 
@@ -227,5 +230,29 @@ describe("ServicePanel - error and loading states", () => {
     );
     const frame = captureCharFrame();
     expect(frame).toContain("Loading...");
+  });
+});
+
+describe("ServicePanel - Codex weekly-only metrics", () => {
+  test("renders only the Weekly bar and keeps a selection when no 5h window is reported", async () => {
+    const { captureCharFrame } = await renderComponent(
+      () => (
+        <ServicePanel
+          service="codex"
+          title="Codex CLI"
+          metrics={mockCodexMetrics({ omitFiveHour: true, weeklyPct: 28, subscriptionType: "Pro Lite" })}
+          error={null}
+          isActive={true}
+          selectedIndex={1}
+          panelNumber={2}
+        />
+      ),
+      { width: 120, height: 40 },
+    );
+    const frame = captureCharFrame();
+    expect(frame).toContain("▸ Weekly");
+    expect(frame).not.toContain("Session (5h)");
+    expect(frame).toContain("28%");
+    expect(frame).toContain("Pro Lite");
   });
 });

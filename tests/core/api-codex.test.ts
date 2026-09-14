@@ -10,8 +10,8 @@
  * a missing auth.json never causes a silent skip.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { CodexAPIProvider } from "../../packages/core/src/providers/api-codex.js";
-import { DataSource } from "../../packages/core/src/types.js";
+import { CodexAPIProvider, parseCodexUsageResponse } from "../../packages/core/src/providers/api-codex.js";
+import { DataSource, type MetricData } from "../../packages/core/src/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,7 +162,7 @@ describe("CodexAPIProvider - response parsing", () => {
   const provider = new CodexAPIProvider();
 
   test(
-    "handles empty response body with zero defaults",
+    "handles empty response body with weekly zeros and no 5h",
     withCredentialsOrFallback(provider, async () => {
       globalThis.fetch = (async () =>
         new Response(JSON.stringify({}), {
@@ -173,8 +173,94 @@ describe("CodexAPIProvider - response parsing", () => {
       const result = await provider.fetch();
       expect(result.error).toBeNull();
       expect(result.metrics).not.toBeNull();
-      const fiveH = result.metrics?.["5h"] as { used_pct: number };
-      expect(fiveH.used_pct).toBe(0);
+      expect(result.metrics?.["5h"]).toBeUndefined();
+      const weekly = result.metrics?.weekly as { used_pct: number };
+      expect(weekly.used_pct).toBe(0);
     }),
   );
+});
+
+// ---------------------------------------------------------------------------
+// Tests: pure response parsing (no credentials needed)
+// ---------------------------------------------------------------------------
+
+describe("parseCodexUsageResponse - window classification", () => {
+  const now = Math.floor(Date.now() / 1000);
+
+  test("weekly-only response (2026 shape) yields weekly and no 5h, ignores per-model limits", () => {
+    const metrics = parseCodexUsageResponse({
+      plan_type: "prolite",
+      rate_limit: {
+        allowed: true,
+        limit_reached: false,
+        primary_window: {
+          used_percent: 28,
+          limit_window_seconds: 604800,
+          reset_after_seconds: 416338,
+          reset_at: now + 416338,
+        },
+        secondary_window: null,
+      },
+      additional_rate_limits: [
+        {
+          limit_name: "GPT-5.3-Codex-Spark",
+          rate_limit: {
+            primary_window: { used_percent: 90, limit_window_seconds: 18000, reset_at: now + 18000 },
+            secondary_window: { used_percent: 50, limit_window_seconds: 604800, reset_at: now + 604800 },
+          },
+        },
+      ],
+    });
+
+    expect(metrics["5h"]).toBeUndefined();
+    const weekly = metrics.weekly as MetricData;
+    expect(weekly.used_pct).toBe(28);
+    expect(weekly.remaining_pct).toBe(72);
+    expect(weekly.resets).toContain(" at ");
+    expect(metrics.subscription_type).toBe("Pro Lite");
+  });
+
+  test("legacy response with both windows classifies by duration", () => {
+    const metrics = parseCodexUsageResponse({
+      plan_type: "plus",
+      rate_limit: {
+        primary_window: { used_percent: 30, limit_window_seconds: 18000, reset_at: now + 3600 },
+        secondary_window: { used_percent: 12, limit_window_seconds: 604800, reset_at: now + 86400 * 3 },
+      },
+    });
+
+    expect((metrics["5h"] as MetricData).used_pct).toBe(30);
+    expect((metrics.weekly as MetricData).used_pct).toBe(12);
+    expect(metrics.subscription_type).toBe("Plus");
+  });
+
+  test("classifies by duration even when the windows are in the opposite order", () => {
+    const metrics = parseCodexUsageResponse({
+      plan_type: "pro",
+      rate_limit: {
+        primary_window: { used_percent: 40, limit_window_seconds: 604800, reset_at: now + 86400 },
+        secondary_window: { used_percent: 10, limit_window_seconds: 18000, reset_at: now + 3600 },
+      },
+    });
+
+    expect((metrics.weekly as MetricData).used_pct).toBe(40);
+    expect((metrics["5h"] as MetricData).used_pct).toBe(10);
+  });
+
+  test("falls back to positional order when window length is missing", () => {
+    const metrics = parseCodexUsageResponse(makeCodexApiResponse());
+
+    expect((metrics["5h"] as MetricData).used_pct).toBe(30);
+    expect((metrics.weekly as MetricData).used_pct).toBe(12);
+  });
+
+  test("empty body yields weekly zeros, no 5h and unknown plan", () => {
+    const metrics = parseCodexUsageResponse({});
+
+    expect(metrics["5h"]).toBeUndefined();
+    const weekly = metrics.weekly as MetricData;
+    expect(weekly.used_pct).toBe(0);
+    expect(weekly.remaining_pct).toBe(100);
+    expect(metrics.subscription_type).toBe("unknown");
+  });
 });

@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { formatClaudeText, formatCodexText, formatWithAvailability, type MetricsDict } from "lazyusage-core";
+import {
+  formatClaudeText,
+  formatCodexCapacityText,
+  formatCodexText,
+  formatWithAvailability,
+  type MetricsDict,
+} from "lazyusage-core";
 
 describe("formatClaudeText", () => {
   test("formats claude metrics correctly", () => {
@@ -97,6 +103,21 @@ describe("formatCodexText", () => {
     };
     const result = formatCodexText(metrics);
     expect(result).toContain("Weekly: 25% allowance used");
+  });
+
+  test("omits Session when the plan reports no 5h window", () => {
+    const metrics: MetricsDict = {
+      subscription_type: "Pro Lite",
+      weekly: { used_pct: 28, remaining_pct: 72, resets: "Sep 19 at 10:32am" },
+    };
+    const result = formatCodexText(metrics);
+    expect(result.startsWith("Weekly: 28% allowance used")).toBe(true);
+    expect(result).not.toContain("Session:");
+    expect(result).toContain("[Subscription: Pro Lite]");
+
+    const capacity = formatCodexCapacityText(metrics);
+    expect(capacity.startsWith("Weekly: ")).toBe(true);
+    expect(capacity).not.toContain("Session:");
   });
 });
 

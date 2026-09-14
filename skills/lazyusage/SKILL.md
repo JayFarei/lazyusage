@@ -64,7 +64,7 @@ Copy-paste prompts for agents:
 
 - [`templates/claude-session-guard.prompt.md`](templates/claude-session-guard.prompt.md): prompt for Claude agents that should watch the Claude `session` / `Session (5h)` metric and sleep at 90-95% usage.
 - [`templates/claude-goal-capacity.prompt.md`](templates/claude-goal-capacity.prompt.md): prompt for Claude agents on a goal/loop that may only spend a fixed share of remaining capacity (capacity budget for unsupervised work).
-- [`templates/codex-goal-capacity.prompt.md`](templates/codex-goal-capacity.prompt.md): the same capacity-budget prompt for Codex agents, using the Codex `5h` / `weekly` metric keys.
+- [`templates/codex-goal-capacity.prompt.md`](templates/codex-goal-capacity.prompt.md): the same capacity-budget prompt for Codex agents, using the Codex `weekly` metric key (`5h` is only present on plans that still report a 5-hour window).
 
 ### Pre-flight gate
 

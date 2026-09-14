@@ -155,12 +155,14 @@ What the text modes look like:
 ```text
 $ lazyusage --capacity
 Claude: Session: -5% | Weekly: -4% | Fable: +6% [Subscription: max]
-Codex: Session: +19% | Weekly: +4% [Subscription: pro]
+Codex: Weekly: +4% [Subscription: Pro Lite]
 
 $ lazyusage --text
 Claude: Session: 50% allowance used, 45% time elapsed, -5% capacity remaining (resets 1:20pm) | ...
-Codex: Session: 5% allowance used, 24% time elapsed, 19% capacity remaining (resets 2:22pm) | ...
+Codex: Weekly: 28% allowance used, 31% time elapsed, 3% capacity remaining (resets Sep 19 at 10:32am) [Subscription: Pro Lite]
 ```
+
+Codex plans currently report a single weekly limit, so only `weekly` is shown. A `Session` / `5h` entry appears only on plans that still expose a 5-hour window.
 
 ### JSON contract
 
@@ -210,7 +212,7 @@ The canonical agent skill lives at [`skills/lazyusage/SKILL.md`](skills/lazyusag
 Copy-paste prompt templates for goal/loop agents:
 
 - [`skills/lazyusage/templates/claude-goal-capacity.prompt.md`](skills/lazyusage/templates/claude-goal-capacity.prompt.md): Claude agent on a goal that may only spend a fixed share of remaining capacity
-- [`skills/lazyusage/templates/codex-goal-capacity.prompt.md`](skills/lazyusage/templates/codex-goal-capacity.prompt.md): the same capacity-budget protocol for Codex agents (`5h` / `weekly` metric keys)
+- [`skills/lazyusage/templates/codex-goal-capacity.prompt.md`](skills/lazyusage/templates/codex-goal-capacity.prompt.md): the same capacity-budget protocol for Codex agents (`weekly` metric key, plus `5h` on plans that still report it)
 - [`skills/lazyusage/templates/claude-session-guard.prompt.md`](skills/lazyusage/templates/claude-session-guard.prompt.md): Claude agent that pauses itself near the 5-hour session limit
 
 Runnable examples:

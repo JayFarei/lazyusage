@@ -1,4 +1,5 @@
 import type { CapacityPrediction, MetricsDict, ServiceName } from "lazyusage-core";
+import { Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";
 import { GraphPanel, type GraphStore } from "./GraphPanel.js";
@@ -27,6 +28,11 @@ export function FullscreenGraphView(props: FullscreenGraphViewProps) {
   const theme = useTheme();
   const weeklyMetricKey = () => getWeeklyMetricKey(props.service, props.selectedMetricKey);
   const sessionMetricKey = () => getSessionMetricKey(props.service);
+  // Codex plans that only report a weekly limit have no session window to graph
+  const hasSessionMetric = () => {
+    const val = props.metrics?.[sessionMetricKey()];
+    return val !== null && val !== undefined && typeof val === "object" && "used_pct" in val;
+  };
 
   return (
     <box
@@ -54,17 +60,19 @@ export function FullscreenGraphView(props: FullscreenGraphViewProps) {
         />
       </box>
 
-      <box flexDirection="column" flexGrow={1}>
-        <GraphPanel
-          service={props.service}
-          metricKey={sessionMetricKey()}
-          metrics={props.metrics}
-          prediction={props.prediction}
-          createStore={props.createGraphStore}
-          variant="fullscreen"
-          showLegend={true}
-        />
-      </box>
+      <Show when={hasSessionMetric()}>
+        <box flexDirection="column" flexGrow={1}>
+          <GraphPanel
+            service={props.service}
+            metricKey={sessionMetricKey()}
+            metrics={props.metrics}
+            prediction={props.prediction}
+            createStore={props.createGraphStore}
+            variant="fullscreen"
+            showLegend={true}
+          />
+        </box>
+      </Show>
 
       <text content="  [/] switch tab  g/Esc return" fg={theme.surface1} height={1} paddingLeft={1} />
     </box>

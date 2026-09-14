@@ -32,6 +32,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
 export const CODEX_PLAN_TYPE_MAP: Record<string, string> = {
   plus: "Plus",
   pro: "Pro",
+  prolite: "Pro Lite",
   free: "Free",
   go: "Go",
   team: "Team",

@@ -6,6 +6,7 @@ import {
   mockHistoryEntries,
   mockProjectUsage,
   renderComponent,
+  withFrozenTime,
 } from "../helpers.js";
 
 describe("StatsPanel - Graph tab", () => {
@@ -31,35 +32,38 @@ describe("StatsPanel - Graph tab", () => {
   });
 
   test("renders the selected daemon graph when the Graph tab is active", async () => {
-    const history = mockHistoryEntries([
-      { minutesAgo: 150, usedPct: 12 },
-      { minutesAgo: 90, usedPct: 26 },
-      { minutesAgo: 30, usedPct: 44 },
-    ]);
-    const { captureCharFrame } = await renderComponent(
-      () => (
-        <StatsPanel
-          contentTab="graph"
-          service="claude"
-          daily={null}
-          weekly={null}
-          monthly={null}
-          graphAvailable={true}
-          graphMetricKey="session"
-          graphMetrics={mockClaudeMetrics()}
-          createGraphStore={() => createMockGraphStore({ session: history })}
-          loading={false}
-          error={null}
-        />
-      ),
-      { width: 120, height: 40 },
-    );
+    // History points must fall inside the session window derived from the mock reset time
+    await withFrozenTime(async () => {
+      const history = mockHistoryEntries([
+        { minutesAgo: 150, usedPct: 12 },
+        { minutesAgo: 90, usedPct: 26 },
+        { minutesAgo: 30, usedPct: 44 },
+      ]);
+      const { captureCharFrame } = await renderComponent(
+        () => (
+          <StatsPanel
+            contentTab="graph"
+            service="claude"
+            daily={null}
+            weekly={null}
+            monthly={null}
+            graphAvailable={true}
+            graphMetricKey="session"
+            graphMetrics={mockClaudeMetrics()}
+            createGraphStore={() => createMockGraphStore({ session: history })}
+            loading={false}
+            error={null}
+          />
+        ),
+        { width: 120, height: 40 },
+      );
 
-    const frame = captureCharFrame();
+      const frame = captureCharFrame();
 
-    expect(frame).toContain("Session (5h)");
-    expect(frame).toContain("projected");
-    expect(frame).toContain("actual");
-    expect(frame).toMatch(/[\u2801-\u28ff]/u);
+      expect(frame).toContain("Session (5h)");
+      expect(frame).toContain("projected");
+      expect(frame).toContain("actual");
+      expect(frame).toMatch(/[\u2801-\u28ff]/u);
+    });
   });
 });

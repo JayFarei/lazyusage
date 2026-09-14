@@ -16,7 +16,12 @@ const METRIC_KEYS_MAP: Record<ActivePanel, string[]> = {
   codex: ["weekly", "5h"],
 };
 
-export function usePanelState() {
+/**
+ * @param availableKeys optional accessor returning the metric keys currently present for a
+ *   panel; falls back to the static list when null or empty. Lets navigation skip metrics a
+ *   provider no longer reports (e.g. Codex without a 5h window).
+ */
+export function usePanelState(availableKeys?: (panel: ActivePanel) => string[] | null) {
   const [activePanel, setActivePanelRaw] = createSignal<ActivePanel>("claude");
   const [contentTab, setContentTab] = createSignal<ContentTab>("daily");
   const [selectedMetricIndex, setSelectedMetricIndex] = createSignal(0);
@@ -25,7 +30,10 @@ export function usePanelState() {
   const [sortColumn, setSortColumn] = createSignal<LedgerSortColumn>("totalTokens");
   const [sortDirection, setSortDirection] = createSignal<SortDirection>("desc");
 
-  const metricKeysForPanel = (panel: ActivePanel): string[] => METRIC_KEYS_MAP[panel];
+  const metricKeysForPanel = (panel: ActivePanel): string[] => {
+    const present = availableKeys?.(panel);
+    return present && present.length > 0 ? present : METRIC_KEYS_MAP[panel];
+  };
 
   const selectedMetricKey = () => {
     const keys = metricKeysForPanel(activePanel());

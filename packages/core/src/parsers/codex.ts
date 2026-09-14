@@ -1,7 +1,13 @@
 /**
  * Parser for Codex CLI /status output.
+ *
+ * The status box lists the account-wide limits first, then optional per-model
+ * sections introduced by a bare "<Model> limit:" header line (for example
+ * "GPT-5.3-Codex-Spark limit:"). Only the account-wide section is parsed.
+ * Current plans report a weekly limit only; the 5h limit is emitted when present.
  */
 
+import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 import type { MetricsDict } from "../types.js";
 import { calculateFallbackTime, format12hTime, formatResetDate } from "../utils/time.js";
 
@@ -35,6 +41,13 @@ function parseMonth(monthStr: string): number | null {
   return months[monthStr.toLowerCase()] ?? null;
 }
 
+/** Keep only the account-wide limits, cutting at the first per-model "<Model> limit:" header line. */
+export function accountLimitSection(output: string): string {
+  const lines = output.split("\n");
+  const headerIdx = lines.findIndex((line) => /\blimit:\s*[│|]?\s*$/.test(line));
+  return headerIdx === -1 ? output : lines.slice(0, headerIdx).join("\n");
+}
+
 /** Parse 5h limit metric from Codex /status output */
 export function parse5hLimit(output: string): {
   used_pct: number | null;
@@ -60,7 +73,7 @@ export function parse5hLimit(output: string): {
   };
 }
 
-/** Parse weekly limit metric from Codex /status output (multi-line) */
+/** Parse weekly limit metric from Codex /status output */
 export function parseWeeklyLimit(output: string): {
   used_pct: number | null;
   remaining_pct: number | null;
@@ -69,13 +82,14 @@ export function parseWeeklyLimit(output: string): {
   const leftMatch = output.match(/weekly limit:.*?(\d+)% left/i);
   const leftPct = leftMatch ? parseInt(leftMatch[1], 10) : null;
 
-  // Reset time is on the next line after "Weekly limit:"
-  const resetMatch = output.match(/weekly limit:.*?\n.*?resets\s+(.+)/is);
+  // Reset time is on the same line ("... 72% left (resets 10:32 on 19 Sep)") or,
+  // in older builds, on the line after "Weekly limit:".
+  const sameLine = output.match(/weekly limit:[^\n]*?resets\s+([^)\n]+)/i);
+  const nextLine = sameLine ? null : output.match(/weekly limit:[^\n]*\n[^\n]*?resets\s+([^)\n]+)/i);
+  const resetRaw = (sameLine ?? nextLine)?.[1].trim() ?? null;
 
   let resets: string | null = null;
-  if (resetMatch) {
-    const resetRaw = resetMatch[1].trim();
-
+  if (resetRaw) {
     // Parse "HH:MM on D Mon" format
     const timeMatch = resetRaw.match(/(\d+):(\d+)\s+on\s+(\d+)\s+(\w+)/);
     if (timeMatch) {
@@ -99,52 +113,42 @@ export function parseWeeklyLimit(output: string): {
   };
 }
 
-/** Parse subscription type from Codex /status output */
+/** Parse subscription type from Codex /status output, e.g. "(pro)" -> "Pro", "(Pro Lite)" -> "Pro Lite" */
 export function parseSubscription(output: string): string | null {
-  const match = output.match(/Account:.*?\(([A-Za-z]+)\)/);
-  if (match) {
-    const sub = match[1];
-    return sub.charAt(0).toUpperCase() + sub.slice(1).toLowerCase();
-  }
-  return null;
+  const match = output.match(/Account:.*?\(([A-Za-z][A-Za-z ]*)\)/);
+  if (!match) return null;
+  return match[1]
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
-/** Apply fallback values to missing metrics */
-export function applyFallbacks(
-  metrics: Record<string, { used_pct: number | null; remaining_pct: number | null; resets: string | null }>,
-): void {
-  // 5h fallbacks
-  if (metrics["5h"].used_pct === null) {
-    metrics["5h"].used_pct = 0;
-    metrics["5h"].remaining_pct = 100;
-  }
-  if (metrics["5h"].resets === null) {
-    metrics["5h"].resets = calculateFallbackTime(5, true);
-  }
-
-  // Weekly fallbacks
-  if (metrics.weekly.used_pct === null) {
-    metrics.weekly.used_pct = 0;
-    metrics.weekly.remaining_pct = 100;
-  }
-  if (metrics.weekly.resets === null) {
-    metrics.weekly.resets = calculateFallbackTime(168, false);
-  }
-}
-
-/** Parse complete Codex status output */
+/**
+ * Parse complete Codex status output.
+ * `weekly` is always present (zeros with a fallback reset when unparsed);
+ * `5h` only when the account-wide section reports one.
+ */
 export function parseCodexOutput(output: string): MetricsDict {
-  const metrics = {
-    "5h": parse5hLimit(output),
-    weekly: parseWeeklyLimit(output),
+  const section = accountLimitSection(output);
+  const fiveH = parse5hLimit(section);
+  const weekly = parseWeeklyLimit(section);
+
+  const metrics: MetricsDict = { subscription_type: parseSubscription(output) };
+
+  if (fiveH.used_pct !== null && fiveH.remaining_pct !== null) {
+    metrics["5h"] = {
+      used_pct: fiveH.used_pct,
+      remaining_pct: fiveH.remaining_pct,
+      resets: fiveH.resets ?? calculateFallbackTime(SESSION_WINDOW_HOURS, true),
+    };
+  }
+
+  metrics.weekly = {
+    used_pct: weekly.used_pct ?? 0,
+    remaining_pct: weekly.remaining_pct ?? 100,
+    resets: weekly.resets ?? calculateFallbackTime(WEEKLY_WINDOW_HOURS, false),
   };
 
-  applyFallbacks(metrics);
-
-  const subscription = parseSubscription(output);
-
-  return {
-    subscription_type: subscription,
-    ...metrics,
-  } as unknown as MetricsDict;
+  return metrics;
 }

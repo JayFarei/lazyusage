@@ -3,10 +3,32 @@
  * Provides mock data factories and testRender wrappers.
  */
 
+import { setSystemTime } from "bun:test";
 import { testRender } from "@opentui/solid";
 import type { HistoryEntry, MetricsDict } from "lazyusage-core";
 import type { ProjectUsage } from "lazyusage-core/parsers/types.js";
 import type { JSX } from "solid-js";
+
+// ---------------------------------------------------------------------------
+// Deterministic clock
+// ---------------------------------------------------------------------------
+
+/**
+ * Mock metrics reset on "Feb 18" (see factories below). Time-elapsed bars,
+ * countdowns and pace graphs derive from the real clock, so tests that assert
+ * on them must freeze it here: 1h before the session reset, 9h before weekly.
+ */
+export const MOCK_NOW = new Date(2026, 1, 18, 2, 0, 0);
+
+/** Run `fn` with the clock frozen at MOCK_NOW, restoring the real clock afterwards. */
+export async function withFrozenTime<T>(fn: () => Promise<T>): Promise<T> {
+  setSystemTime(MOCK_NOW);
+  try {
+    return await fn();
+  } finally {
+    setSystemTime();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Mock data factories
@@ -45,22 +67,32 @@ export function mockClaudeMetrics(
 
 /** Create a mock Codex MetricsDict with configurable usage percentages. */
 export function mockCodexMetrics(
-  overrides: { fiveHourPct?: number; weeklyPct?: number; subscriptionType?: string; resets?: string } = {},
+  overrides: {
+    fiveHourPct?: number;
+    weeklyPct?: number;
+    subscriptionType?: string;
+    resets?: string;
+    /** Mimic plans that only report a weekly limit (no 5h window). */
+    omitFiveHour?: boolean;
+  } = {},
 ): MetricsDict {
   const resets = overrides.resets ?? "Feb 18 at 4:00am";
-  return {
+  const metrics: MetricsDict = {
     subscription_type: overrides.subscriptionType ?? "plus",
-    "5h": {
-      used_pct: overrides.fiveHourPct ?? 0,
-      remaining_pct: 100 - (overrides.fiveHourPct ?? 0),
-      resets,
-    },
     weekly: {
       used_pct: overrides.weeklyPct ?? 4,
       remaining_pct: 100 - (overrides.weeklyPct ?? 4),
       resets: "Feb 23 at 9:59pm",
     },
   };
+  if (!overrides.omitFiveHour) {
+    metrics["5h"] = {
+      used_pct: overrides.fiveHourPct ?? 0,
+      remaining_pct: 100 - (overrides.fiveHourPct ?? 0),
+      resets,
+    };
+  }
+  return metrics;
 }
 
 /** Create mock ProjectUsage[] data for ledger display. */

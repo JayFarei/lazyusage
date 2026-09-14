@@ -81,12 +81,13 @@ export {
 // Parsers
 export { parseClaudeOutput } from "./parsers/claude.js";
 export { parseCodexOutput } from "./parsers/codex.js";
+export { buildCodexMetrics, type CodexRateWindow, classifyCodexWindow } from "./parsers/codex-rate-limits.js";
 // Prediction
 export { computeDailyDeltas } from "./prediction/deltas.js";
 export { predict } from "./prediction/project.js";
 // Providers
 export { ClaudeAPIProvider } from "./providers/api-claude.js";
-export { CodexAPIProvider } from "./providers/api-codex.js";
+export { CodexAPIProvider, parseCodexUsageResponse } from "./providers/api-codex.js";
 export type { ChainDiagnosticEvent, ChainDiagnosticListener, SourcePlan } from "./providers/chain.js";
 export {
   FallbackChain,

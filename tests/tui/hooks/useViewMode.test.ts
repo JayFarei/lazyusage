@@ -157,3 +157,32 @@ describe("usePanelState - sort controls", () => {
     });
   });
 });
+
+describe("usePanelState - availableKeys accessor", () => {
+  test("bounds navigation by the metrics actually present", () => {
+    createRoot((dispose) => {
+      const { selectedMetricIndex, selectedMetricKey, navigateMetric, setActivePanel } = usePanelState((panel) =>
+        panel === "codex" ? ["weekly"] : null,
+      );
+      setActivePanel("codex");
+      navigateMetric("down");
+      expect(selectedMetricIndex()).toBe(0);
+      expect(selectedMetricKey()).toBe("weekly");
+      // Claude falls back to the static list
+      setActivePanel("claude");
+      navigateMetric("down");
+      expect(selectedMetricIndex()).toBe(1);
+      dispose();
+    });
+  });
+
+  test("falls back to the static list when the accessor returns an empty list", () => {
+    createRoot((dispose) => {
+      const { selectedMetricIndex, navigateMetric, setActivePanel } = usePanelState(() => []);
+      setActivePanel("codex");
+      navigateMetric("down");
+      expect(selectedMetricIndex()).toBe(1);
+      dispose();
+    });
+  });
+});
