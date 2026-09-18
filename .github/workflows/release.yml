@@ -3,15 +3,27 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Exercise the pipeline with `npm publish --dry-run` (no tag check, no GitHub release)"
+        type: boolean
+        default: true
 
+# id-token lets npm authenticate this workflow through OIDC (trusted
+# publishing): no npm token, no 2FA code. Each package must list this
+# workflow as a trusted publisher on npmjs.com (Package settings ->
+# Publishing access -> Trusted publisher: GitHub Actions, owner JayFarei,
+# repository lazyusage, workflow release.yml).
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +31,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Trusted publishing needs npm >= 11.5.1; the npm bundled with Node LTS is older.
+      # No registry-url / auth token here on purpose: a configured token would take
+      # precedence over OIDC.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install npm with trusted publishing support
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -42,6 +66,7 @@ jobs:
         run: bun run test:smoke
 
       - name: Verify tag matches package versions
+        if: github.event_name == 'push'
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           for pkg in packages/core packages/cli; do
@@ -52,28 +77,8 @@ jobs:
             fi
           done
 
-      # npm publish runs only when the NPM_TOKEN secret is configured
-      # (Settings -> Secrets and variables -> Actions). Already-published
-      # versions are skipped so re-running a release is idempotent.
-      - name: Publish to npm
-        if: env.NPM_TOKEN != ''
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          for pkg in packages/core packages/cli; do
-            NAME=$(jq -r .name "$pkg/package.json")
-            VERSION=$(jq -r .version "$pkg/package.json")
-            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
-              echo "$NAME@$VERSION already on npm, skipping"
-            else
-              (cd "$pkg" && bun publish --access public)
-            fi
-          done
-
-      - name: Warn when npm publish is skipped
-        if: env.NPM_TOKEN == ''
-        run: echo "::warning::NPM_TOKEN secret not set; skipped npm publish"
-
       - name: Extract changelog notes
+        if: github.event_name == 'push'
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v ver="$VERSION" '
@@ -85,11 +90,51 @@ jobs:
             echo "No CHANGELOG section found for $VERSION" > release-notes.md
           fi
 
+      # Created before the npm publish and idempotent, so a failed publish can be
+      # re-run from the Actions tab without touching the release.
       - name: Create GitHub release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file release-notes.md \
-            --verify-tag
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, skipping"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file release-notes.md \
+              --verify-tag
+          fi
+
+      # Already-published versions are skipped so re-running a release is
+      # idempotent. The CLI is published from a `bun pm pack` tarball because bun
+      # resolves its `workspace:*` dependency from the lockfile; npm would ship the
+      # literal spec (the 0.2.0 / 0.2.1 breakage).
+      - name: Publish to npm (trusted publishing)
+        run: |
+          set -euo pipefail
+          FLAGS="--access public --provenance"
+          if [ "$DRY_RUN" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+          fi
+
+          publish_needed() {
+            if [ "$DRY_RUN" = "true" ]; then return 0; fi
+            if npm view "$1@$2" version >/dev/null 2>&1; then
+              echo "$1@$2 already on npm, skipping"
+              return 1
+            fi
+            return 0
+          }
+
+          CORE_VERSION=$(jq -r .version packages/core/package.json)
+          if publish_needed lazyusage-core "$CORE_VERSION"; then
+            (cd packages/core && npm publish $FLAGS)
+          fi
+
+          CLI_VERSION=$(jq -r .version packages/cli/package.json)
+          if publish_needed lazyusage "$CLI_VERSION"; then
+            mkdir -p pack
+            (cd packages/cli && bun pm pack --destination ../../pack)
+            npm publish "pack/lazyusage-$CLI_VERSION.tgz" $FLAGS
+          fi

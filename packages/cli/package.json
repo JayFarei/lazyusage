@@ -14,7 +14,7 @@
   "author": "Jay Farei",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jayfarei/lazyusage.git"
+    "url": "git+https://github.com/JayFarei/lazyusage.git"
   },
   "homepage": "https://github.com/jayfarei/lazyusage#readme",
   "bugs": {
