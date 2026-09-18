@@ -6,6 +6,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { consumedFromSamples } from "../prediction/deltas.js";
 import type { DailyBoundary, HistoryEntry, MetricsDict, Regime, ServiceName, SupervisedMark } from "../types.js";
 import { parseTimeToDatetime } from "../utils/time.js";
 
@@ -212,45 +213,70 @@ export class UsageStore {
 
   getDailyBoundaries(service: ServiceName, metricName: string, days: number = 30): DailyBoundary[] {
     const cutoffIso = new Date(Date.now() - days * 86400_000).toISOString();
+    // One row per value change per day (plus each day's first sample), with the
+    // day's sample count, last value and last resets_at carried on every row.
+    // Unchanged samples are dropped in SQL; they cannot affect consumption.
     const rows = this.db
       .query(
-        `SELECT
-          date(timestamp) AS day,
-          MIN(used_pct) AS min_pct,
-          MAX(used_pct) AS max_pct,
-          COUNT(*) AS sample_count,
-          (SELECT s2.used_pct FROM usage_snapshots s2
-           WHERE s2.service = ? AND s2.metric_name = ?
-             AND date(s2.timestamp) = date(s1.timestamp)
-           ORDER BY s2.timestamp ASC LIMIT 1) AS first_pct,
-          (SELECT s2.used_pct FROM usage_snapshots s2
-           WHERE s2.service = ? AND s2.metric_name = ?
-             AND date(s2.timestamp) = date(s1.timestamp)
-           ORDER BY s2.timestamp DESC LIMIT 1) AS last_pct,
-          (SELECT s2.resets_at FROM usage_snapshots s2
-           WHERE s2.service = ? AND s2.metric_name = ?
-             AND date(s2.timestamp) = date(s1.timestamp)
-           ORDER BY s2.timestamp DESC LIMIT 1) AS resets_at
-        FROM usage_snapshots s1
-        WHERE service = ? AND metric_name = ? AND timestamp >= ?
-        GROUP BY date(timestamp)
-        ORDER BY day`,
+        `WITH ordered AS (
+          SELECT
+            date(timestamp) AS day,
+            timestamp,
+            used_pct,
+            LAG(used_pct) OVER (PARTITION BY date(timestamp) ORDER BY timestamp) AS prev_pct,
+            COUNT(*) OVER (PARTITION BY date(timestamp)) AS sample_count,
+            LAST_VALUE(used_pct) OVER (
+              PARTITION BY date(timestamp) ORDER BY timestamp
+              ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            ) AS last_pct,
+            LAST_VALUE(resets_at) OVER (
+              PARTITION BY date(timestamp) ORDER BY timestamp
+              ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            ) AS resets_at
+          FROM usage_snapshots
+          WHERE service = ? AND metric_name = ? AND timestamp >= ?
+        )
+        SELECT day, used_pct, sample_count, last_pct, resets_at
+        FROM ordered
+        WHERE prev_pct IS NULL OR used_pct != prev_pct
+        ORDER BY timestamp`,
       )
-      .all(service, metricName, service, metricName, service, metricName, service, metricName, cutoffIso) as Array<{
+      .all(service, metricName, cutoffIso) as Array<{
       day: string;
+      used_pct: number;
       sample_count: number;
-      first_pct: number;
       last_pct: number;
       resets_at: string | null;
     }>;
 
-    return rows.map((row) => ({
-      date: row.day,
-      firstUsedPct: row.first_pct,
-      lastUsedPct: row.last_pct,
-      resetsAt: row.resets_at,
-      sampleCount: row.sample_count,
-    }));
+    const boundaries: DailyBoundary[] = [];
+    let current: { boundary: DailyBoundary; samples: number[] } | null = null;
+    const flush = () => {
+      if (current === null) return;
+      current.boundary.consumedPct = consumedFromSamples(current.samples);
+      boundaries.push(current.boundary);
+    };
+
+    for (const row of rows) {
+      if (current === null || current.boundary.date !== row.day) {
+        flush();
+        current = {
+          boundary: {
+            date: row.day,
+            firstUsedPct: row.used_pct,
+            lastUsedPct: row.last_pct,
+            consumedPct: 0,
+            resetsAt: row.resets_at,
+            sampleCount: row.sample_count,
+          },
+          samples: [],
+        };
+      }
+      current.samples.push(row.used_pct);
+    }
+    flush();
+
+    return boundaries;
   }
 
   setCapacityMark(date: string, regime: Regime): void {

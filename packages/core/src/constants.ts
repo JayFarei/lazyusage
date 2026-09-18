@@ -47,6 +47,13 @@ export const CODEX_PLAN_TYPE_MAP: Record<string, string> = {
   enterprise: "Enterprise",
 };
 
+/**
+ * A drop in used_pct of at least this many points between consecutive snapshots
+ * is treated as a window reset or a provider-side adjustment (usage zeroed
+ * mid-window), which starts a new consumption segment. Smaller dips are jitter.
+ */
+export const USAGE_DROP_RESET_THRESHOLD = 5;
+
 /** Fixed daily rates for each regime level (v1) */
 export const REGIME_RATES: Record<string, number> = {
   L: 3,
