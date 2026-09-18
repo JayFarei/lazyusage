@@ -142,5 +142,6 @@ jobs:
           if publish_needed lazyusage "$CLI_VERSION"; then
             mkdir -p pack
             (cd packages/cli && bun pm pack --destination ../../pack)
-            npm publish "pack/lazyusage-$CLI_VERSION.tgz" $FLAGS
+            # Explicit ./ prefix: npm parses "pack/name.tgz" as the GitHub shorthand pack/name
+            npm publish "./pack/lazyusage-$CLI_VERSION.tgz" $FLAGS
           fi
