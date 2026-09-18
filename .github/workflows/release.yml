@@ -115,7 +115,13 @@ jobs:
           set -euo pipefail
           FLAGS="--access public --provenance"
           if [ "$DRY_RUN" = "true" ]; then
-            FLAGS="$FLAGS --dry-run"
+            # npm refuses to dry-run a version that is already published, so use a
+            # throwaway prerelease (which npm requires to carry an explicit tag).
+            # The CLI tarball still pins lazyusage-core to the lockfile version.
+            FLAGS="$FLAGS --dry-run --tag dryrun"
+            for pkg in packages/core packages/cli; do
+              (cd "$pkg" && npm pkg set version="$(jq -r .version package.json)-dryrun.${GITHUB_RUN_ID}")
+            done
           fi
 
           publish_needed() {
