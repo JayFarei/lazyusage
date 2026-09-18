@@ -3,7 +3,7 @@
  * Port of ClaudeAPIProvider from src/providers/api.py
  */
 
-import { API_TIMEOUT_MS, RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
+import { API_TIMEOUT_MS, CLAUDE_API_MIN_INTERVAL_MS, RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
 import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
 import { formatResetFromIso } from "../utils/time.js";
@@ -18,6 +18,9 @@ export class ClaudeAPIProvider implements UsageProvider {
   sourceType = DataSource.API;
 
   private _credentialsStore: ClaudeCredentialStore;
+
+  /** Last successful live fetch, reused within CLAUDE_API_MIN_INTERVAL_MS to stay under the endpoint's budget. */
+  private _lastSuccess: { at: number; metrics: MetricsDict } | null = null;
 
   constructor(credentialsStore?: ClaudeCredentialStore) {
     this._credentialsStore = credentialsStore ?? new ClaudeCredentialStore();
@@ -41,6 +44,16 @@ export class ClaudeAPIProvider implements UsageProvider {
       };
     }
 
+    if (this._lastSuccess !== null && Date.now() - this._lastSuccess.at < CLAUDE_API_MIN_INTERVAL_MS) {
+      return {
+        metrics: this._lastSuccess.metrics,
+        source: this.sourceType,
+        timestamp,
+        error: null,
+        stale: false,
+      };
+    }
+
     try {
       const response = await this._fetchWithRetry(creds.accessToken);
 
@@ -56,6 +69,7 @@ export class ClaudeAPIProvider implements UsageProvider {
 
       const data = await response.json();
       const metrics = this._parseApiResponse(data as Record<string, unknown>, creds.subscriptionType);
+      this._lastSuccess = { at: Date.now(), metrics };
 
       return {
         metrics,

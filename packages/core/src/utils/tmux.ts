@@ -24,6 +24,15 @@ async function runTmux(
 /** Session names created by the usage collectors: <service>-<kind>-<pid> */
 const USAGE_SESSION_PATTERN = /^(claude|codex)-(usage|live)-(\d+)$/;
 
+/**
+ * Collector pane geometry. Claude Code's /usage screen (2.1.27x) puts a session
+ * summary and a plugin footprint above the usage bars; at tmux's default 80x24
+ * the bars fall below the fold and are never rendered, so the parser sees
+ * nothing. A tall pane keeps the whole screen visible for both CLIs.
+ */
+const USAGE_PANE_COLS = "160";
+const USAGE_PANE_ROWS = "60";
+
 /** Sessions created by this process, killed via exit hook if not cleaned up. */
 const liveSessions = new Set<string>();
 let exitHookInstalled = false;
@@ -112,7 +121,17 @@ export class EphemeralSession {
   async start(): Promise<void> {
     assertCommandExists(this.command);
     await sweepStaleUsageSessions();
-    await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
+    await runTmux([
+      "new-session",
+      "-d",
+      "-s",
+      this.sessionName,
+      "-x",
+      USAGE_PANE_COLS,
+      "-y",
+      USAGE_PANE_ROWS,
+      this.command,
+    ]);
     trackSession(this.sessionName);
     await Bun.sleep(2000);
   }
@@ -169,7 +188,17 @@ export class PersistentSession {
   async windup(): Promise<void> {
     assertCommandExists(this.command);
     await sweepStaleUsageSessions();
-    await runTmux(["new-session", "-d", "-s", this.sessionName, this.command]);
+    await runTmux([
+      "new-session",
+      "-d",
+      "-s",
+      this.sessionName,
+      "-x",
+      USAGE_PANE_COLS,
+      "-y",
+      USAGE_PANE_ROWS,
+      this.command,
+    ]);
     trackSession(this.sessionName);
     await Bun.sleep(2000);
     this.sessionStarted = true;

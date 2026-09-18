@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-09-18
+
+### Fixed
+- Claude `/usage` PTY fallback works again with Claude Code 2.1.27x: the status screen gained a plugin footprint section that pushed the usage bars below tmux's default 80x24 pane, so the parser never saw them. Collector panes are now 160x60.
+- The Claude PTY is no longer driven while the Anthropic usage API is rate-limited. Claude Code's `/usage` calls the same `/api/oauth/usage` endpoint, so refreshing it every 10s kept the account permanently 429'd (a 6h+ block that cleared within a minute of stopping the loop).
+- Claude API requests are spaced at least 30s apart regardless of the TUI refresh interval, reusing the last live result in between.
+
 ## [0.2.5] - 2026-09-14
 
 ### Fixed

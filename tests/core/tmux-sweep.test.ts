@@ -81,3 +81,20 @@ describe("sweepStaleUsageSessions", () => {
     expect(killed).toBe(0);
   });
 });
+
+describe("collector pane geometry", () => {
+  const GEOMETRY_SESSION = "claude-usage-test-geometry";
+
+  afterEach(() => {
+    tmux("kill-session", "-t", GEOMETRY_SESSION);
+  });
+
+  test("EphemeralSession opens a pane tall enough for Claude Code's /usage screen", async () => {
+    if (!tmuxAvailable()) return;
+    const session = new EphemeralSession(GEOMETRY_SESSION, "sleep 30");
+    await session.start();
+    const { stdout } = tmux("display", "-p", "-t", GEOMETRY_SESSION, "#{window_width}x#{window_height}");
+    await session.cleanup();
+    expect(stdout.trim()).toBe("160x60");
+  });
+});

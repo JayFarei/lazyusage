@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CLAUDE_API_MIN_INTERVAL_MS } from "../../packages/core/src/constants.js";
 import { ClaudeAPIProvider } from "../../packages/core/src/providers/api-claude.js";
 import { ClaudeCredentialStore } from "../../packages/core/src/providers/credentials.js";
 import { DataSource } from "../../packages/core/src/types.js";
@@ -187,6 +188,52 @@ describe("ClaudeAPIProvider - successful fetch + parse", () => {
     expect((result.metrics?.session as { used_pct: number }).used_pct).toBe(10);
     expect((result.metrics?.week_all as { used_pct: number }).used_pct).toBe(77);
     expect((result.metrics?.week_sonnet as { used_pct: number }).used_pct).toBe(86);
+  });
+});
+
+describe("ClaudeAPIProvider - request spacing", () => {
+  test("reuses the last successful result within the minimum request interval", async () => {
+    writeCredsFile(tempCredsPath);
+    const provider = new ClaudeAPIProvider(new ClaudeCredentialStore());
+
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(JSON.stringify(makeLimitsResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const first = await provider.fetch();
+    const second = await provider.fetch();
+
+    expect(calls).toBe(1);
+    expect(second.error).toBeNull();
+    expect(second.source).toBe(DataSource.API);
+    expect(second.stale).toBe(false);
+    expect(second.metrics).toEqual(first.metrics);
+
+    // Age the cached result past the interval: the next fetch goes live again
+    (provider as unknown as { _lastSuccess: { at: number } })._lastSuccess.at =
+      Date.now() - CLAUDE_API_MIN_INTERVAL_MS - 1;
+    await provider.fetch();
+    expect(calls).toBe(2);
+  });
+
+  test("does not reuse a failed fetch", async () => {
+    writeCredsFile(tempCredsPath);
+    const provider = new ClaudeAPIProvider(new ClaudeCredentialStore());
+
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response("Forbidden", { status: 403, statusText: "Forbidden" });
+    }) as unknown as typeof fetch;
+
+    await provider.fetch();
+    await provider.fetch();
+    expect(calls).toBe(2);
   });
 });
 
