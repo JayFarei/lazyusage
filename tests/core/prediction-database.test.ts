@@ -95,6 +95,51 @@ describe("UsageStore prediction features", () => {
       expect(boundaries[0].resetsAt).toBe(resetsAt);
     });
 
+    test("consumedPct on a monotonic day equals last - first", () => {
+      insertSnapshot("claude", "week_all", 30, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 35, isoAt(5, 12));
+      insertSnapshot("claude", "week_all", 35, isoAt(5, 13));
+      insertSnapshot("claude", "week_all", 45, isoAt(5, 18));
+
+      const [day] = store.getDailyBoundaries("claude", "week_all", 30);
+      expect(day.consumedPct).toBe(15);
+      expect(day.sampleCount).toBe(4);
+    });
+
+    test("consumedPct on a reset day sums real usage before and after the drop", () => {
+      const resetsAt = isoAt(5, 14);
+      insertSnapshot("claude", "week_all", 80, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 92, isoAt(5, 13));
+      insertSnapshot("claude", "week_all", 0, isoAt(5, 15), resetsAt);
+      insertSnapshot("claude", "week_all", 16, isoAt(5, 18), resetsAt);
+
+      const [day] = store.getDailyBoundaries("claude", "week_all", 30);
+      expect(day.firstUsedPct).toBe(80);
+      expect(day.lastUsedPct).toBe(16);
+      expect(day.consumedPct).toBe(28); // 12 before the reset + 16 after, not 100 - 80 + 16
+    });
+
+    test("consumedPct ignores a mid-window adjustment that zeroes usage", () => {
+      // Shape observed on 2026-09-01: 42 -> 54, provider zeroes usage, 0 -> 10, same window
+      const resetsAt = isoAt(3, 21);
+      const values = [42, 43, 46, 48, 49, 54, 0, 2, 3, 4, 6, 10];
+      for (const [i, v] of values.entries()) {
+        insertSnapshot("claude", "week_all", v, isoAt(5, 7 + i), resetsAt);
+      }
+
+      const [day] = store.getDailyBoundaries("claude", "week_all", 30);
+      expect(day.consumedPct).toBe(22);
+    });
+
+    test("consumedPct nets out one-point jitter", () => {
+      insertSnapshot("claude", "week_all", 46, isoAt(5, 8));
+      insertSnapshot("claude", "week_all", 45, isoAt(5, 9));
+      insertSnapshot("claude", "week_all", 46, isoAt(5, 10));
+
+      const [day] = store.getDailyBoundaries("claude", "week_all", 30);
+      expect(day.consumedPct).toBe(0);
+    });
+
     test("empty database returns empty array", () => {
       const boundaries = store.getDailyBoundaries("claude", "week_all", 30);
       expect(boundaries).toEqual([]);

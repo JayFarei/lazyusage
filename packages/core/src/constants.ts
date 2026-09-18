@@ -13,6 +13,13 @@ export const API_TIMEOUT_MS = 10_000;
  * The Anthropic usage API allows ~1 request per 3-4 minutes. */
 export const RATE_LIMIT_DEFAULT_SECONDS = 240;
 
+/**
+ * Minimum spacing between live requests to the Anthropic usage API, regardless of
+ * the TUI refresh interval. The endpoint's per-account budget is a handful of
+ * requests per minute and a sustained overrun blocks for hours (retry-after: 0).
+ */
+export const CLAUDE_API_MIN_INTERVAL_MS = 30_000;
+
 /** Default retry-after for Codex usage API (shorter window than Claude) */
 export const CODEX_RATE_LIMIT_DEFAULT_SECONDS = 60;
 
@@ -39,6 +46,13 @@ export const CODEX_PLAN_TYPE_MAP: Record<string, string> = {
   business: "Business",
   enterprise: "Enterprise",
 };
+
+/**
+ * A drop in used_pct of at least this many points between consecutive snapshots
+ * is treated as a window reset or a provider-side adjustment (usage zeroed
+ * mid-window), which starts a new consumption segment. Smaller dips are jitter.
+ */
+export const USAGE_DROP_RESET_THRESHOLD = 5;
 
 /** Fixed daily rates for each regime level (v1) */
 export const REGIME_RATES: Record<string, number> = {

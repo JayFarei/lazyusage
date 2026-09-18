@@ -53,17 +53,15 @@ GROUP BY date(timestamp)
 ORDER BY day
 ```
 
-For each day: `delta = last_pct - first_pct`
+For each day: `delta = consumed_pct`, where consumption is measured across the day's value changes (see Step 2), not as `last_pct - first_pct`.
 
-**Step 2: Handle window resets (negative deltas)**
+**Step 2: Handle window resets and mid-window adjustments (v1.0.1)**
 
-When `delta < 0`, a window reset occurred mid-day. Use the `resets_at` ISO timestamp to split:
-```
-pre_reset  = 100 - first_pct    // usage consumed before window rolled
-post_reset = last_pct           // usage consumed in the new window
-```
+The implementation (`getDailyBoundaries` + `consumedFromSamples`) walks the day's samples in order and sums gains across segments. A segment ends whenever the value drops by `USAGE_DROP_RESET_THRESHOLD` (5) points or more, which covers both a window reset and a provider-side adjustment that zeroes usage mid-window. Smaller dips are jitter and net out inside their segment. Example, a day that went 42 → 54, was zeroed by the provider, then 0 → 10: `consumed = 12 + 10 = 22`.
 
-Days with >1 negative transition are skipped entirely (rare edge case: subscription tier change mid-day).
+The original v1 split (`pre_reset = 100 - first_pct`, `post_reset = last_pct`) assumed the window had filled before any drop; a mid-window adjustment on 2026-09-01 was booked as 68% consumed that way and flipped the weekly forecast. It has been replaced.
+
+Days whose consumption exceeds 100% are skipped entirely (corrupt or multi-reset data).
 
 Days with only 1 snapshot have `delta = 0` and are treated as "unknown" (excluded from the average, not counted as zero).
 

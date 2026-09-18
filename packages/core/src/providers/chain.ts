@@ -7,6 +7,7 @@ import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 import type { FetchResult, MetricsDict, PersistentUsageProvider, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
 import { calculateFallbackTime } from "../utils/time.js";
+import { ClaudeAPIProvider } from "./api-claude.js";
 import { CodexAPIProvider } from "./api-codex.js";
 import { UsageCache } from "./cache.js";
 
@@ -397,11 +398,12 @@ export class PersistentFallbackChain {
 
   /**
    * Check if the PTY should be skipped due to API rate limiting.
-   * Claude CLI's /usage command uses an internal endpoint independent of the
-   * OAuth usage API, so PTY is never skipped for Claude.
-   * Codex CLI's /status may share the same rate limit as the API.
+   * Both CLIs' status screens call the same usage endpoints as the API providers
+   * (Claude Code's /usage hits /api/oauth/usage, verified on 2.1.276), so driving
+   * the PTY while rate-limited only extends the block.
    */
   private _isApiRateLimited(): boolean {
+    if (this.service === "claude") return ClaudeAPIProvider.isRateLimited();
     if (this.service === "codex") return CodexAPIProvider.isRateLimited();
     return false;
   }

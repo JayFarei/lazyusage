@@ -143,6 +143,12 @@ export interface DailyBoundary {
   date: string; // YYYY-MM-DD
   firstUsedPct: number;
   lastUsedPct: number;
+  /**
+   * Allowance consumed during the day: gains summed across segments split at
+   * drops of USAGE_DROP_RESET_THRESHOLD or more (window resets, mid-window
+   * adjustments), so a reset day counts what was really used, not 100 - first.
+   */
+  consumedPct: number;
   resetsAt: string | null; // ISO timestamp from resets_at column
   sampleCount: number;
 }

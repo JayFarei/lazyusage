@@ -18,7 +18,7 @@
     },
     "packages/cli": {
       "name": "lazyusage",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "bin": {
         "lazyusage": "./dist/cli.js",
       },
@@ -32,11 +32,11 @@
     },
     "packages/core": {
       "name": "lazyusage-core",
-      "version": "0.2.5",
+      "version": "0.2.6",
     },
     "packages/e2e": {
       "name": "lazyusage-e2e",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "dependencies": {
         "lazyusage": "workspace:*",
       },
