@@ -3,6 +3,7 @@
  * Reuses LedgerContent at full terminal width.
  */
 
+import type { ServiceName } from "lazyusage-core";
 import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { Show } from "solid-js";
 import type { ContentTab } from "../hooks/useViewMode.js";
@@ -20,7 +21,7 @@ const TAB_LABELS: Record<ContentTab, string> = {
 };
 
 interface FullscreenStatsViewProps {
-  service: "claude" | "codex";
+  service: ServiceName;
   contentTab: ContentTab;
   daily: ProjectUsage[] | null;
   weekly: ProjectUsage[] | null;

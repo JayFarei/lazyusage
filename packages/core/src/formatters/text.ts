@@ -3,7 +3,8 @@
  * Port of src/formatters/text.py
  */
 
-import type { MetricsDict } from "../types.js";
+import { listedServices, SERVICES, type ServiceName } from "../services.js";
+import type { MetricsDict, ServiceMetricsMap } from "../types.js";
 import { calculateTimeProgress } from "../utils/time.js";
 
 type MetricEntry = { used_pct: number; remaining_pct: number; resets: string };
@@ -12,12 +13,22 @@ function isMetricEntry(v: unknown): v is MetricEntry {
   return v !== null && typeof v === "object" && "used_pct" in v;
 }
 
-/** Codex windows in display order; the 5h window is only present on plans that still report it. */
-function codexEntries(metrics: MetricsDict): Array<[label: string, m: MetricEntry, windowHours: number]> {
+/** A service's reported metrics in text order; optional windows (e.g. Codex 5h) are skipped when absent. */
+function serviceEntries(
+  service: ServiceName,
+  metrics: MetricsDict,
+): Array<[label: string, m: MetricEntry, windowHours: number]> {
   const entries: Array<[string, MetricEntry, number]> = [];
-  if (isMetricEntry(metrics["5h"])) entries.push(["Session", metrics["5h"], 5]);
-  entries.push(["Weekly", metrics.weekly as MetricEntry, 168]);
+  for (const spec of SERVICES[service].textMetrics) {
+    const value = metrics[spec.key];
+    if (isMetricEntry(value)) entries.push([spec.textLabel, value, spec.windowHours]);
+  }
   return entries;
+}
+
+function withSubscription(base: string, metrics: MetricsDict): string {
+  const subscription = metrics.subscription_type as string | null;
+  return subscription ? `${base} [Subscription: ${subscription}]` : base;
 }
 
 function fmtMetric(label: string, m: MetricEntry, windowHours: number): string {
@@ -26,41 +37,6 @@ function fmtMetric(label: string, m: MetricEntry, windowHours: number): string {
   return `${label}: ${Math.round(m.used_pct)}% allowance used, ${timeElapsed}% time elapsed, ${capacityRemaining}% capacity remaining (resets ${m.resets})`;
 }
 
-/** Format Claude metrics as text with subscription suffix */
-export function formatClaudeText(metrics: MetricsDict): string {
-  const subscription = metrics.subscription_type as string | null;
-  const session = metrics.session as MetricEntry;
-  const weekAll = metrics.week_all as MetricEntry;
-  const weekModel = metrics.week_sonnet as MetricEntry;
-
-  const base = [
-    fmtMetric("Session", session, 5),
-    fmtMetric("Weekly", weekAll, 168),
-    fmtMetric("Fable", weekModel, 168),
-  ].join(" | ");
-
-  if (subscription) {
-    return `${base} [Subscription: ${subscription}]`;
-  }
-  return base;
-}
-
-/** Format Codex metrics as text with subscription suffix */
-export function formatCodexText(metrics: MetricsDict): string {
-  const subscription = metrics.subscription_type as string | null;
-
-  const base = codexEntries(metrics)
-    .map(([label, m, hours]) => fmtMetric(label, m, hours))
-    .join(" | ");
-
-  if (subscription) {
-    return `${base} [Subscription: ${subscription}]`;
-  }
-  return base;
-}
-
-// ── Capacity-only formatters ──────────────────────────────────────────────────
-
 function fmtCapacity(label: string, m: MetricEntry, windowHours: number): string {
   const timeElapsed = Math.round(calculateTimeProgress(m.resets, windowHours));
   const cap = Math.round(timeElapsed - m.used_pct);
@@ -68,79 +44,57 @@ function fmtCapacity(label: string, m: MetricEntry, windowHours: number): string
   return `${label}: ${sign}${cap}%`;
 }
 
-/** Format Claude capacity deltas only (time elapsed % - allowance used %) */
-export function formatClaudeCapacityText(metrics: MetricsDict): string {
-  const subscription = metrics.subscription_type as string | null;
-  const session = metrics.session as MetricEntry;
-  const weekAll = metrics.week_all as MetricEntry;
-  const weekModel = metrics.week_sonnet as MetricEntry;
-
-  const base = [
-    fmtCapacity("Session", session, 5),
-    fmtCapacity("Weekly", weekAll, 168),
-    fmtCapacity("Fable", weekModel, 168),
-  ].join(" | ");
-
-  return subscription ? `${base} [Subscription: ${subscription}]` : base;
+/** Format one service's metrics as text with subscription suffix */
+export function formatServiceText(service: ServiceName, metrics: MetricsDict): string {
+  const base = serviceEntries(service, metrics)
+    .map(([label, m, hours]) => fmtMetric(label, m, hours))
+    .join(" | ");
+  return withSubscription(base, metrics);
 }
 
-/** Format Codex capacity deltas only */
-export function formatCodexCapacityText(metrics: MetricsDict): string {
-  const subscription = metrics.subscription_type as string | null;
-
-  const base = codexEntries(metrics)
+/** Format one service's capacity deltas only (time elapsed % - allowance used %) */
+export function formatServiceCapacityText(service: ServiceName, metrics: MetricsDict): string {
+  const base = serviceEntries(service, metrics)
     .map(([label, m, hours]) => fmtCapacity(label, m, hours))
     .join(" | ");
-
-  return subscription ? `${base} [Subscription: ${subscription}]` : base;
+  return withSubscription(base, metrics);
 }
 
-/** Format capacity with graceful handling of missing services */
+export const formatClaudeText = (metrics: MetricsDict) => formatServiceText("claude", metrics);
+export const formatCodexText = (metrics: MetricsDict) => formatServiceText("codex", metrics);
+export const formatGrokText = (metrics: MetricsDict) => formatServiceText("grok", metrics);
+export const formatClaudeCapacityText = (metrics: MetricsDict) => formatServiceCapacityText("claude", metrics);
+export const formatCodexCapacityText = (metrics: MetricsDict) => formatServiceCapacityText("codex", metrics);
+export const formatGrokCapacityText = (metrics: MetricsDict) => formatServiceCapacityText("grok", metrics);
+
+function formatLines(
+  metricsByService: ServiceMetricsMap,
+  availableServices: string[],
+  format: (service: ServiceName, metrics: MetricsDict) => string,
+): string {
+  const collected = Object.keys(metricsByService).filter((s) => metricsByService[s as ServiceName]);
+  return listedServices(availableServices, collected)
+    .map((service) => {
+      const metrics = metricsByService[service];
+      const label = SERVICES[service].label;
+      return metrics && availableServices.includes(service)
+        ? `${label}: ${format(service, metrics)}`
+        : `${label}: [not available]`;
+    })
+    .join("\n");
+}
+
+/** Format capacity for every service, marking missing ones as not available */
 export function formatCapacityWithAvailability(
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
+  metricsByService: ServiceMetricsMap,
   availableServices: string[],
 ): string {
-  const lines: string[] = [];
-
-  if (claudeMetrics && availableServices.includes("claude")) {
-    lines.push(`Claude: ${formatClaudeCapacityText(claudeMetrics)}`);
-  } else {
-    lines.push("Claude: [not available]");
-  }
-
-  if (codexMetrics && availableServices.includes("codex")) {
-    lines.push(`Codex: ${formatCodexCapacityText(codexMetrics)}`);
-  } else {
-    lines.push("Codex: [not available]");
-  }
-
-  return lines.join("\n");
+  return formatLines(metricsByService, availableServices, formatServiceCapacityText);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Format metrics with graceful handling of missing services */
-export function formatWithAvailability(
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
-  availableServices: string[],
-): string {
-  const lines: string[] = [];
-
-  if (claudeMetrics && availableServices.includes("claude")) {
-    lines.push(`Claude: ${formatClaudeText(claudeMetrics)}`);
-  } else {
-    lines.push("Claude: [not available]");
-  }
-
-  if (codexMetrics && availableServices.includes("codex")) {
-    lines.push(`Codex: ${formatCodexText(codexMetrics)}`);
-  } else {
-    lines.push("Codex: [not available]");
-  }
-
-  return lines.join("\n");
+/** Format metrics for every service, marking missing ones as not available */
+export function formatWithAvailability(metricsByService: ServiceMetricsMap, availableServices: string[]): string {
+  return formatLines(metricsByService, availableServices, formatServiceText);
 }
 
 // ── Prediction formatters ────────────────────────────────────────────────────

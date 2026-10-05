@@ -16,6 +16,9 @@ import {
   type MetricData,
   type MetricsDict,
   parseTimeToDatetime,
+  SERVICE_NAMES,
+  SERVICES,
+  type ServiceName,
 } from "lazyusage-core";
 import { createMemo, For, Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
@@ -37,13 +40,12 @@ export const WINDOW_HOURS: Record<string, number> = {
   weekly: 168,
 };
 
-export const METRIC_KEYS: Record<string, string[]> = {
-  claude: ["week_all", "week_sonnet", "session"],
-  codex: ["weekly", "5h"],
-};
+export const METRIC_KEYS: Record<ServiceName, string[]> = Object.fromEntries(
+  SERVICE_NAMES.map((service) => [service, SERVICES[service].panelMetrics]),
+) as Record<ServiceName, string[]>;
 
 interface ServicePanelProps {
-  service: "claude" | "codex";
+  service: ServiceName;
   title: string;
   metrics: MetricsDict | null;
   error: string | null;
@@ -58,6 +60,27 @@ interface ServicePanelProps {
 
 const BAR_OVERHEAD = 12;
 const MIN_LOCAL_BAR = 20;
+
+/** Optional rows of an expanded metric, in the order they are kept when height is short. */
+const OPTIONAL_ROWS = ["periodBar", "reset", "prediction", "markers", "resetSpacer", "trailingSpacer"] as const;
+type OptionalRow = (typeof OPTIONAL_ROWS)[number];
+
+/**
+ * Which optional rows fit an expanded metric given `budget` lines. Label and
+ * capacity bar always render; the rest are added in priority order so a short
+ * panel (e.g. three service rows at 24 lines) drops spacers before data.
+ */
+export function fitMetricRows(budget: number, hasPrediction: boolean): Set<OptionalRow> {
+  const rows = new Set<OptionalRow>();
+  let remaining = budget - 2;
+  for (const row of OPTIONAL_ROWS) {
+    if (row === "prediction" && !hasPrediction) continue;
+    if (remaining <= 0) break;
+    rows.add(row);
+    remaining--;
+  }
+  return rows;
+}
 
 export function ServicePanel(props: ServicePanelProps) {
   const theme = useTheme();
@@ -138,6 +161,7 @@ export function ServicePanel(props: ServicePanelProps) {
       borderColor={props.isActive ? theme.borderActive : theme.text}
       title={panelTitle()}
       titleAlignment="left"
+      overflow="hidden"
     >
       <Show when={props.error}>
         <text content={`  Error: ${props.error}`} fg={theme.red} height={1} />
@@ -174,12 +198,26 @@ export function ServicePanel(props: ServicePanelProps) {
 
             const marker = () => (isSelected() ? "\u25b8 " : "  ");
 
-            // Visibility per element: full=always, focus=only selected gets all rows
-            const showCapBar = () => mode() === "full" || isSelected();
-            const showMarkers = () => mode() === "full" || isSelected();
-            const showPeriodBar = () => mode() === "full" || isSelected();
-            const showResetTime = () => mode() === "full" || isSelected();
-            const showSpacer = () => mode() === "full" || isSelected();
+            const isWeekly = entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly";
+            const prediction = () => {
+              const pred = props.prediction?.[entry.key];
+              // Skip when the window just reset (< 5% used, > 5 days left): history doesn't reflect it yet
+              return isWeekly && pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5) ? pred : undefined;
+            };
+
+            // Expanded: every metric in full mode, only the selected one in focus mode
+            const expanded = () => mode() === "full" || isSelected();
+            // Lines this metric may use: an even share in full mode, all but the collapsed rows in focus mode
+            const rowBudget = () => {
+              const n = metricEntries().length;
+              return mode() === "full" ? Math.floor(panelHeight() / n) : panelHeight() - (n - 1);
+            };
+            const rows = createMemo(() => fitMetricRows(rowBudget(), prediction() !== undefined));
+            const show = (row: OptionalRow) => expanded() && rows().has(row);
+
+            const showCapBar = expanded;
+            const showMarkers = () => show("markers");
+            const showPeriodBar = () => show("periodBar");
 
             const labelText = () => {
               const collapsed = mode() === "focus" && !isSelected();
@@ -220,16 +258,9 @@ export function ServicePanel(props: ServicePanelProps) {
                 {/* Capacity bar */}
                 <Show when={showCapBar()}>
                   {(() => {
-                    const pred = props.prediction?.[entry.key];
-                    // Show prediction bar for weekly metrics, but only when the prediction
-                    // is meaningful. Skip when window just reset (< 5% used, > 5 days left),
-                    // historic rates don't reflect the new window yet.
-                    const predUseful = (pred && pred.usedSoFar >= 5) || (pred && pred.remainingDays <= 5);
-                    if (
-                      pred &&
-                      predUseful &&
-                      (entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly")
-                    ) {
+                    // Prediction bar for weekly metrics with a meaningful prediction
+                    const pred = prediction();
+                    if (pred) {
                       const w = barWidth();
                       const predictedPct = Math.max(0, pred.projectedTotal - pred.usedSoFar);
                       const segments = createPredictionBar(entry.data.used_pct, predictedPct, w);
@@ -255,11 +286,11 @@ export function ServicePanel(props: ServicePanelProps) {
                   <text content={`  ${perBar()} \u23f1 ${timePctR()}%`} fg={theme.cyan} dim={true} height={1} />
                 </Show>
                 {/* Spacer above reset for visual breathing room */}
-                <Show when={showResetTime()}>
+                <Show when={show("resetSpacer") && show("reset")}>
                   <text content="" height={1} />
                 </Show>
                 {/* Reset time with countdown */}
-                <Show when={showResetTime()}>
+                <Show when={show("reset")}>
                   <text
                     content={(() => {
                       void props.tick;
@@ -273,11 +304,8 @@ export function ServicePanel(props: ServicePanelProps) {
                 </Show>
                 {/* Prediction summary (over/spare) below reset time */}
                 {(() => {
-                  if (!(mode() === "full" || isSelected())) return null;
-                  const pred = props.prediction?.[entry.key];
-                  const predUseful = pred && (pred.usedSoFar >= 5 || pred.remainingDays <= 5);
-                  if (!pred || !predUseful) return null;
-                  if (entry.key !== "week_all" && entry.key !== "week_sonnet" && entry.key !== "weekly") return null;
+                  const pred = prediction();
+                  if (!pred || !show("prediction")) return null;
                   const sparePrefix = pred.confidence === "low" ? "~" : "";
                   const spareVal = `${sparePrefix}${Math.round(pred.predictedSpare)}%`;
                   const summary = pred.overBudget ? `  \u26a1 OVER BUDGET ${spareVal}` : `  \u26a1 ${spareVal} spare`;
@@ -291,7 +319,7 @@ export function ServicePanel(props: ServicePanelProps) {
                   );
                 })()}
                 {/* Spacer between metrics */}
-                <Show when={showSpacer()}>
+                <Show when={show("trailingSpacer")}>
                   <text content="" height={1} />
                 </Show>
               </box>

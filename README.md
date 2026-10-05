@@ -13,7 +13,7 @@
 
 <img src="docs/assets/tui.png" alt="lazyusage TUI: Claude and Codex panels with pace bars, OVER BUDGET warnings, and a per-project token ledger" width="843">
 
-`lazyusage` answers the questions you actually ask about your Claude and Codex subscriptions:
+`lazyusage` answers the questions you actually ask about your Claude, Codex and Grok subscriptions:
 
 - **"Am I overspending against my weekly capacity?"** Pace bars compare allowance burned vs time elapsed, and flag `OVER BUDGET` the moment you burn faster than the window refills.
 - **"Which of my projects is eating the tokens?"** A per-project ledger (Daily / Weekly / Monthly) built from your local session history.
@@ -44,7 +44,7 @@ lazyusage --capacity
 lazyusage usage-check --json
 ```
 
-Requirements: Bun `>= 1.3`, plus the Claude CLI (`claude`) and/or Codex CLI (`codex`) in `PATH`. `tmux` is optional (PTY fallback and some end-to-end tests).
+Requirements: Bun `>= 1.3`, plus any of the Claude CLI (`claude`), Codex CLI (`codex`) or Grok Build CLI (`grok`) in `PATH`. `tmux` is optional (PTY fallback and some end-to-end tests).
 
 ## How it works
 
@@ -95,10 +95,11 @@ A positive value means you can speed up; a negative value means at the current p
 
 ## The TUI
 
-- 2x2 grid: one row per service, usage bars on the left, per-project token ledger on the right
+- One row per installed service, usage bars on the left, per-project token ledger on the right
 - `Tab` cycles stats tabs (Daily, Weekly, Monthly, and Graph when the daemon is running)
 - `j/k` navigate metrics, `g` fullscreen, `p` pause refresh, `?` help, `q` quit
-- `lazyusage claude` or `lazyusage codex` shows a single service
+- `1`/`2`/`5` focus the Claude/Codex/Grok bars, `3`/`4`/`6` their stats
+- `lazyusage claude`, `lazyusage codex` or `lazyusage grok` shows a single service
 
 ### tmux popup
 
@@ -156,6 +157,7 @@ What the text modes look like:
 $ lazyusage --capacity
 Claude: Session: -5% | Weekly: -4% | Fable: +6% [Subscription: max]
 Codex: Weekly: +4% [Subscription: Pro Lite]
+Grok: Weekly: +3% [Subscription: X Premium]
 
 $ lazyusage --text
 Claude: Session: 50% allowance used, 45% time elapsed, -5% capacity remaining (resets 1:20pm) | ...
@@ -164,6 +166,8 @@ Codex: Weekly: 28% allowance used, 31% time elapsed, 3% capacity remaining (rese
 
 Codex plans currently report a single weekly limit, so only `weekly` is shown. A `Session` / `5h` entry appears only on plans that still expose a 5-hour window.
 
+Grok reports one shared weekly pool (`weekly`), read from the same endpoint as the grok CLI's `/usage` screen using the browser login in `~/.grok/auth.json` (`$GROK_HOME`). That endpoint is undocumented, so lazyusage polls it at most once a minute. The grok CLI refreshes its own token while it runs; if it has not run for a few hours, lazyusage serves the last cached value until it does. API-key-only setups (`XAI_API_KEY`) have no allowance to report, only the token ledger.
+
 ### JSON contract
 
 Snapshot responses include resource-awareness metadata so agents can distinguish fresh data from fallback or cached data.
@@ -171,7 +175,7 @@ Snapshot responses include resource-awareness metadata so agents can distinguish
 ```json
 {
   "timestamp": "2026-03-22T12:00:00.000Z",
-  "available_services": ["claude", "codex"],
+  "available_services": ["claude", "codex", "grok"],
   "services": [
     {
       "name": "claude",
@@ -270,7 +274,7 @@ lazyusage daemon install    # launchd agent on macOS, systemd user unit on Linux
 lazyusage daemon uninstall
 ```
 
-Configuration is optional and lives at `~/.config/lazyusage/daemon.toml`. When the daemon is healthy, the TUI hydrates from its stored snapshots instead of starting its own collection chain, and the stats panel gains a Graph tab (cycle with `Tab`: Daily, Weekly, Monthly, Graph).
+Configuration is optional and lives at `~/.config/lazyusage/daemon.toml`. The daemon collects Claude and Codex by default; add Grok with `services = ["claude", "codex", "grok"]` (or `lazyusage daemon start --services claude,codex,grok`). When the daemon is healthy, the TUI hydrates from its stored snapshots instead of starting its own collection chain, and the stats panel gains a Graph tab (cycle with `Tab`: Daily, Weekly, Monthly, Graph).
 
 ## Capacity prediction and planning
 
@@ -307,10 +311,12 @@ Endpoints:
 - `GET /` all configured services
 - `GET /claude` Claude only
 - `GET /codex` Codex only
+- `GET /grok` Grok only
 - `GET /health` server metadata
 - `GET /stream` SSE stream for all configured services
 - `GET /stream/claude` SSE stream for Claude only
 - `GET /stream/codex` SSE stream for Codex only
+- `GET /stream/grok` SSE stream for Grok only
 
 ## Install
 

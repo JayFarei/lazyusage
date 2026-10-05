@@ -1,20 +1,30 @@
 #!/usr/bin/env bun
-import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "lazyusage-core/parsers/aggregator";
+import type { ServiceName } from "lazyusage-core";
 /**
  * Standalone worker script for loading per-project usage ledger data.
  * Replaces ccusage-worker.ts and codex-ccusage.ts.
  *
- * Parses JSONL files directly from:
+ * Parses session files directly from:
  *   ~/.claude/projects/  (Claude Code sessions)
  *   ~/.codex/sessions/   (Codex CLI sessions)
+ *   ~/.grok/sessions/    (Grok Build sessions)
  *
- * Outputs JSON to stdout:
- *   { claude: { daily, weekly, monthly }, codex: { daily, weekly, monthly } }
+ * Outputs JSON to stdout, one entry per service:
+ *   { claude: { daily, weekly, monthly }, codex: { ... }, grok: { ... } }
  *
  * Accepts optional --since YYYY-MM-DD flag to limit parsing window (default: 28 days ago).
  */
+import { aggregateDaily, aggregateMonthly, aggregateWeekly } from "lazyusage-core/parsers/aggregator";
 import { parseClaudeSessions } from "lazyusage-core/parsers/claude-parser";
 import { parseCodexSessions } from "lazyusage-core/parsers/codex-parser";
+import { parseGrokSessions } from "lazyusage-core/parsers/grok-parser";
+import type { SessionTokens } from "lazyusage-core/parsers/types";
+
+const PARSERS: Record<ServiceName, (since: string) => Promise<SessionTokens[]>> = {
+  claude: parseClaudeSessions,
+  codex: parseCodexSessions,
+  grok: parseGrokSessions,
+};
 
 function defaultSince(): string {
   const d = new Date();
@@ -29,22 +39,17 @@ const sinceIdx = process.argv.indexOf("--since");
 const since = sinceIdx !== -1 && process.argv[sinceIdx + 1] ? process.argv[sinceIdx + 1] : defaultSince();
 
 try {
-  const [claudeSessions, codexSessions] = await Promise.all([parseClaudeSessions(since), parseCodexSessions(since)]);
+  const entries = await Promise.all(
+    Object.entries(PARSERS).map(async ([service, parse]) => {
+      const sessions = await parse(since);
+      return [
+        service,
+        { daily: aggregateDaily(sessions), weekly: aggregateWeekly(sessions), monthly: aggregateMonthly(sessions) },
+      ] as const;
+    }),
+  );
 
-  const result = {
-    claude: {
-      daily: aggregateDaily(claudeSessions),
-      weekly: aggregateWeekly(claudeSessions),
-      monthly: aggregateMonthly(claudeSessions),
-    },
-    codex: {
-      daily: aggregateDaily(codexSessions),
-      weekly: aggregateWeekly(codexSessions),
-      monthly: aggregateMonthly(codexSessions),
-    },
-  };
-
-  process.stdout.write(JSON.stringify(result));
+  process.stdout.write(JSON.stringify(Object.fromEntries(entries)));
 } catch (err) {
   process.stderr.write(`ledger worker error: ${err}\n`);
   process.exit(1);

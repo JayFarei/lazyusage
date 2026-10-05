@@ -57,13 +57,14 @@ export class UsageStore {
     this.initDatabase();
   }
 
-  private initDatabase(): void {
-    this.db.run("PRAGMA journal_mode = WAL");
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS usage_snapshots (
+  /**
+   * usage_snapshots columns. `service` is deliberately unconstrained: the set of
+   * services is validated in code (ServiceName), so adding one needs no migration.
+   */
+  private static readonly SNAPSHOT_COLUMNS = `
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-        service TEXT NOT NULL CHECK (service IN ('claude', 'codex')),
+        service TEXT NOT NULL,
         metric_name TEXT NOT NULL,
         used_pct INTEGER NOT NULL,
         remaining_pct INTEGER NOT NULL,
@@ -71,9 +72,14 @@ export class UsageStore {
         resets_at TEXT,
         subscription_type TEXT,
         source TEXT NOT NULL DEFAULT 'pty',
-        collection_id TEXT
-      )
-    `);
+        collection_id TEXT`;
+
+  private initDatabase(): void {
+    this.db.run("PRAGMA journal_mode = WAL");
+    // Wait for a concurrent writer (daemon, another TUI) instead of failing with SQLITE_BUSY
+    this.db.run("PRAGMA busy_timeout = 5000");
+    this.db.run(`CREATE TABLE IF NOT EXISTS usage_snapshots (${UsageStore.SNAPSHOT_COLUMNS})`);
+    this.dropLegacyServiceCheck();
     this.db.run(
       `CREATE INDEX IF NOT EXISTS idx_snapshots_service_metric_ts ON usage_snapshots (service, metric_name, timestamp)`,
     );
@@ -97,6 +103,32 @@ export class UsageStore {
         updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
     `);
+  }
+
+  /**
+   * Databases created before Grok support carry `CHECK (service IN ('claude', 'codex'))`,
+   * which rejects new services. SQLite cannot drop a constraint in place, so rebuild
+   * the table (same columns, rows and ids) once.
+   */
+  private dropLegacyServiceCheck(): void {
+    const hasLegacyCheck = () => {
+      const row = this.db
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'usage_snapshots'")
+        .get() as { sql: string } | null;
+      return row !== null && /CHECK\s*\(\s*service\s+IN/i.test(row.sql);
+    };
+    if (!hasLegacyCheck()) return;
+
+    // IMMEDIATE takes the write lock up front; re-check inside it in case another process just migrated
+    this.db
+      .transaction(() => {
+        if (!hasLegacyCheck()) return;
+        this.db.run(`CREATE TABLE usage_snapshots_new (${UsageStore.SNAPSHOT_COLUMNS})`);
+        this.db.run("INSERT INTO usage_snapshots_new SELECT * FROM usage_snapshots");
+        this.db.run("DROP TABLE usage_snapshots");
+        this.db.run("ALTER TABLE usage_snapshots_new RENAME TO usage_snapshots");
+      })
+      .immediate();
   }
 
   storeSnapshot(service: ServiceName, metrics: MetricsDict, source: string, collectionId?: string): void {

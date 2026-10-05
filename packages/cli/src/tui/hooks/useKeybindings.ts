@@ -1,7 +1,22 @@
 /**
  * Keyboard event handler hook for panel-based navigation.
  */
+import type { ServiceName } from "lazyusage-core";
 import type { ActivePanel } from "./useViewMode.js";
+
+/** Number keys that focus each service's bars and stats panels (also shown as panel numbers). */
+export const PANEL_KEYS: Record<ServiceName, { bars: string; stats: string }> = {
+  claude: { bars: "1", stats: "3" },
+  codex: { bars: "2", stats: "4" },
+  grok: { bars: "5", stats: "6" },
+};
+
+const BARS_KEY_TO_SERVICE = new Map(
+  (Object.entries(PANEL_KEYS) as Array<[ServiceName, { bars: string; stats: string }]>).map(([s, k]) => [k.bars, s]),
+);
+const STATS_KEY_TO_SERVICE = new Map(
+  (Object.entries(PANEL_KEYS) as Array<[ServiceName, { bars: string; stats: string }]>).map(([s, k]) => [k.stats, s]),
+);
 
 export interface KeybindingHandlers {
   setActivePanel: (panel: ActivePanel) => void;
@@ -39,21 +54,19 @@ export function createKeybindingHandler(handlers: KeybindingHandlers) {
       return;
     }
 
-    switch (key) {
-      // Panel focus
-      case "1":
-        handlers.setActivePanel("claude");
-        break;
-      case "2":
-        handlers.setActivePanel("codex");
-        break;
-      case "3":
-        handlers.focusStatsPanel("claude");
-        break;
-      case "4":
-        handlers.focusStatsPanel("codex");
-        break;
+    // Panel focus
+    const barsService = BARS_KEY_TO_SERVICE.get(key);
+    if (barsService) {
+      handlers.setActivePanel(barsService);
+      return;
+    }
+    const statsService = STATS_KEY_TO_SERVICE.get(key);
+    if (statsService) {
+      handlers.focusStatsPanel(statsService);
+      return;
+    }
 
+    switch (key) {
       // Metric navigation
       case "j":
       case "down":

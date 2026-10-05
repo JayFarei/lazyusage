@@ -1,5 +1,5 @@
 /**
- * Credential discovery for Claude and Codex APIs.
+ * Credential discovery for Claude, Codex and Grok APIs.
  * Port of src/providers/credentials.py
  */
 
@@ -7,7 +7,7 @@ import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { API_TIMEOUT_MS } from "../constants.js";
-import type { ClaudeCredentials, CodexCredentials } from "../types.js";
+import type { ClaudeCredentials, CodexCredentials, GrokCredentials } from "../types.js";
 
 /**
  * Circuit breaker for OAuth token refresh.
@@ -445,6 +445,114 @@ export class CodexCredentialStore {
       this._credentials = creds;
       this._lastDiskReadAt = Date.now();
       return creds;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Grok Build state directory: `$GROK_HOME`, defaulting to `~/.grok` (same rule as the grok CLI). */
+export function grokHome(): string {
+  return process.env.GROK_HOME || join(homedir(), ".grok");
+}
+
+/**
+ * Manages Grok Build credentials from `$GROK_HOME/auth.json`.
+ *
+ * The grok CLI refreshes its OIDC access token (~6h lifetime) in the background
+ * and rewrites auth.json, so "refresh" here is a disk re-read, as for Codex.
+ * We never write auth.json: grok guards it with its own lock file and rotates
+ * the refresh token, so a concurrent write could sign the user out.
+ */
+export class GrokCredentialStore {
+  private static readonly DISK_READ_TTL_MS = 60_000;
+
+  private readonly _home: string;
+  private _credentials: GrokCredentials | null = null;
+  private _subscription: string | null = null;
+  private _lastDiskReadAt = 0;
+
+  constructor(home?: string) {
+    this._home = home ?? grokHome();
+  }
+
+  get credentialsFile(): string {
+    return join(this._home, "auth.json");
+  }
+
+  getCredentials(): GrokCredentials | null {
+    if (this._credentials !== null && Date.now() - this._lastDiskReadAt < GrokCredentialStore.DISK_READ_TTL_MS) {
+      return this._credentials;
+    }
+    return this._readFromDisk();
+  }
+
+  /** Display name of the plan (e.g. "X Premium") from grok's settings cache, or null. */
+  getSubscription(): string | null {
+    this.getCredentials();
+    return this._subscription;
+  }
+
+  /** A disk re-read can pick up a token grok refreshed, as long as auth.json exists. */
+  canRefresh(): boolean {
+    return existsSync(this.credentialsFile);
+  }
+
+  async tryRefreshToken(): Promise<boolean> {
+    this._credentials = null;
+    const creds = this._readFromDisk();
+    return creds !== null && this._isUsable(creds);
+  }
+
+  isAvailable(): boolean {
+    const creds = this.getCredentials();
+    return creds !== null && this._isUsable(creds);
+  }
+
+  private _isUsable(creds: GrokCredentials): boolean {
+    if (!creds.accessToken) return false;
+    return creds.expiresAt === 0 || creds.expiresAt > Date.now();
+  }
+
+  private _readFromDisk(): GrokCredentials | null {
+    try {
+      if (!existsSync(this.credentialsFile)) return null;
+
+      // auth.json maps "<issuer>::<client_id>" to an OIDC session; prefer the one that expires last.
+      const data = JSON.parse(readFileSync(this.credentialsFile, "utf-8")) as Record<string, unknown>;
+      let creds: GrokCredentials | null = null;
+      for (const entry of Object.values(data)) {
+        if (entry === null || typeof entry !== "object") continue;
+        const record = entry as Record<string, unknown>;
+        if (typeof record.key !== "string" || record.key.length === 0) continue;
+        const parsed = typeof record.expires_at === "string" ? Date.parse(record.expires_at) : Number.NaN;
+        // Unknown expiry (0) is treated as non-expiring, so it ranks above any timestamp
+        const expiresAt = Number.isFinite(parsed) ? parsed : 0;
+        const rank = (c: GrokCredentials) => (c.expiresAt === 0 ? Number.POSITIVE_INFINITY : c.expiresAt);
+        const candidate = { accessToken: record.key, expiresAt };
+        if (creds === null || rank(candidate) > rank(creds)) creds = candidate;
+      }
+
+      this._credentials = creds;
+      this._subscription = this._readSubscription();
+      this._lastDiskReadAt = Date.now();
+      return creds;
+    } catch {
+      return null;
+    }
+  }
+
+  /** settings_cache.json wraps the server settings as a JSON string in `payload`. */
+  private _readSubscription(): string | null {
+    try {
+      const file = join(this._home, "settings_cache.json");
+      if (!existsSync(file)) return null;
+      const cache = JSON.parse(readFileSync(file, "utf-8")) as { payload?: unknown };
+      const payload = (typeof cache.payload === "string" ? JSON.parse(cache.payload) : cache.payload) as {
+        settings?: { subscription_tier_display?: unknown };
+      } | null;
+      const display = payload?.settings?.subscription_tier_display;
+      return typeof display === "string" && display.length > 0 ? display : null;
     } catch {
       return null;
     }

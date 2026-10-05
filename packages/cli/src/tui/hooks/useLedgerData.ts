@@ -2,41 +2,33 @@
  * Hook for loading per-project usage ledger data.
  * Replaces useCcusageData.ts.
  *
- * Spawns a single ledger-worker subprocess that parses JSONL files
- * from ~/.claude/projects/ and ~/.codex/sessions/ directly.
+ * Spawns a single ledger-worker subprocess that parses session files
+ * from ~/.claude/projects/, ~/.codex/sessions/ and ~/.grok/sessions/ directly.
  *
  * 30s throttled refresh, independent of rate-limit polling.
  */
 
 import { existsSync } from "node:fs";
+import type { ServiceName } from "lazyusage-core";
 import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { type Accessor, createSignal } from "solid-js";
 
+export interface ServiceLedger {
+  daily: ProjectUsage[];
+  weekly: ProjectUsage[];
+  monthly: ProjectUsage[];
+}
+
 export interface LedgerHook {
-  claudeDaily: Accessor<ProjectUsage[] | null>;
-  claudeWeekly: Accessor<ProjectUsage[] | null>;
-  claudeMonthly: Accessor<ProjectUsage[] | null>;
-  codexDaily: Accessor<ProjectUsage[] | null>;
-  codexWeekly: Accessor<ProjectUsage[] | null>;
-  codexMonthly: Accessor<ProjectUsage[] | null>;
+  /** Ledger for a service, or null before the first load (or when the worker omitted it) */
+  ledgerFor: (service: ServiceName) => ServiceLedger | null;
   loading: Accessor<boolean>;
   error: Accessor<string | null>;
   refresh: (force?: boolean) => Promise<void>;
   killAll: () => void;
 }
 
-interface LedgerResult {
-  claude: {
-    daily: ProjectUsage[];
-    weekly: ProjectUsage[];
-    monthly: ProjectUsage[];
-  };
-  codex: {
-    daily: ProjectUsage[];
-    weekly: ProjectUsage[];
-    monthly: ProjectUsage[];
-  };
-}
+type LedgerResult = Partial<Record<ServiceName, ServiceLedger>>;
 
 const THROTTLE_MS = 30_000;
 const WORKER_TIMEOUT_MS = 60_000;
@@ -51,12 +43,7 @@ const WORKER_PATH = existsSync(_workerJs) ? _workerJs : _workerTs;
 const activeProcs = new Set<{ kill(): void }>();
 
 export function useLedgerData(): LedgerHook {
-  const [claudeDaily, setClaudeDaily] = createSignal<ProjectUsage[] | null>(null);
-  const [claudeWeekly, setClaudeWeekly] = createSignal<ProjectUsage[] | null>(null);
-  const [claudeMonthly, setClaudeMonthly] = createSignal<ProjectUsage[] | null>(null);
-  const [codexDaily, setCodexDaily] = createSignal<ProjectUsage[] | null>(null);
-  const [codexWeekly, setCodexWeekly] = createSignal<ProjectUsage[] | null>(null);
-  const [codexMonthly, setCodexMonthly] = createSignal<ProjectUsage[] | null>(null);
+  const [ledgers, setLedgers] = createSignal<LedgerResult>({});
 
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -100,14 +87,7 @@ export function useLedgerData(): LedgerHook {
         return;
       }
 
-      const data = JSON.parse(trimmed) as LedgerResult;
-
-      setClaudeDaily(data.claude.daily);
-      setClaudeWeekly(data.claude.weekly);
-      setClaudeMonthly(data.claude.monthly);
-      setCodexDaily(data.codex.daily);
-      setCodexWeekly(data.codex.weekly);
-      setCodexMonthly(data.codex.monthly);
+      setLedgers(JSON.parse(trimmed) as LedgerResult);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -125,12 +105,7 @@ export function useLedgerData(): LedgerHook {
   }
 
   return {
-    claudeDaily,
-    claudeWeekly,
-    claudeMonthly,
-    codexDaily,
-    codexWeekly,
-    codexMonthly,
+    ledgerFor: (service) => ledgers()[service] ?? null,
     loading,
     error,
     refresh,

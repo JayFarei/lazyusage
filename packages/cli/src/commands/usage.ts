@@ -9,50 +9,41 @@ import {
   computeDailyDeltas,
   ExitCode,
   formatCapacityWithAvailability,
-  formatClaudeCapacityText,
-  formatClaudeText,
-  formatCodexCapacityText,
-  formatCodexText,
   formatCombinedCapacityJson,
   formatCombinedJson,
   formatPredictionText,
-  formatWithAvailability,
+  formatServiceCapacityText,
   type LogLevel,
-  type MetricsDict,
   predict,
+  SERVICES,
+  type ServiceMetricsMap,
   type ServiceName,
   setLogLevel,
   sweepStaleUsageSessions,
   UsageStore,
   WEEKLY_WINDOW_HOURS,
 } from "lazyusage-core";
-import { collectMetrics, detectAvailableServices, validateService } from "./usage-check.js";
+import { collectMetrics, detectAvailableServices, formatTextOutput, validateService } from "./usage-check.js";
 
 /** Run predictions and return camelCase CapacityPrediction objects keyed by service → metric. */
 function runPredictionsRaw(
-  services: string[],
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
+  services: ServiceName[],
+  metricsByService: ServiceMetricsMap,
 ): Record<string, Record<string, CapacityPrediction>> {
   const store = new UsageStore();
   const predictions: Record<string, Record<string, CapacityPrediction>> = {};
 
   try {
-    const metricMap: Record<string, { metrics: MetricsDict | null; keys: string[] }> = {
-      claude: { metrics: claudeMetrics, keys: ["week_all", "week_sonnet"] },
-      codex: { metrics: codexMetrics, keys: ["weekly"] },
-    };
-
     for (const svc of services) {
-      const info = metricMap[svc];
-      if (!info?.metrics) continue;
+      const metrics = metricsByService[svc];
+      if (!metrics) continue;
 
       const svcPredictions: Record<string, CapacityPrediction> = {};
-      for (const metricName of info.keys) {
-        const metricData = info.metrics[metricName];
+      for (const metricName of SERVICES[svc].predictableMetrics) {
+        const metricData = metrics[metricName];
         if (!metricData || typeof metricData !== "object" || !("used_pct" in metricData)) continue;
 
-        const boundaries = store.getDailyBoundaries(svc as ServiceName, metricName, 30);
+        const boundaries = store.getDailyBoundaries(svc, metricName, 30);
         const deltas = computeDailyDeltas(boundaries);
 
         const lastBoundary = boundaries[boundaries.length - 1];
@@ -147,7 +138,7 @@ Modes:
 
 export const usageCommand = new Command("usage")
   .description("Interactive TUI or continuous monitoring")
-  .argument("[service]", "Service to monitor: claude, codex, or all")
+  .argument("[service]", "Service to monitor: claude, codex, grok, or all")
   .option("--live", "Enable continuous NDJSON stream (use with --json)")
   .option("--json", "JSON output instead of TUI")
   .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
@@ -169,7 +160,7 @@ export const usageCommand = new Command("usage")
       let output = "";
       if (usage) output += `Usage: ${usage}\n\n`;
       if (description) output += `${description}\n\n`;
-      output += `Arguments:\n  service              Service to monitor: claude, codex, or all\n`;
+      output += `Arguments:\n  service              Service to monitor: claude, codex, grok, or all\n`;
       output += GROUPED_HELP;
       return output;
     },
@@ -216,13 +207,13 @@ export const usageCommand = new Command("usage")
 
           // --json-only with --capacity
           if (opts.capacity) {
-            const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-            console.log(formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+            const { metrics, sources, serviceInfo } = await collectMetrics(services, debug);
+            console.log(formatCombinedCapacityJson(metrics, available, sources, serviceInfo));
             return;
           }
 
-          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-          console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo));
+          const { metrics, sources, serviceInfo } = await collectMetrics(services, debug);
+          console.log(formatCombinedJson(metrics, available, sources, serviceInfo));
         } catch (e) {
           console.error = origError;
           console.log(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -285,8 +276,8 @@ export const usageCommand = new Command("usage")
 
         while (!abortController.signal.aborted) {
           const loopStart = performance.now();
-          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
-          const output = formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          const { metrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+          const output = formatCombinedCapacityJson(metrics, available, sources, serviceInfo);
           console.log(JSON.stringify(JSON.parse(output)));
           const elapsed = (performance.now() - loopStart) / 1000;
           await Bun.sleep(Math.max(0, refresh - elapsed) * 1000);
@@ -296,36 +287,27 @@ export const usageCommand = new Command("usage")
 
       // --capacity --json: capacity JSON snapshot
       if (opts.capacity && useJson) {
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-        const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+        const { metrics, sources, serviceInfo } = await collectMetrics(services, debug);
+        const rawPreds = opts.predict ? runPredictionsRaw(services, metrics) : undefined;
         const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
-        console.log(
-          formatCombinedCapacityJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions),
-        );
+        console.log(formatCombinedCapacityJson(metrics, available, sources, serviceInfo, predictions));
         return;
       }
 
       // --capacity (with or without --text): capacity text - most compact agent output
       if (opts.capacity) {
-        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+        const { metrics } = await collectMetrics(services, debug);
 
-        let output: string;
-        if (services.length === 1) {
-          if (services.includes("claude") && claudeMetrics) {
-            output = formatClaudeCapacityText(claudeMetrics);
-          } else if (codexMetrics) {
-            output = formatCodexCapacityText(codexMetrics);
-          } else {
-            output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
-          }
-        } else {
-          output = formatCapacityWithAvailability(claudeMetrics, codexMetrics, available);
-        }
-
-        console.log(output);
+        const single = services.length === 1 ? services[0] : undefined;
+        const singleMetrics = single ? metrics[single] : null;
+        console.log(
+          single && singleMetrics
+            ? formatServiceCapacityText(single, singleMetrics)
+            : formatCapacityWithAvailability(metrics, available),
+        );
 
         if (opts.predict) {
-          const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+          const rawPreds = runPredictionsRaw(services, metrics);
           for (const [, preds] of Object.entries(rawPreds)) {
             for (const [, pred] of Object.entries(preds)) {
               console.log(formatPredictionText(pred));
@@ -342,8 +324,8 @@ export const usageCommand = new Command("usage")
 
       // --predict standalone: text prediction output
       if (opts.predict && !useJson && !opts.capacity && !opts.text) {
-        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
-        const rawPreds = runPredictionsRaw(services, claudeMetrics, codexMetrics);
+        const { metrics } = await collectMetrics(services, debug);
+        const rawPreds = runPredictionsRaw(services, metrics);
 
         const lines: string[] = [];
         for (const [svc, preds] of Object.entries(rawPreds)) {
@@ -361,22 +343,9 @@ export const usageCommand = new Command("usage")
 
       if (opts.text) {
         // Single text snapshot
-        const { claudeMetrics, codexMetrics } = await collectMetrics(services, debug);
+        const { metrics } = await collectMetrics(services, debug);
 
-        let output: string;
-        if (services.length === 1) {
-          if (services.includes("claude") && claudeMetrics) {
-            output = formatClaudeText(claudeMetrics);
-          } else if (codexMetrics) {
-            output = formatCodexText(codexMetrics);
-          } else {
-            output = formatWithAvailability(claudeMetrics, codexMetrics, available);
-          }
-        } else {
-          output = formatWithAvailability(claudeMetrics, codexMetrics, available);
-        }
-
-        console.log(output);
+        console.log(formatTextOutput(services, metrics, available));
 
         if (debug) {
           const elapsed = (performance.now() - startTime) / 1000;
@@ -387,10 +356,10 @@ export const usageCommand = new Command("usage")
 
       if (useJson && !opts.live) {
         // Single JSON snapshot
-        const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug);
-        const rawPreds = opts.predict ? runPredictionsRaw(services, claudeMetrics, codexMetrics) : undefined;
+        const { metrics, sources, serviceInfo } = await collectMetrics(services, debug);
+        const rawPreds = opts.predict ? runPredictionsRaw(services, metrics) : undefined;
         const predictions = rawPreds ? predictionsToJson(rawPreds) : undefined;
-        console.log(formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo, predictions));
+        console.log(formatCombinedJson(metrics, available, sources, serviceInfo, predictions));
         return;
       }
 
@@ -401,8 +370,8 @@ export const usageCommand = new Command("usage")
 
         while (!abortController.signal.aborted) {
           const loopStart = performance.now();
-          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
-          const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          const { metrics, sources, serviceInfo } = await collectMetrics(services, debug, false);
+          const output = formatCombinedJson(metrics, available, sources, serviceInfo);
           // NDJSON: compact single-line JSON objects
           console.log(JSON.stringify(JSON.parse(output)));
           const elapsed = (performance.now() - loopStart) / 1000;
@@ -414,8 +383,7 @@ export const usageCommand = new Command("usage")
       // Launch TUI (default)
       const { render } = await import("@opentui/solid");
       const { App } = await import("../tui/App.js");
-      // Pass validated service filter to TUI
-      const tuiService = (services.length === 1 ? services[0] : "all") as "claude" | "codex" | "all";
-      render(() => App({ service: tuiService }), { useMouse: true });
+      // Show only the validated (installed or requested) services
+      render(() => App({ services }), { useMouse: true });
     },
   );

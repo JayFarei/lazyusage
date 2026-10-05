@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ServiceName } from "../types.js";
+import { isServiceName, type ServiceName } from "../services.js";
 
 export type DaemonLogLevel = "error" | "warn" | "info" | "debug";
 
@@ -21,6 +21,9 @@ export interface DaemonConfigOverrides {
   ptyRecycleHours?: number;
 }
 
+/** Services collected when the config names none. Grok is opt-in (services = ["claude", "codex", "grok"]). */
+export const DEFAULT_DAEMON_SERVICES: readonly ServiceName[] = ["claude", "codex"];
+
 export const DEFAULT_DAEMON_CONFIG_PATH = join(homedir(), ".config", "lazyusage", "daemon.toml");
 
 interface ParsedDaemonConfigFile {
@@ -30,10 +33,6 @@ interface ParsedDaemonConfigFile {
   pty?: {
     recycle_hours?: unknown;
   };
-}
-
-function isServiceName(value: unknown): value is ServiceName {
-  return value === "claude" || value === "codex";
 }
 
 function parseServices(value: unknown): ServiceName[] | undefined {
@@ -65,7 +64,7 @@ export function loadDaemonConfig(overrides: DaemonConfigOverrides = {}): DaemonC
 
   return {
     interval: overrides.interval ?? interval ?? 60,
-    services: overrides.services ?? services ?? ["claude", "codex"],
+    services: overrides.services ?? services ?? [...DEFAULT_DAEMON_SERVICES],
     logLevel: overrides.logLevel ?? logLevel ?? "info",
     ptyRecycleHours: overrides.ptyRecycleHours ?? ptyRecycleHours ?? 4,
     configPath,

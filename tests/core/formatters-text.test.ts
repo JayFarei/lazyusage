@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatCapacityWithAvailability,
   formatClaudeText,
   formatCodexCapacityText,
   formatCodexText,
+  formatGrokCapacityText,
+  formatGrokText,
   formatWithAvailability,
   type MetricsDict,
 } from "lazyusage-core";
@@ -123,9 +126,23 @@ describe("formatCodexText", () => {
 
 describe("formatWithAvailability", () => {
   test("shows not available when service missing", () => {
-    const result = formatWithAvailability(null, null, []);
+    const result = formatWithAvailability({}, []);
     expect(result).toContain("Claude: [not available]");
     expect(result).toContain("Codex: [not available]");
+  });
+
+  test("output for users without grok is unchanged (no Grok line)", () => {
+    expect(formatWithAvailability({}, ["claude", "codex"]).split("\n")).toEqual([
+      "Claude: [not available]",
+      "Codex: [not available]",
+    ]);
+    expect(formatCapacityWithAvailability({}, ["claude", "codex"])).not.toContain("Grok");
+  });
+
+  test("lists grok when installed or collected", () => {
+    expect(formatWithAvailability({}, ["grok"])).toContain("Grok: [not available]");
+    const grok: MetricsDict = { weekly: { used_pct: 10, remaining_pct: 90, resets: "Oct 12 at 4:00am" } };
+    expect(formatWithAvailability({ grok }, ["grok"])).toContain("Grok: Weekly: 10% allowance used");
   });
 
   test("shows metrics for available services", () => {
@@ -135,8 +152,30 @@ describe("formatWithAvailability", () => {
       week_all: { used_pct: 15, remaining_pct: 85, resets: "Feb 9 at 8:19pm" },
       week_sonnet: { used_pct: 10, remaining_pct: 90, resets: "Feb 9 at 8:19pm" },
     };
-    const result = formatWithAvailability(claudeMetrics, null, ["claude"]);
+    const result = formatWithAvailability({ claude: claudeMetrics }, ["claude"]);
     expect(result).toContain("Claude: Session: 25% allowance used");
     expect(result).toContain("Codex: [not available]");
+  });
+});
+
+describe("formatGrokText", () => {
+  const metrics: MetricsDict = {
+    subscription_type: "X Premium",
+    weekly: { used_pct: 10, remaining_pct: 90, resets: "Oct 12 at 4:00am" },
+  };
+
+  test("renders the single weekly pool with subscription", () => {
+    const result = formatGrokText(metrics);
+    expect(result.startsWith("Weekly: 10% allowance used")).toBe(true);
+    expect(result).not.toContain("Session:");
+    expect(result).toContain("[Subscription: X Premium]");
+  });
+
+  test("capacity output has only the weekly delta", () => {
+    expect(formatGrokCapacityText(metrics)).toMatch(/^Weekly: [+-]?\d+% \[Subscription: X Premium\]$/);
+  });
+
+  test("labels grok in the multi-service listing", () => {
+    expect(formatWithAvailability({ grok: metrics }, ["grok"])).toContain("Grok: Weekly: 10% allowance used");
   });
 });

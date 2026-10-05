@@ -1,13 +1,10 @@
 import { readFileSync } from "node:fs";
-import { DEFAULT_DAEMON_PID_PATH, type MetricsDict, type ServiceName, UsageStore } from "lazyusage-core";
+import { DEFAULT_DAEMON_PID_PATH, type MetricsDict, SERVICE_NAMES, type ServiceName, UsageStore } from "lazyusage-core";
 import { type Accessor, createSignal } from "solid-js";
 
 type DaemonDetectionStore = Pick<UsageStore, "isDaemonHeartbeatFresh" | "getLatestSnapshot" | "close">;
 
-interface DaemonBackedServices {
-  claude: boolean;
-  codex: boolean;
-}
+type DaemonBackedServices = Record<ServiceName, boolean>;
 
 export interface DaemonDetectionHook {
   daemonHealthy: Accessor<boolean>;
@@ -29,10 +26,7 @@ function parsePid(pidContents: string): number | null {
 }
 
 function createInactiveServices(): DaemonBackedServices {
-  return {
-    claude: false,
-    codex: false,
-  };
+  return Object.fromEntries(SERVICE_NAMES.map((service) => [service, false])) as DaemonBackedServices;
 }
 
 export function useDaemonDetection(options: DaemonDetectionOptions = {}): DaemonDetectionHook {
@@ -81,7 +75,7 @@ export function useDaemonDetection(options: DaemonDetectionOptions = {}): Daemon
       const nextBackedServices = createInactiveServices();
       const nextMetrics: Partial<Record<ServiceName, MetricsDict>> = {};
 
-      for (const service of ["claude", "codex"] satisfies ServiceName[]) {
+      for (const service of SERVICE_NAMES) {
         if (!store.isDaemonHeartbeatFresh(service)) {
           continue;
         }
@@ -97,7 +91,7 @@ export function useDaemonDetection(options: DaemonDetectionOptions = {}): Daemon
 
       setDaemonBackedServices(nextBackedServices);
       setDaemonMetrics(nextMetrics);
-      setDaemonHealthy(nextBackedServices.claude || nextBackedServices.codex);
+      setDaemonHealthy(SERVICE_NAMES.some((service) => nextBackedServices[service]));
     } finally {
       store.close();
     }

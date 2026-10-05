@@ -3,51 +3,45 @@
  * Provides REST + SSE endpoints for upstream dashboard integration.
  */
 import {
-  createClaudeChain,
-  createCodexChain,
+  createChain,
   type FallbackChain,
   formatCombinedJson,
+  isServiceName,
   type MetricsDict,
+  type ServiceMetricsMap,
   type ServiceName,
   type ServiceResourceInfo,
 } from "lazyusage-core";
 
-async function collectMetrics(servicesToQuery: string[]): Promise<{
-  claudeMetrics: MetricsDict | null;
-  codexMetrics: MetricsDict | null;
+async function collectMetrics(servicesToQuery: ServiceName[]): Promise<{
+  metrics: ServiceMetricsMap;
   serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>>;
 }> {
-  let claudeMetrics: MetricsDict | null = null;
-  let codexMetrics: MetricsDict | null = null;
+  const metrics: ServiceMetricsMap = {};
   const serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>> = {};
 
-  if (servicesToQuery.includes("claude")) {
-    const chain = createClaudeChain(false) as FallbackChain;
+  for (const service of servicesToQuery) {
+    const chain = createChain(service, false) as FallbackChain;
     const result = await chain.fetch();
-    claudeMetrics = result.metrics as MetricsDict | null;
-    serviceInfo.claude = {
+    metrics[service] = result.metrics as MetricsDict | null;
+    serviceInfo[service] = {
       source: result.source,
       stale: result.stale,
       error: result.error,
     };
   }
 
-  if (servicesToQuery.includes("codex")) {
-    const chain = createCodexChain(false) as FallbackChain;
-    const result = await chain.fetch();
-    codexMetrics = result.metrics as MetricsDict | null;
-    serviceInfo.codex = {
-      source: result.source,
-      stale: result.stale,
-      error: result.error,
-    };
-  }
+  return { metrics, serviceInfo };
+}
 
-  return { claudeMetrics, codexMetrics, serviceInfo };
+/** `/claude` -> "claude" when that is a known service, else null */
+function serviceFromPath(path: string, prefix: string): ServiceName | null {
+  const name = path.startsWith(prefix) ? path.slice(prefix.length) : "";
+  return isServiceName(name) ? name : null;
 }
 
 export function startServer(options: {
-  services: string[];
+  services: ServiceName[];
   port: number;
   host?: string;
   refreshInterval: number;
@@ -96,7 +90,8 @@ export function startServer(options: {
 
       // SSE streaming endpoints
       if (path.startsWith("/stream")) {
-        const streamService = path === "/stream/claude" ? ["claude"] : path === "/stream/codex" ? ["codex"] : services;
+        const streamTarget = serviceFromPath(path, "/stream/");
+        const streamService = streamTarget ? [streamTarget] : services;
 
         const stream = new ReadableStream({
           async start(controller) {
@@ -112,8 +107,8 @@ export function startServer(options: {
             controller.enqueue(encoder.encode(": connected\n\n"));
 
             // Send initial data
-            const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(streamService);
-            send(formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo));
+            const { metrics, serviceInfo } = await collectMetrics(streamService);
+            send(formatCombinedJson(metrics, services, undefined, serviceInfo));
 
             // Keepalive: send an SSE comment every 5s so Bun doesn't consider
             // the connection idle between data refreshes
@@ -124,8 +119,8 @@ export function startServer(options: {
             // Set up periodic refresh
             const interval = setInterval(async () => {
               try {
-                const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(streamService);
-                send(formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo));
+                const { metrics, serviceInfo } = await collectMetrics(streamService);
+                send(formatCombinedJson(metrics, services, undefined, serviceInfo));
               } catch {
                 // Skip failed refreshes
               }
@@ -152,10 +147,9 @@ export function startServer(options: {
 
       // Determine services to query based on path
       let servicesToQuery = services;
-      if (path === "/claude" && services.includes("claude")) {
-        servicesToQuery = ["claude"];
-      } else if (path === "/codex" && services.includes("codex")) {
-        servicesToQuery = ["codex"];
+      const pathService = serviceFromPath(path, "/");
+      if (pathService && services.includes(pathService)) {
+        servicesToQuery = [pathService];
       } else if (path !== "/" && path !== "/all") {
         return new Response(JSON.stringify({ error: "Not Found" }), {
           status: 404,
@@ -164,8 +158,8 @@ export function startServer(options: {
       }
 
       // Collect and return metrics
-      const { claudeMetrics, codexMetrics, serviceInfo } = await collectMetrics(servicesToQuery);
-      const output = formatCombinedJson(claudeMetrics, codexMetrics, services, undefined, serviceInfo);
+      const { metrics, serviceInfo } = await collectMetrics(servicesToQuery);
+      const output = formatCombinedJson(metrics, services, undefined, serviceInfo);
       return new Response(output, { headers: corsHeaders });
     },
   });

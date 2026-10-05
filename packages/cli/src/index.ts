@@ -12,7 +12,7 @@ import { usageCheckCommand } from "./commands/usage-check.js";
 
 const program = new Command();
 
-program.name("lazyusage").description("Usage monitoring for Claude and Codex CLI").version(pkg.version);
+program.name("lazyusage").description("Usage monitoring for Claude, Codex and Grok CLIs").version(pkg.version);
 
 program.addCommand(usageCheckCommand);
 program.addCommand(usageCommand);

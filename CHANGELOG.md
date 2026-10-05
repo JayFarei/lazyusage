@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-05
+
+### Added
+- Grok Build CLI support (#11): weekly allowance from the Grok billing API (token read from `$GROK_HOME/auth.json`, never written), plan name from the settings cache, and a per-project token ledger from `sessions/*/*/usage.json`. Available in the TUI (third row, keys `5`/`6`, `lazyusage grok`), `--text`, `--capacity`, `--json`, `--live`, the HTTP server (`/grok`, `/stream/grok`) and the daemon (opt-in via `services`). Grok API calls are spaced at least 60s apart and back off on 429.
+- Service registry (`SERVICES` in `lazyusage-core`) that formatters, storage, daemon, server and TUI iterate, so a new service is one entry plus a provider chain and ledger parser.
+
+### Changed
+- Text and JSON output list Grok only when it is installed or has data; output for Claude/Codex-only users is unchanged.
+- TUI rows fit their metrics to the available height, so three services render cleanly at 80x24.
+- The snapshot database drops the old `service IN ('claude','codex')` CHECK on first open (automatic, keeps existing rows, waits for concurrent writers).
+
+### Fixed
+- The "data unavailable, run `<login command>`" warning now fires when every provider fails; it previously never matched the chain's fallback error.
+
 ## [0.2.6] - 2026-09-18
 
 ### Fixed

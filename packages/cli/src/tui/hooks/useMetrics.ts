@@ -7,20 +7,22 @@ import { detectLimitAdjustment, detectWarning } from "lazyusage-core";
 import { createSignal } from "solid-js";
 
 export function useMetrics() {
-  const [claudeMetrics, setClaudeMetrics] = createSignal<MetricsDict | null>(null);
-  const [codexMetrics, setCodexMetrics] = createSignal<MetricsDict | null>(null);
-  const [claudeError, setClaudeError] = createSignal<string | null>(null);
-  const [codexError, setCodexError] = createSignal<string | null>(null);
+  const [metricsByService, setMetricsByService] = createSignal<Partial<Record<ServiceName, MetricsDict | null>>>({});
+  const [errorsByService, setErrorsByService] = createSignal<Partial<Record<ServiceName, string | null>>>({});
   const [dataSources, setDataSources] = createSignal<Record<string, string>>({});
   const [warnings, setWarnings] = createSignal<ServiceWarning[]>([]);
 
   /** Previous metrics per service, used to detect limit adjustments */
-  const prevMetrics: Record<string, MetricsDict> = {};
+  const prevMetrics: Partial<Record<ServiceName, MetricsDict>> = {};
+
+  const metricsFor = (service: ServiceName): MetricsDict | null => metricsByService()[service] ?? null;
+  const errorFor = (service: ServiceName): string | null => errorsByService()[service] ?? null;
 
   function updateMetrics(service: ServiceName, metrics: MetricsDict | null, error: string | null, source: string) {
     // Detect limit adjustments before updating state
-    if (metrics && prevMetrics[service]) {
-      const adjustments = detectLimitAdjustment(service, prevMetrics[service], metrics);
+    const previous = prevMetrics[service];
+    if (metrics && previous) {
+      const adjustments = detectLimitAdjustment(service, previous, metrics);
       if (adjustments.length > 0) {
         setWarnings((prev) => {
           const filtered = prev.filter((w) => !(w.service === service && w.message.includes("limit adjusted")));
@@ -30,23 +32,8 @@ export function useMetrics() {
     }
     if (metrics) prevMetrics[service] = metrics;
 
-    if (service === "claude") {
-      if (error) {
-        setClaudeError(error);
-        setClaudeMetrics(null);
-      } else {
-        setClaudeError(null);
-        setClaudeMetrics(metrics);
-      }
-    } else {
-      if (error) {
-        setCodexError(error);
-        setCodexMetrics(null);
-      } else {
-        setCodexError(null);
-        setCodexMetrics(metrics);
-      }
-    }
+    setErrorsByService((prev) => ({ ...prev, [service]: error }));
+    setMetricsByService((prev) => ({ ...prev, [service]: error ? null : metrics }));
     setDataSources((prev) => ({ ...prev, [service]: source }));
   }
 
@@ -60,10 +47,8 @@ export function useMetrics() {
   }
 
   return {
-    claudeMetrics,
-    codexMetrics,
-    claudeError,
-    codexError,
+    metricsFor,
+    errorFor,
     dataSources,
     warnings,
     updateMetrics,

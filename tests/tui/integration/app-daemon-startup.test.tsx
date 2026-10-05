@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { DataSource, type PersistentFallbackChain } from "lazyusage-core";
+import { DataSource, type PersistentFallbackChain, type ServiceName } from "lazyusage-core";
 import { App } from "../../../packages/cli/src/tui/App.js";
 import {
   createMockGraphStore,
@@ -10,6 +10,16 @@ import {
 } from "../helpers.js";
 
 type AppChain = Pick<PersistentFallbackChain, "start" | "refresh" | "stop">;
+type ChainFactory = (persistent: boolean) => AppChain;
+
+/** Route App's createChain(service, persistent) to per-service factories; unknown services fail loudly. */
+function routeChains(factories: Partial<Record<ServiceName, ChainFactory>>) {
+  return (service: ServiceName, persistent: boolean): AppChain => {
+    const factory = factories[service];
+    if (!factory) throw new Error(`Unexpected chain for ${service}`);
+    return factory(persistent);
+  };
+}
 
 function createThrowingChainFactory(message: string) {
   const spy = mock((_persistent: boolean): never => {
@@ -41,6 +51,7 @@ describe("App daemon startup", () => {
               daemonBackedServices: () => ({
                 claude: true,
                 codex: false,
+                grok: false,
               }),
               daemonMetrics: () => ({
                 claude: mockClaudeMetrics(),
@@ -61,15 +72,9 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: claudeChain.factory,
-            createCodexChain: codexChain.factory,
+            createChain: routeChains({ claude: claudeChain.factory, codex: codexChain.factory }),
             createLedgerData: () => ({
-              claudeDaily: () => null,
-              claudeWeekly: () => null,
-              claudeMonthly: () => null,
-              codexDaily: () => null,
-              codexWeekly: () => null,
-              codexMonthly: () => null,
+              ledgerFor: () => null,
               loading: () => false,
               error: () => null,
               refresh: mock(async () => {}),
@@ -84,8 +89,7 @@ describe("App daemon startup", () => {
               startTimer: mock(() => {}),
             }),
             createPrediction: () => ({
-              claudePrediction: () => null,
-              codexPrediction: () => null,
+              predictionFor: () => null,
             }),
             setIntervalFn: (() => 0) as typeof setInterval,
             clearIntervalFn: (() => {}) as typeof clearInterval,
@@ -135,6 +139,7 @@ describe("App daemon startup", () => {
               daemonBackedServices: () => ({
                 claude: true,
                 codex: false,
+                grok: false,
               }),
               daemonMetrics: () => ({
                 claude: mockClaudeMetrics(),
@@ -155,15 +160,9 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: claudeChain.factory,
-            createCodexChain: codexChain.factory,
+            createChain: routeChains({ claude: claudeChain.factory, codex: codexChain.factory }),
             createLedgerData: () => ({
-              claudeDaily: () => null,
-              claudeWeekly: () => null,
-              claudeMonthly: () => null,
-              codexDaily: () => null,
-              codexWeekly: () => null,
-              codexMonthly: () => null,
+              ledgerFor: () => null,
               loading: () => false,
               error: () => null,
               refresh: mock(async () => {}),
@@ -178,8 +177,7 @@ describe("App daemon startup", () => {
               startTimer: mock(() => {}),
             }),
             createPrediction: () => ({
-              claudePrediction: () => null,
-              codexPrediction: () => null,
+              predictionFor: () => null,
             }),
             setIntervalFn: (() => 0) as typeof setInterval,
             clearIntervalFn: (() => {}) as typeof clearInterval,
@@ -237,12 +235,14 @@ describe("App daemon startup", () => {
     const { captureCharFrame, renderOnce, renderer } = await renderComponent(
       () => (
         <App
+          services={["claude", "codex"]}
           deps={{
             createDaemonDetection: () => ({
               daemonHealthy: () => true,
               daemonBackedServices: () => ({
                 claude: true,
                 codex: false,
+                grok: false,
               }),
               daemonMetrics: () => ({
                 claude: mockClaudeMetrics(),
@@ -257,15 +257,12 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: claudeChain.factory,
-            createCodexChain: (persistent: boolean) => createCodexChain(persistent),
+            createChain: routeChains({
+              claude: claudeChain.factory,
+              codex: (persistent: boolean) => createCodexChain(persistent),
+            }),
             createLedgerData: () => ({
-              claudeDaily: () => null,
-              claudeWeekly: () => null,
-              claudeMonthly: () => null,
-              codexDaily: () => null,
-              codexWeekly: () => null,
-              codexMonthly: () => null,
+              ledgerFor: () => null,
               loading: () => false,
               error: () => null,
               refresh: mock(async () => {}),
@@ -280,8 +277,7 @@ describe("App daemon startup", () => {
               startTimer: mock(() => {}),
             }),
             createPrediction: () => ({
-              claudePrediction: () => null,
-              codexPrediction: () => null,
+              predictionFor: () => null,
             }),
             setIntervalFn: (() => 0) as typeof setInterval,
             clearIntervalFn: (() => {}) as typeof clearInterval,
@@ -342,12 +338,14 @@ describe("App daemon startup", () => {
     const { captureCharFrame, renderOnce, renderer } = await renderComponent(
       () => (
         <App
+          services={["claude", "codex"]}
           deps={{
             createDaemonDetection: () => ({
               daemonHealthy: () => true,
               daemonBackedServices: () => ({
                 claude: true,
                 codex: false,
+                grok: false,
               }),
               daemonMetrics: () => ({
                 claude: claudeDaemonMetrics,
@@ -362,15 +360,12 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: (persistent: boolean) => createClaudeChain(persistent),
-            createCodexChain: (persistent: boolean) => createCodexChain(persistent),
+            createChain: routeChains({
+              claude: (persistent: boolean) => createClaudeChain(persistent),
+              codex: (persistent: boolean) => createCodexChain(persistent),
+            }),
             createLedgerData: () => ({
-              claudeDaily: () => null,
-              claudeWeekly: () => null,
-              claudeMonthly: () => null,
-              codexDaily: () => null,
-              codexWeekly: () => null,
-              codexMonthly: () => null,
+              ledgerFor: () => null,
               loading: () => false,
               error: () => null,
               refresh: ledgerRefresh,
@@ -385,8 +380,7 @@ describe("App daemon startup", () => {
               startTimer,
             }),
             createPrediction: () => ({
-              claudePrediction: () => null,
-              codexPrediction: () => null,
+              predictionFor: () => null,
             }),
             setIntervalFn: (() => 0) as typeof setInterval,
             clearIntervalFn: (() => {}) as typeof clearInterval,
@@ -457,6 +451,7 @@ describe("App daemon startup", () => {
               daemonBackedServices: () => ({
                 claude: true,
                 codex: false,
+                grok: false,
               }),
               daemonMetrics: () => ({
                 claude: daemonMetrics,
@@ -471,15 +466,12 @@ describe("App daemon startup", () => {
             createDedupTracker: () => ({
               shouldStoreMetrics: () => true,
             }),
-            createClaudeChain: (persistent: boolean) => createClaudeChain(persistent),
-            createCodexChain: codexChain.factory,
+            createChain: routeChains({
+              claude: (persistent: boolean) => createClaudeChain(persistent),
+              codex: codexChain.factory,
+            }),
             createLedgerData: () => ({
-              claudeDaily: () => null,
-              claudeWeekly: () => null,
-              claudeMonthly: () => null,
-              codexDaily: () => null,
-              codexWeekly: () => null,
-              codexMonthly: () => null,
+              ledgerFor: () => null,
               loading: () => false,
               error: () => null,
               refresh: mock(async () => {}),
@@ -494,8 +486,7 @@ describe("App daemon startup", () => {
               startTimer: mock(() => {}),
             }),
             createPrediction: () => ({
-              claudePrediction: () => null,
-              codexPrediction: () => null,
+              predictionFor: () => null,
             }),
             setIntervalFn: (() => 0) as typeof setInterval,
             clearIntervalFn: (() => {}) as typeof clearInterval,
@@ -521,6 +512,84 @@ describe("App daemon startup", () => {
     expect(temporaryChainStop).toHaveBeenCalledTimes(1);
     expect(captureCharFrame()).toContain("Source: Claude: API");
     expect(captureCharFrame()).toContain("◆ 88%");
+
+    renderer.destroy();
+  });
+});
+
+describe("App grok row", () => {
+  test("renders a Grok Build row with its weekly bar when grok is visible", async () => {
+    const grokMetrics = {
+      subscription_type: "X Premium",
+      weekly: { used_pct: 42, remaining_pct: 58, resets: "Oct 12 at 4:00am" },
+    };
+    const liveChain = (metrics: Record<string, unknown>): AppChain => ({
+      start: mock(async () => ({ metrics, source: DataSource.API, timestamp: Date.now(), error: null, stale: false })),
+      refresh: mock(async () => ({
+        metrics,
+        source: DataSource.API,
+        timestamp: Date.now(),
+        error: null,
+        stale: false,
+      })),
+      stop: mock(async () => {}),
+    });
+
+    const { captureCharFrame, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          services={["claude", "grok"]}
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => false,
+              daemonBackedServices: () => ({ claude: false, codex: false, grok: false }),
+              daemonMetrics: () => ({}),
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createDedupTracker: () => ({ shouldStoreMetrics: () => true }),
+            createChain: routeChains({
+              claude: () => liveChain(mockClaudeMetrics()),
+              grok: () => liveChain(grokMetrics),
+            }),
+            createLedgerData: () => ({
+              ledgerFor: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({ predictionFor: () => null }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 140, height: 40 },
+    );
+
+    await Bun.sleep(10);
+    await renderOnce();
+
+    const frame = captureCharFrame();
+    expect(frame).toContain("[5] Grok Build - X Premium");
+    expect(frame).toContain("◆ 42%");
+    expect(frame).toContain("[5]Grok");
+    expect(frame).toContain("[6]GrokStats");
+    expect(frame).not.toContain("Codex CLI");
+    expect(frame).toContain("Grok token stats not available");
 
     renderer.destroy();
   });

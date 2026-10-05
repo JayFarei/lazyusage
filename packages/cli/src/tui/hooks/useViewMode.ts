@@ -2,19 +2,15 @@
  * Panel-based state management hook.
  * Manages active panel, selected metric, and content tab.
  */
+import { SERVICES, type ServiceName } from "lazyusage-core";
 import { createSignal } from "solid-js";
 import type { SortDirection } from "../components/DataTable.js";
 
-export type ActivePanel = "claude" | "codex";
+export type ActivePanel = ServiceName;
 export type ContentTab = "daily" | "weekly" | "monthly";
 
 const SORT_COLUMNS = ["totalTokens", "project", "inputTokens", "outputTokens", "pctOfTotal"] as const;
 export type LedgerSortColumn = (typeof SORT_COLUMNS)[number];
-
-const METRIC_KEYS_MAP: Record<ActivePanel, string[]> = {
-  claude: ["week_all", "week_sonnet", "session"],
-  codex: ["weekly", "5h"],
-};
 
 /**
  * @param availableKeys optional accessor returning the metric keys currently present for a
@@ -32,7 +28,7 @@ export function usePanelState(availableKeys?: (panel: ActivePanel) => string[] |
 
   const metricKeysForPanel = (panel: ActivePanel): string[] => {
     const present = availableKeys?.(panel);
-    return present && present.length > 0 ? present : METRIC_KEYS_MAP[panel];
+    return present && present.length > 0 ? present : SERVICES[panel].panelMetrics;
   };
 
   const selectedMetricKey = () => {

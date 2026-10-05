@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A TypeScript/Bun monorepo that provides interactive usage monitoring for Claude CLI and Codex CLI. The primary interface is an OpenTUI/SolidJS terminal dashboard with real-time metrics, usage charts, and per-project ledger data.
+A TypeScript/Bun monorepo that provides interactive usage monitoring for Claude CLI, Codex CLI and Grok Build CLI. The primary interface is an OpenTUI/SolidJS terminal dashboard with real-time metrics, usage charts, and per-project ledger data.
 
 ## Architecture
 
@@ -38,6 +38,7 @@ bun run build
 bun run lazyusage
 bun run lazyusage claude
 bun run lazyusage codex
+bun run lazyusage grok
 
 # Development mode (no build, uses Babel transform)
 bun run lazyusage:dev
@@ -98,7 +99,8 @@ bun run capture-golden
 
 ### TUI Layout (OpenTUI/SolidJS)
 
-- 2x2 grid: Claude row (bars left, stats right) + Codex row (bars left, stats right)
+- One row per visible service (bars left, stats right); services come from the `SERVICES` registry in `packages/core/src/services.ts`
+- `ServicePanel` fits each metric's rows to the panel height (`fitMetricRows`), so three rows still render at 80x24
 - `ServicePanel`: horizontal bar chart with time markers (shared 30s tick)
 - `StatsPanel`: tabbed stats panel (Daily / Weekly / Monthly ledger)
 - `StatusBar`: data source, refresh interval, last updated time
@@ -118,8 +120,12 @@ Equidistance is validated in E2E tests via `extractAllMarkers()` in `packages/e2
 
 ### Service Filter
 
-`App` accepts an optional `service?: "claude" | "codex" | "all"` prop.
-`usage claude` shows only the Claude panel; `usage codex` only Codex.
+`App` accepts `services?: ServiceName[]` (the CLI passes the installed or requested services) or a single `service?: ServiceName | "all"`.
+`usage claude` shows only the Claude panel; `usage codex` only Codex; `usage grok` only Grok.
+
+### Adding a service
+
+Add an entry to `SERVICES` / `SERVICE_NAMES` (`packages/core/src/services.ts`), a provider chain in `providers/factory.ts` (`createChain`), and a ledger parser in `tui/lib/ledger-worker.ts`. Formatters, storage, daemon, server and TUI iterate the registry. Grok is the reference for an API-only service: `GrokAPIProvider` + `GrokCredentialStore` (reads `$GROK_HOME/auth.json`, never writes it) and `parsers/grok-parser.ts`. New services set `alwaysListed: false` so text/JSON output only lists them when installed or collected, leaving existing users' output unchanged.
 
 ## Modifying the Codebase
 

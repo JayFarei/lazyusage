@@ -2,6 +2,7 @@
  * Unit tests for detectWarning and detectLimitAdjustment from warnings.ts.
  */
 import { describe, expect, test } from "bun:test";
+import { FallbackChain } from "../../packages/core/src/providers/chain.js";
 import type { FetchResult, MetricsDict } from "../../packages/core/src/types.js";
 import { DataSource } from "../../packages/core/src/types.js";
 import { detectLimitAdjustment, detectWarning } from "../../packages/core/src/utils/warnings.js";
@@ -85,12 +86,12 @@ describe("detectWarning", () => {
     expect(warning?.action).toContain("codex login");
   });
 
-  test("returns 'data unavailable' for FALLBACK with 'All providers failed'", () => {
+  test("returns 'data unavailable' for FALLBACK with the chain fallback error", () => {
     const result: FetchResult = {
       metrics: null,
       source: DataSource.FALLBACK,
       timestamp: Date.now() / 1000,
-      error: "All providers failed, using fallback zeros",
+      error: "Unable to fetch usage data",
       stale: false,
     };
     const warning = detectWarning("claude", result);
@@ -189,5 +190,17 @@ describe("detectLimitAdjustment", () => {
     };
     const warnings = detectLimitAdjustment("claude", prev, current);
     expect(warnings.length).toBe(2);
+  });
+});
+
+describe("detectWarning - real fallback chain output", () => {
+  test("warns with the service login command when a chain falls back to zeros", async () => {
+    // No providers and no cache file: the chain returns its fallback-zeros result
+    const result = await new FallbackChain(`warning-regression-${process.pid}`, []).fetch();
+    expect(result.source).toBe(DataSource.FALLBACK);
+
+    const warning = detectWarning("grok", result);
+    expect(warning?.message).toBe("grok data unavailable");
+    expect(warning?.action).toContain("grok login");
   });
 });

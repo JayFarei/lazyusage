@@ -5,6 +5,7 @@
  * at the component level. Full App-level filter is verified by E2E tests.
  */
 import { describe, expect, mock, test } from "bun:test";
+import type { ServiceName } from "lazyusage-core";
 import { ServicePanel } from "../../../packages/cli/src/tui/components/ServicePanel.js";
 import type { KeybindingHandlers } from "../../../packages/cli/src/tui/hooks/useKeybindings.js";
 import { createKeybindingHandler } from "../../../packages/cli/src/tui/hooks/useKeybindings.js";
@@ -17,8 +18,8 @@ import { mockClaudeMetrics, mockCodexMetrics, renderComponent } from "../helpers
 /** Build a full KeybindingHandlers object with all required keys. */
 function makeFullHandlers(overrides: Partial<KeybindingHandlers> = {}): KeybindingHandlers {
   return {
-    setActivePanel: mock((_panel: "claude" | "codex") => {}),
-    focusStatsPanel: mock((_panel: "claude" | "codex") => {}),
+    setActivePanel: mock((_panel: ServiceName) => {}),
+    focusStatsPanel: mock((_panel: ServiceName) => {}),
     navigateMetric: mock((_direction: "up" | "down") => {}),
     cycleTab: mock((_direction: "left" | "right") => {}),
     togglePause: mock(() => {}),
@@ -115,5 +116,19 @@ describe("App module exports", () => {
   test("App is exported as a function", async () => {
     const { App } = await import("../../../packages/cli/src/tui/App.js");
     expect(typeof App).toBe("function");
+  });
+});
+
+describe("Keybinding - grok panels", () => {
+  test("key '5' focuses Grok bars and '6' focuses Grok stats", () => {
+    const setActivePanel = mock((_panel: ServiceName) => {});
+    const focusStatsPanel = mock((_panel: ServiceName) => {});
+    const handleKey = createKeybindingHandler(makeFullHandlers({ setActivePanel, focusStatsPanel }));
+
+    handleKey({ name: "5" });
+    handleKey({ name: "6" });
+
+    expect(setActivePanel).toHaveBeenCalledWith("grok");
+    expect(focusStatsPanel).toHaveBeenCalledWith("grok");
   });
 });

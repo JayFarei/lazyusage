@@ -3,8 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Command } from "commander";
 import {
-  createClaudeChain,
-  createCodexChain,
+  createChain,
   createDaemonCollector,
   createDaemonLifecycle,
   createDaemonLogger,
@@ -15,7 +14,11 @@ import {
   type DaemonLogLevel,
   DEFAULT_DAEMON_LOG_PATH,
   DEFAULT_DAEMON_PID_PATH,
+  DEFAULT_DAEMON_SERVICES,
+  isServiceName,
   loadDaemonConfig,
+  SERVICE_NAMES,
+  SERVICES,
   type ServiceName,
   UsageStore,
 } from "lazyusage-core";
@@ -62,10 +65,6 @@ export interface DaemonCommandOptions {
   writeServiceFile?: (path: string, contents: string) => void;
   removeServiceFile?: (path: string) => void;
   runServiceManagerCommand?: (command: string[]) => Promise<void> | void;
-}
-
-function isServiceName(value: string): value is ServiceName {
-  return value === "claude" || value === "codex";
 }
 
 function parseServices(input?: string): string[] | undefined {
@@ -167,7 +166,7 @@ function formatServiceSummary(
   fresh: boolean,
   nowMs: number,
 ): string {
-  const label = service[0].toUpperCase() + service.slice(1);
+  const label = SERVICES[service].label;
 
   if (!status?.lastCollectedAt) {
     return `${label}: no heartbeat`;
@@ -231,7 +230,7 @@ function createDaemonStartArgs(config: DaemonConfig): string[] {
 }
 
 function createPersistentDaemonChain(service: ServiceName): DaemonCollectorChain {
-  const chain = service === "claude" ? createClaudeChain(true) : createCodexChain(true);
+  const chain = createChain(service, true);
 
   if (!("refresh" in chain) || !("stop" in chain)) {
     throw new Error(`Persistent daemon chain unavailable for ${service}.`);
@@ -583,10 +582,12 @@ export function createDaemonCommand(options: DaemonCommandOptions = {}): Command
           ? `Daemon: running (pid ${pid}, uptime ${uptime})`
           : `Daemon: running (pid ${pid})`;
 
-        const services: ServiceName[] = ["claude", "codex"];
-        const serviceSummaries = services.map((service) =>
-          formatServiceSummary(service, store.getDaemonStatus(service), store.isDaemonHeartbeatFresh(service), nowMs),
-        );
+        // Opt-in services (Grok) are listed only once the daemon has reported on them.
+        const serviceSummaries = SERVICE_NAMES.flatMap((service) => {
+          const status = store.getDaemonStatus(service);
+          if (status === null && !DEFAULT_DAEMON_SERVICES.includes(service)) return [];
+          return [formatServiceSummary(service, status, store.isDaemonHeartbeatFresh(service), nowMs)];
+        });
 
         writeStdout([daemonSummary, ...serviceSummaries].join(" | "));
       } finally {
