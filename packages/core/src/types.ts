@@ -3,6 +3,8 @@
  * Ported from Python src/providers/base.py
  */
 
+import type { ServiceName } from "./services.js";
+
 /** Source of usage data */
 export enum DataSource {
   API = "api",
@@ -55,11 +57,19 @@ export interface CodexMetrics {
   weekly: MetricData;
 }
 
-/** Union of service metrics */
-export type ServiceMetrics = ClaudeMetrics | CodexMetrics;
+/** Grok Build metrics: one shared weekly pool (no 5h window) */
+export interface GrokMetrics {
+  subscription_type: string | null;
+  weekly: MetricData;
+}
 
-/** Service name literal */
-export type ServiceName = "claude" | "codex";
+/** Union of service metrics */
+export type ServiceMetrics = ClaudeMetrics | CodexMetrics | GrokMetrics;
+
+export type { ServiceName } from "./services.js";
+
+/** Metrics keyed by service; a missing or null entry means the service was not collected */
+export type ServiceMetricsMap = Partial<Record<ServiceName, MetricsDict | null>>;
 
 /** Usage provider interface (ephemeral) */
 export interface UsageProvider {
@@ -124,6 +134,13 @@ export interface CodexCredentials {
   refreshToken: string;
   accountId: string;
   lastRefresh: string;
+}
+
+/** Grok Build credential data (from ~/.grok/auth.json) */
+export interface GrokCredentials {
+  accessToken: string;
+  /** Unix timestamp in milliseconds; 0 when unknown */
+  expiresAt: number;
 }
 
 /** CLI exit codes for machine consumers */

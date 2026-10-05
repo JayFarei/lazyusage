@@ -5,48 +5,41 @@
 
 import { Command } from "commander";
 import {
-  createClaudeChain,
-  createCodexChain,
+  createChain,
   detectWarning,
   ExitCode,
   type FallbackChain,
-  formatClaudeText,
-  formatCodexText,
   formatCombinedJson,
+  formatServiceText,
   formatWarningStderr,
   formatWithAvailability,
+  isServiceName,
   type MetricsDict,
+  SERVICE_NAMES,
+  SERVICES,
+  type ServiceMetricsMap,
   type ServiceName,
   type ServiceResourceInfo,
   UsageStore,
 } from "lazyusage-core";
 
-export function detectAvailableServices(): string[] {
-  const available: string[] = [];
-  if (Bun.which("claude")) available.push("claude");
-  if (Bun.which("codex")) available.push("codex");
-  return available;
+export function detectAvailableServices(): ServiceName[] {
+  return SERVICE_NAMES.filter((service) => Bun.which(SERVICES[service].binary));
 }
 
-function validateService(service: string | undefined, available: string[]): string[] {
-  if (!service) {
+function validateService(service: string | undefined, available: ServiceName[]): ServiceName[] {
+  if (!service || service === "all") {
     if (available.length === 0) {
-      console.error("Error: No CLI tools found. Please install 'claude' or 'codex' CLI.");
+      const binaries = SERVICE_NAMES.map((s) => `'${SERVICES[s].binary}'`).join(", ");
+      console.error(`Error: No CLI tools found. Please install one of: ${binaries}.`);
       process.exit(ExitCode.BINARY_NOT_FOUND);
     }
     return available;
   }
 
-  if (service === "all") {
-    if (available.length < 2) {
-      const all = new Set(["claude", "codex"]);
-      const missing = [...all].filter((s) => !available.includes(s));
-      console.error(
-        `Error: 'all' requested but ${missing.join(", ")} not available. Only ${available.join(", ")} found.`,
-      );
-      process.exit(ExitCode.BINARY_NOT_FOUND);
-    }
-    return ["claude", "codex"];
+  if (!isServiceName(service)) {
+    console.error(`Error: Unknown service '${service}'. Expected one of: ${[...SERVICE_NAMES, "all"].join(", ")}`);
+    process.exit(ExitCode.FAILURE);
   }
 
   if (!available.includes(service)) {
@@ -60,30 +53,25 @@ function validateService(service: string | undefined, available: string[]): stri
 }
 
 async function collectMetrics(
-  services: string[],
+  services: ServiceName[],
   debug: boolean,
   store: boolean = true,
 ): Promise<{
-  claudeMetrics: MetricsDict | null;
-  codexMetrics: MetricsDict | null;
+  metrics: ServiceMetricsMap;
   sources: Record<string, string>;
   serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>>;
 }> {
-  let claudeMetrics: MetricsDict | null = null;
-  let codexMetrics: MetricsDict | null = null;
-  let claudeSource: string | null = null;
-  let codexSource: string | null = null;
+  const metrics: ServiceMetricsMap = {};
   const sources: Record<string, string> = {};
   const serviceInfo: Partial<Record<ServiceName, ServiceResourceInfo>> = {};
 
-  if (services.includes("claude")) {
-    if (debug) console.error("Collecting Claude metrics...");
-    const chain = createClaudeChain(false) as FallbackChain;
+  for (const service of services) {
+    if (debug) console.error(`Collecting ${SERVICES[service].label} metrics...`);
+    const chain = createChain(service, false) as FallbackChain;
     const result = await chain.fetch();
-    claudeMetrics = result.metrics as MetricsDict | null;
-    claudeSource = result.source;
-    if (claudeSource) sources.claude = claudeSource;
-    serviceInfo.claude = {
+    metrics[service] = result.metrics as MetricsDict | null;
+    if (result.source) sources[service] = result.source;
+    serviceInfo[service] = {
       source: result.source,
       stale: result.stale,
       error: result.error,
@@ -93,53 +81,28 @@ async function collectMetrics(
       if (result.stale) console.error("  Warning: Data is stale");
       if (result.error) console.error(`  Error: ${result.error}`);
     }
-    const warning = detectWarning("claude", result);
-    if (warning) console.error(formatWarningStderr(warning));
-  }
-
-  if (services.includes("codex")) {
-    if (debug) console.error("Collecting Codex metrics...");
-    const chain = createCodexChain(false) as FallbackChain;
-    const result = await chain.fetch();
-    codexMetrics = result.metrics as MetricsDict | null;
-    codexSource = result.source;
-    if (codexSource) sources.codex = codexSource;
-    serviceInfo.codex = {
-      source: result.source,
-      stale: result.stale,
-      error: result.error,
-    };
-    if (debug) {
-      console.error(`  Source: ${result.source}`);
-      if (result.stale) console.error("  Warning: Data is stale");
-      if (result.error) console.error(`  Error: ${result.error}`);
-    }
-    const warning = detectWarning("codex", result);
+    const warning = detectWarning(service, result);
     if (warning) console.error(formatWarningStderr(warning));
   }
 
   if (store) {
-    storeSnapshots(claudeMetrics, codexMetrics, claudeSource, codexSource);
+    storeSnapshots(metrics, sources);
   }
 
-  return { claudeMetrics, codexMetrics, sources, serviceInfo };
+  return { metrics, sources, serviceInfo };
 }
 
-function storeSnapshots(
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
-  claudeSource: string | null,
-  codexSource: string | null,
-): void {
+function storeSnapshots(metrics: ServiceMetricsMap, sources: Record<string, string>): void {
   try {
     const usageStore = new UsageStore();
     const collectionId = crypto.randomUUID();
 
-    if (claudeMetrics && claudeSource) {
-      usageStore.storeSnapshot("claude", claudeMetrics, claudeSource, collectionId);
-    }
-    if (codexMetrics && codexSource) {
-      usageStore.storeSnapshot("codex", codexMetrics, codexSource, collectionId);
+    for (const service of SERVICE_NAMES) {
+      const serviceMetrics = metrics[service];
+      const source = sources[service];
+      if (serviceMetrics && source) {
+        usageStore.storeSnapshot(service, serviceMetrics, source, collectionId);
+      }
     }
 
     usageStore.close();
@@ -148,9 +111,17 @@ function storeSnapshots(
   }
 }
 
+/** Text for `--text`: a bare line for a single service, otherwise one labelled line per service. */
+function formatTextOutput(services: ServiceName[], metrics: ServiceMetricsMap, available: ServiceName[]): string {
+  const single = services.length === 1 ? services[0] : undefined;
+  const singleMetrics = single ? metrics[single] : null;
+  if (single && singleMetrics) return formatServiceText(single, singleMetrics);
+  return formatWithAvailability(metrics, available);
+}
+
 export const usageCheckCommand = new Command("usage-check")
   .description("Fast point-in-time usage snapshot")
-  .argument("[service]", "Service to check: claude, codex, or all")
+  .argument("[service]", "Service to check: claude, codex, grok, or all")
   .option("--json", "Output as JSON")
   .option("--json-only", "JSON output with errors as JSON on stdout (machine-safe)")
   .option("--text", "Output as text (default)")
@@ -174,12 +145,9 @@ export const usageCheckCommand = new Command("usage-check")
           const startTime = performance.now();
           const available = detectAvailableServices();
           const services = validateService(service, available);
-          const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(
-            services,
-            opts.debug ?? false,
-          );
+          const { metrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
 
-          const output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
+          const output = formatCombinedJson(metrics, available, sources, serviceInfo);
           console.log(output);
 
           if (opts.debug) {
@@ -200,24 +168,11 @@ export const usageCheckCommand = new Command("usage-check")
       const startTime = performance.now();
       const available = detectAvailableServices();
       const services = validateService(service, available);
-      const { claudeMetrics, codexMetrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
+      const { metrics, sources, serviceInfo } = await collectMetrics(services, opts.debug ?? false);
 
-      let output: string;
-      if (opts.json) {
-        output = formatCombinedJson(claudeMetrics, codexMetrics, available, sources, serviceInfo);
-      } else {
-        if (services.length === 1) {
-          if (services.includes("claude") && claudeMetrics) {
-            output = formatClaudeText(claudeMetrics);
-          } else if (codexMetrics) {
-            output = formatCodexText(codexMetrics);
-          } else {
-            output = formatWithAvailability(claudeMetrics, codexMetrics, available);
-          }
-        } else {
-          output = formatWithAvailability(claudeMetrics, codexMetrics, available);
-        }
-      }
+      const output = opts.json
+        ? formatCombinedJson(metrics, available, sources, serviceInfo)
+        : formatTextOutput(services, metrics, available);
 
       console.log(output);
 
@@ -228,4 +183,4 @@ export const usageCheckCommand = new Command("usage-check")
     },
   );
 
-export { collectMetrics, validateService };
+export { collectMetrics, formatTextOutput, validateService };

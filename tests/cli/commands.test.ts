@@ -10,7 +10,7 @@ describe("detectAvailableServices", () => {
   test("only contains valid service names", () => {
     const result = detectAvailableServices();
     for (const svc of result) {
-      expect(["claude", "codex"]).toContain(svc);
+      expect(["claude", "codex", "grok"]).toContain(svc);
     }
   });
 });
@@ -39,5 +39,13 @@ describe("validateService", () => {
   test("returns codex when requested", () => {
     const result = validateService("codex", ["claude", "codex"]);
     expect(result).toEqual(["codex"]);
+  });
+
+  test("returns grok when requested", () => {
+    expect(validateService("grok", ["claude", "grok"])).toEqual(["grok"]);
+  });
+
+  test("'all' returns every installed service, including grok", () => {
+    expect(validateService("all", ["claude", "codex", "grok"])).toEqual(["claude", "codex", "grok"]);
   });
 });

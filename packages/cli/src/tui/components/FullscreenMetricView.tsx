@@ -14,6 +14,7 @@ import {
   createTimeMarkers,
   type MetricData,
   type MetricsDict,
+  type ServiceName,
 } from "lazyusage-core";
 import { For, Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
@@ -24,7 +25,7 @@ const BAR_OVERHEAD = 12;
 const MIN_LOCAL_BAR = 20;
 
 interface FullscreenMetricViewProps {
-  service: "claude" | "codex";
+  service: ServiceName;
   metricKey: string;
   metrics: MetricsDict | null;
   tick?: number;

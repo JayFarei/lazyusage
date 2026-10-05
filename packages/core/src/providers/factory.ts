@@ -3,10 +3,12 @@
  * Port of src/providers/factory.py
  */
 
+import type { ServiceName } from "../services.js";
 import { ClaudeAPIProvider } from "./api-claude.js";
 import { CodexAPIProvider } from "./api-codex.js";
+import { GrokAPIProvider } from "./api-grok.js";
 import { FallbackChain, PersistentFallbackChain } from "./chain.js";
-import { ClaudeCredentialStore, CodexCredentialStore } from "./credentials.js";
+import { ClaudeCredentialStore, CodexCredentialStore, GrokCredentialStore } from "./credentials.js";
 import { ClaudePersistentPTYProvider, ClaudePTYProvider, CodexPersistentPTYProvider, CodexPTYProvider } from "./pty.js";
 import { CodexSessionProvider } from "./session-codex.js";
 import { ClaudeWebProvider } from "./web-claude.js";
@@ -38,4 +40,25 @@ export function createCodexChain(persistent: boolean = false): FallbackChain | P
   // API -> Session files (fallback when token expires) -> PTY
   const providers = [new CodexAPIProvider(), new CodexSessionProvider(), new CodexPTYProvider()];
   return new FallbackChain("codex", providers);
+}
+
+/** Create Grok provider fallback chain (billing API only; Grok has no PTY or local allowance source) */
+export function createGrokChain(persistent: boolean = false): FallbackChain | PersistentFallbackChain {
+  const credStore = new GrokCredentialStore();
+  const providers = [new GrokAPIProvider(credStore)];
+  return persistent ? new PersistentFallbackChain("grok", providers, credStore) : new FallbackChain("grok", providers);
+}
+
+const CHAIN_FACTORIES: Record<ServiceName, (persistent: boolean) => FallbackChain | PersistentFallbackChain> = {
+  claude: createClaudeChain,
+  codex: createCodexChain,
+  grok: createGrokChain,
+};
+
+/** Create the provider fallback chain for any service */
+export function createChain(
+  service: ServiceName,
+  persistent: boolean = false,
+): FallbackChain | PersistentFallbackChain {
+  return CHAIN_FACTORIES[service](persistent);
 }

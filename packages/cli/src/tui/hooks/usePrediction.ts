@@ -9,17 +9,14 @@ import {
   computeDailyDeltas,
   type MetricsDict,
   predict,
+  SERVICES,
   type ServiceName,
   UsageStore,
   WEEKLY_WINDOW_HOURS,
 } from "lazyusage-core";
 import { createEffect, createSignal, on } from "solid-js";
 
-/** Weekly metric keys that are predictable */
-const PREDICTABLE_METRICS: Record<string, string[]> = {
-  claude: ["week_all", "week_sonnet"],
-  codex: ["weekly"],
-};
+type ServicePredictions = Record<string, CapacityPrediction>;
 
 /**
  * Compute remaining fractional days until window end from a resets_at ISO string.
@@ -34,18 +31,11 @@ function computeRemainingDays(resetsAtIso: string): number {
 /**
  * Run prediction for a single service.
  */
-function predictForService(
-  store: UsageStore,
-  service: ServiceName,
-  metrics: MetricsDict,
-): Record<string, CapacityPrediction> | null {
-  const metricKeys = PREDICTABLE_METRICS[service];
-  if (!metricKeys) return null;
-
-  const results: Record<string, CapacityPrediction> = {};
+function predictForService(store: UsageStore, service: ServiceName, metrics: MetricsDict): ServicePredictions | null {
+  const results: ServicePredictions = {};
   let hasAny = false;
 
-  for (const metricName of metricKeys) {
+  for (const metricName of SERVICES[service].predictableMetrics) {
     const metricData = metrics[metricName];
     if (!metricData || typeof metricData !== "object" || !("used_pct" in metricData)) continue;
 
@@ -87,17 +77,15 @@ function predictForService(
 /**
  * Reactive prediction hook for the TUI.
  * @param tick - Shared 30s tick signal from App
+ * @param metricsFor - Current metrics accessor per service
+ * @param services - Services to predict for
  */
 export function usePrediction(
   tick: () => number,
-  claudeMetrics: () => MetricsDict | null,
-  codexMetrics: () => MetricsDict | null,
-): {
-  claudePrediction: () => Record<string, CapacityPrediction> | null;
-  codexPrediction: () => Record<string, CapacityPrediction> | null;
-} {
-  const [claudePrediction, setClaudePrediction] = createSignal<Record<string, CapacityPrediction> | null>(null);
-  const [codexPrediction, setCodexPrediction] = createSignal<Record<string, CapacityPrediction> | null>(null);
+  metricsFor: (service: ServiceName) => MetricsDict | null,
+  services: readonly ServiceName[],
+): { predictionFor: (service: ServiceName) => ServicePredictions | null } {
+  const [predictions, setPredictions] = createSignal<Partial<Record<ServiceName, ServicePredictions | null>>>({});
 
   let store: UsageStore | null = null;
 
@@ -107,28 +95,21 @@ export function usePrediction(
         store = new UsageStore();
       }
 
-      const cm = claudeMetrics();
-      if (cm) {
-        setClaudePrediction(predictForService(store, "claude", cm));
+      const next: Partial<Record<ServiceName, ServicePredictions | null>> = { ...predictions() };
+      for (const service of services) {
+        const metrics = metricsFor(service);
+        if (metrics) next[service] = predictForService(store, service, metrics);
       }
-
-      const cx = codexMetrics();
-      if (cx) {
-        setCodexPrediction(predictForService(store, "codex", cx));
-      }
+      setPredictions(next);
     } catch {
       // Silent fallback
-      setClaudePrediction(null);
-      setCodexPrediction(null);
+      setPredictions({});
     }
   };
 
-  // Run on tick changes
+  // Run on tick changes and whenever any service's metrics change
   createEffect(on(tick, computePredictions));
+  createEffect(on(() => services.map(metricsFor), computePredictions));
 
-  // Also run when metrics change
-  createEffect(on(claudeMetrics, computePredictions));
-  createEffect(on(codexMetrics, computePredictions));
-
-  return { claudePrediction, codexPrediction };
+  return { predictionFor: (service) => predictions()[service] ?? null };
 }

@@ -3,6 +3,8 @@
  * Detects degraded states from FetchResult and returns actionable user messages.
  */
 
+import { FALLBACK_ERROR_MESSAGE } from "../constants.js";
+import { SERVICES, type ServiceName } from "../services.js";
 import { DataSource, type FetchResult, type MetricData, type MetricsDict } from "../types.js";
 import { parseTimeToDatetime } from "./time.js";
 
@@ -18,8 +20,8 @@ const AUTH_ERROR_PATTERNS = [/401/i, /403/i, /unauthorized/i, /token.?expired/i,
  * Detect actionable warnings from a fetch result.
  * Returns null if no warning is needed.
  */
-export function detectWarning(service: "claude" | "codex", result: FetchResult): ServiceWarning | null {
-  const loginCmd = service === "claude" ? "claude" : "codex login";
+export function detectWarning(service: ServiceName, result: FetchResult): ServiceWarning | null {
+  const loginCmd = SERVICES[service].loginCommand;
 
   // A successful cache read can still contain usage from an expired window.
   // Warn before inspecting provider errors because fallback chains intentionally
@@ -53,7 +55,7 @@ export function detectWarning(service: "claude" | "codex", result: FetchResult):
 
   // Degraded to cache/fallback with a non-auth error
   if (result.source === DataSource.CACHE || result.source === DataSource.FALLBACK) {
-    if (error.includes("All providers failed")) {
+    if (error.includes(FALLBACK_ERROR_MESSAGE)) {
       return {
         service,
         message: `${service} data unavailable`,
@@ -126,11 +128,7 @@ function parseResetForComparison(timeStr: string, referenceDate: Date): Date {
  * Signals: resets_at shifts forward significantly AND used_pct drops.
  * Returns warnings for each adjusted metric, or an empty array.
  */
-export function detectLimitAdjustment(
-  service: "claude" | "codex",
-  prev: MetricsDict,
-  current: MetricsDict,
-): ServiceWarning[] {
+export function detectLimitAdjustment(service: ServiceName, prev: MetricsDict, current: MetricsDict): ServiceWarning[] {
   const warnings: ServiceWarning[] = [];
   const now = new Date();
 

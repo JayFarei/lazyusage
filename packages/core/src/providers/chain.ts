@@ -3,12 +3,13 @@
  * Port of src/providers/chain.py
  */
 
-import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
+import { FALLBACK_ERROR_MESSAGE, SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
 import type { FetchResult, MetricsDict, PersistentUsageProvider, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
 import { calculateFallbackTime } from "../utils/time.js";
 import { ClaudeAPIProvider } from "./api-claude.js";
 import { CodexAPIProvider } from "./api-codex.js";
+import { GrokAPIProvider } from "./api-grok.js";
 import { UsageCache } from "./cache.js";
 
 /** Structured diagnostic event emitted during chain operations */
@@ -110,7 +111,7 @@ export class FallbackChain {
       metrics,
       source: DataSource.FALLBACK,
       timestamp: Date.now() / 1000,
-      error: "Unable to fetch usage data",
+      error: FALLBACK_ERROR_MESSAGE,
       stale: false,
     };
   }
@@ -176,16 +177,15 @@ export class PersistentFallbackChain {
   private service: string;
   /** Non-persistent providers (API, Web, Session) - tried via fetch() */
   private immediateProviders: UsageProvider[];
-  /** Persistent providers (PTY) - tried via start()/refresh()/stop() */
+  /** Persistent providers (PTY) - tried via start()/refresh()/stop(); may be empty (e.g. Grok has no PTY source) */
   private persistentProviders: PersistentUsageProvider[];
   private credStore: TokenRefreshable | undefined;
   private cache: UsageCache;
   private _lastResult: FetchResult | null = null;
   private _ptyStarted = false;
 
-  // Legacy compat: keep references for getSourcePlan()
+  // Legacy compat: keep reference for getSourcePlan()
   private apiProvider: UsageProvider | null;
-  private ptyProvider: PersistentUsageProvider;
 
   /**
    * Accepts either:
@@ -207,23 +207,14 @@ export class PersistentFallbackChain {
       this.immediateProviders = allProviders.filter((p) => !isPersistentProvider(p));
       this.persistentProviders = allProviders.filter(isPersistentProvider);
       this.credStore = ptyProviderOrCredStore as TokenRefreshable | undefined;
-      const persistentProvider = this.persistentProviders[0];
-
-      if (!persistentProvider) {
-        throw new Error(`PersistentFallbackChain requires at least one persistent provider for ${service}`);
-      }
-
-      // Compat fields
       this.apiProvider = this.immediateProviders[0] ?? null;
-      this.ptyProvider = persistentProvider;
     } else {
       // Legacy 2-provider constructor
       this.apiProvider = apiProviderOrProviders;
-      this.ptyProvider = ptyProviderOrCredStore as PersistentUsageProvider;
       this.credStore = credStore;
 
       this.immediateProviders = this.apiProvider ? [this.apiProvider] : [];
-      this.persistentProviders = [this.ptyProvider];
+      this.persistentProviders = [ptyProviderOrCredStore as PersistentUsageProvider];
     }
   }
 
@@ -328,7 +319,7 @@ export class PersistentFallbackChain {
     // Skip PTY when API is rate-limited (PTY's /usage and /status hit the same APIs)
     const rateLimited = this._isApiRateLimited();
     if (!rateLimited) {
-      if (!this._ptyStarted) {
+      if (!this._ptyStarted && this.persistentProviders.length > 0) {
         emitDiag(this.service, "refresh", "redirect-to-start", { detail: "PTY not started" });
         return this.start();
       }
@@ -389,7 +380,7 @@ export class PersistentFallbackChain {
   getSourcePlan(): SourcePlan {
     const planner = new SourcePlanner(
       this.apiProvider,
-      true, // PTY is always potentially available
+      this.persistentProviders.length > 0,
       true, // Cache is always available
       this.credStore,
     );
@@ -405,6 +396,7 @@ export class PersistentFallbackChain {
   private _isApiRateLimited(): boolean {
     if (this.service === "claude") return ClaudeAPIProvider.isRateLimited();
     if (this.service === "codex") return CodexAPIProvider.isRateLimited();
+    if (this.service === "grok") return GrokAPIProvider.isRateLimited();
     return false;
   }
 
@@ -414,7 +406,7 @@ export class PersistentFallbackChain {
       metrics,
       source: DataSource.FALLBACK,
       timestamp: Date.now() / 1000,
-      error: "Unable to fetch usage data",
+      error: FALLBACK_ERROR_MESSAGE,
       stale: false,
     };
   }

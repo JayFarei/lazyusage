@@ -1,6 +1,6 @@
 {
   "name": "lazyusage-core",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Core collectors, formatters, and storage for lazyusage CLI monitoring.",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,6 +22,7 @@
     "bun",
     "claude",
     "codex",
+    "grok",
     "rate-limit",
     "tui",
     "usage-monitoring"
@@ -48,6 +49,10 @@
     "./parsers/codex-parser": {
       "types": "./dist/parsers/codex-parser.d.ts",
       "import": "./dist/parsers/codex-parser.js"
+    },
+    "./parsers/grok-parser": {
+      "types": "./dist/parsers/grok-parser.d.ts",
+      "import": "./dist/parsers/grok-parser.js"
     },
     "./parsers/aggregator": {
       "types": "./dist/parsers/aggregator.d.ts",

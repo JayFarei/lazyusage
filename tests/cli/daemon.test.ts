@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ServiceName } from "lazyusage-core";
 import { createDaemonCommand } from "../../packages/cli/src/commands/daemon.js";
 
 describe("createDaemonCommand", () => {
@@ -187,6 +188,41 @@ describe("createDaemonCommand", () => {
     expect(output).toEqual(["Stopped daemon 4321."]);
   });
 
+  test("lists grok in the status summary once the daemon has reported on it", async () => {
+    const output: string[] = [];
+    const row = (service: ServiceName | "_daemon", lastSource: string | null) => ({
+      service,
+      lastCollectedAt: lastSource ? "2026-04-09T11:59:30.000Z" : null,
+      lastSource,
+      lastError: null,
+      consecutiveFailures: 0,
+      pid: service === "_daemon" ? 4321 : null,
+      startedAt: service === "_daemon" ? "2026-04-09T11:58:00.000Z" : null,
+      updatedAt: "2026-04-09T12:00:00.000Z",
+    });
+
+    const command = createDaemonCommand({
+      readPidFile: () => "4321\n",
+      isProcessRunning: (pid) => pid === 4321,
+      createStore: () => ({
+        getDaemonStatus: (service: ServiceName | "_daemon") =>
+          service === "codex" ? null : row(service, service === "_daemon" ? null : "api"),
+        isDaemonHeartbeatFresh: () => true,
+        close: () => {},
+      }),
+      now: () => new Date("2026-04-09T12:00:00.000Z").getTime(),
+      writeStdout: (message) => {
+        output.push(message);
+      },
+    }).exitOverride();
+
+    await command.parseAsync(["node", "daemon", "status"]);
+
+    expect(output).toEqual([
+      "Daemon: running (pid 4321, uptime 2m) | Claude: healthy 30s ago via API | Codex: no heartbeat | Grok: healthy 30s ago via API",
+    ]);
+  });
+
   test("registers a daemon status subcommand and prints a heartbeat summary", async () => {
     const output: string[] = [];
 
@@ -221,16 +257,21 @@ describe("createDaemonCommand", () => {
             };
           }
 
-          return {
-            service: "codex",
-            lastCollectedAt: "2026-04-09T11:55:00.000Z",
-            lastSource: "pty",
-            lastError: "rate limited",
-            consecutiveFailures: 2,
-            pid: null,
-            startedAt: null,
-            updatedAt: "2026-04-09T12:00:00.000Z",
-          };
+          if (service === "codex") {
+            return {
+              service: "codex",
+              lastCollectedAt: "2026-04-09T11:55:00.000Z",
+              lastSource: "pty",
+              lastError: "rate limited",
+              consecutiveFailures: 2,
+              pid: null,
+              startedAt: null,
+              updatedAt: "2026-04-09T12:00:00.000Z",
+            };
+          }
+
+          // Opt-in services the daemon never reported on have no row
+          return null;
         },
         isDaemonHeartbeatFresh: (service: string) => service === "claude",
         close: () => {},

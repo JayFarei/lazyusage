@@ -3,10 +3,12 @@
  * Shared between parsers, aggregator, worker, and UI components.
  */
 
+import type { ServiceName } from "../services.js";
+
 export interface SessionTokens {
   project: string; // folder name (last cwd component)
   cwd: string; // full path
-  service: "claude" | "codex";
+  service: ServiceName;
   date: string; // YYYY-MM-DD
   inputTokens: number; // fresh input only (not cache)
   outputTokens: number;

@@ -8,8 +8,8 @@ exports[`HelpOverlay - visibility snapshot when visible 1`] = `
      │ Keyboard Shortcuts                                  │                    
      │ ==================                                  │                    
      │                                                     │                    
-     │   1/2        Focus service bars panel               │                    
-     │   3/4        Focus stats panel                      │                    
+     │   1/2/5      Focus bars panel (Claude/Codex/Grok)   │                    
+     │   3/4/6      Focus stats panel (Claude/Codex/Grok)  │                    
      │   j/k        Navigate metrics (up/down)             │                    
      │   Tab        Switch focus (bars ↔ stats)            │                    
      │   g          Fullscreen focused panel               │                    

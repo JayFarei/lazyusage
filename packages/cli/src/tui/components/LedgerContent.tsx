@@ -4,6 +4,7 @@
  * Uses DataTable for responsive flexbox-based layout.
  */
 
+import type { ServiceName } from "lazyusage-core";
 import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { createMemo } from "solid-js";
 import { useTheme } from "../theme.js";
@@ -19,7 +20,7 @@ export type LedgerSortColumn =
 
 export interface LedgerContentProps {
   data: ProjectUsage[] | null;
-  service: "claude" | "codex";
+  service: ServiceName;
   title: string;
   sortState?: SortState<ProjectUsage>;
   onSort?: (column: keyof ProjectUsage) => void;

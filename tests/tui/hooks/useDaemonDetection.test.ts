@@ -42,11 +42,12 @@ describe("useDaemonDetection", () => {
       expect(detection.daemonBackedServices()).toEqual({
         claude: true,
         codex: false,
+        grok: false,
       });
       expect(detection.daemonMetrics()).toEqual({
         claude: claudeMetrics,
       });
-      expect(freshnessChecks).toEqual(["claude", "codex"]);
+      expect(freshnessChecks).toEqual(["claude", "codex", "grok"]);
       expect(snapshotReads).toEqual(["claude"]);
       expect(closed).toBe(true);
 
@@ -74,6 +75,7 @@ describe("useDaemonDetection", () => {
       expect(detection.daemonBackedServices()).toEqual({
         claude: false,
         codex: false,
+        grok: false,
       });
       expect(detection.daemonMetrics()).toEqual({});
       expect(storeCreated).toBe(false);

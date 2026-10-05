@@ -4,6 +4,10 @@
  * returns fallback data, which is sufficient to test routing and response shape.
  */
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ServiceName } from "lazyusage-core";
 import { startServer } from "../../packages/cli/src/server/index.js";
 
 // ---------------------------------------------------------------------------
@@ -19,7 +23,7 @@ afterEach(() => {
   }
 });
 
-function createTestServer(services = ["claude", "codex"]): ReturnType<typeof Bun.serve> {
+function createTestServer(services: ServiceName[] = ["claude", "codex"]): ReturnType<typeof Bun.serve> {
   server = startServer({
     services,
     port: 0, // random available port
@@ -73,6 +77,33 @@ describe("Server - /claude endpoint", () => {
 
     const body = await resp.json();
     expect(typeof body).toBe("object");
+  }, 15_000);
+});
+
+describe("Server - /grok endpoint", () => {
+  test("routes /grok to the grok service only, and 404s when grok is not served", async () => {
+    // Empty GROK_HOME: no credentials, so the chain never reaches the network
+    const home = mkdtempSync(join(tmpdir(), "lazyusage-grok-server-"));
+    const previous = process.env.GROK_HOME;
+    process.env.GROK_HOME = home;
+    try {
+      const srv = createTestServer(["claude", "grok"]);
+      const resp = await fetch(`http://127.0.0.1:${srv.port}/grok`);
+      expect(resp.status).toBe(200);
+      const body = await resp.json();
+      const grok = body.services.find((s: { name: string }) => s.name === "grok");
+      const claude = body.services.find((s: { name: string }) => s.name === "claude");
+      expect(grok.source).not.toBeNull();
+      expect(claude.source).toBeNull(); // not queried for /grok
+
+      server?.stop(true);
+      const codexOnly = createTestServer(["codex"]);
+      expect((await fetch(`http://127.0.0.1:${codexOnly.port}/grok`)).status).toBe(404);
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
   }, 15_000);
 });
 

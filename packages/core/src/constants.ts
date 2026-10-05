@@ -23,6 +23,18 @@ export const CLAUDE_API_MIN_INTERVAL_MS = 30_000;
 /** Default retry-after for Codex usage API (shorter window than Claude) */
 export const CODEX_RATE_LIMIT_DEFAULT_SECONDS = 60;
 
+/**
+ * Minimum spacing between live requests to the Grok billing endpoint. Its rate
+ * limit is undocumented; the grok CLI itself re-checks the subscription every 60s.
+ */
+export const GROK_API_MIN_INTERVAL_MS = 60_000;
+
+/** Default retry-after for the Grok billing endpoint when a 429 carries no header */
+export const GROK_RATE_LIMIT_DEFAULT_SECONDS = 120;
+
+/** Error a fallback chain reports when every source failed and it returns zeros */
+export const FALLBACK_ERROR_MESSAGE = "Unable to fetch usage data";
+
 /** TUI tick interval in milliseconds (30 seconds) */
 export const TICK_INTERVAL_MS = 30_000;
 

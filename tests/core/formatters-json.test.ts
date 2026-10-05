@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { formatAllJson, formatCombinedJson, formatJson, type MetricsDict } from "lazyusage-core";
+import {
+  formatAllJson,
+  formatCombinedCapacityJson,
+  formatCombinedJson,
+  formatJson,
+  type MetricsDict,
+} from "lazyusage-core";
 
 describe("formatJson", () => {
   test("outputs valid JSON", () => {
@@ -89,7 +95,7 @@ describe("formatAllJson", () => {
       "5h": { used_pct: 20, remaining_pct: 80, resets: "3:15pm" },
       weekly: { used_pct: 12, remaining_pct: 88, resets: "Feb 10 at 9:00pm" },
     };
-    const result = formatAllJson(claudeMetrics, codexMetrics);
+    const result = formatAllJson({ claude: claudeMetrics, codex: codexMetrics });
     const parsed = JSON.parse(result);
     expect(parsed.services).toBeDefined();
     expect(parsed.services.claude).toBeDefined();
@@ -106,24 +112,46 @@ describe("formatAllJson", () => {
       subscription_type: null,
       "5h": { used_pct: 0, remaining_pct: 100, resets: "5:00pm" },
     };
-    const result = formatAllJson(claudeMetrics, codexMetrics);
+    const result = formatAllJson({ claude: claudeMetrics, codex: codexMetrics });
     const parsed = JSON.parse(result);
     expect(parsed.services.claude.subscription_type).toBe("Max");
     expect(parsed.services.claude.metrics).toHaveLength(1);
   });
 });
 
+describe("formatAllJson with grok", () => {
+  test("omits services that were not collected", () => {
+    const parsed = JSON.parse(
+      formatAllJson({
+        grok: {
+          subscription_type: "X Premium",
+          weekly: { used_pct: 10, remaining_pct: 90, resets: "Oct 12 at 4:00am" },
+        },
+      }),
+    );
+    expect(Object.keys(parsed.services)).toEqual(["grok"]);
+    expect(parsed.services.grok.metrics[0].name).toBe("weekly");
+  });
+});
+
 describe("formatCombinedJson", () => {
   test("includes availability metadata", () => {
-    const result = formatCombinedJson(null, null, ["claude"]);
+    const result = formatCombinedJson({}, ["claude"]);
     const parsed = JSON.parse(result);
     expect(parsed.available_services).toContain("claude");
     expect(Array.isArray(parsed.services)).toBe(true);
-    expect(parsed.services).toHaveLength(2);
+    expect(parsed.services.map((s: Record<string, unknown>) => s.name)).toEqual(["claude", "codex"]);
+  });
+
+  test("lists grok only when installed or collected", () => {
+    const names = (json: string) => JSON.parse(json).services.map((s: Record<string, unknown>) => s.name);
+    expect(names(formatCombinedJson({}, ["claude", "codex"]))).toEqual(["claude", "codex"]);
+    expect(names(formatCombinedJson({}, ["grok"]))).toEqual(["claude", "codex", "grok"]);
+    expect(names(formatCombinedCapacityJson({}, ["claude", "codex"]))).toEqual(["claude", "codex"]);
   });
 
   test("marks services as available/unavailable", () => {
-    const result = formatCombinedJson(null, null, ["claude"]);
+    const result = formatCombinedJson({}, ["claude"]);
     const parsed = JSON.parse(result);
     const claudeSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "claude");
     const codexSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "codex");
@@ -136,7 +164,7 @@ describe("formatCombinedJson", () => {
       subscription_type: "Max",
       session: { used_pct: 25, remaining_pct: 75, resets: "2:31pm" },
     };
-    const result = formatCombinedJson(claudeMetrics, null, ["claude"]);
+    const result = formatCombinedJson({ claude: claudeMetrics }, ["claude"]);
     const parsed = JSON.parse(result);
     const claudeSvc = parsed.services.find((s: Record<string, unknown>) => s.name === "claude");
     expect(claudeSvc.metrics).toHaveLength(1);
@@ -150,7 +178,7 @@ describe("formatCombinedJson", () => {
       subscription_type: "Max",
       session: { used_pct: 25, remaining_pct: 75, resets: "2:31pm" },
     };
-    const result = formatCombinedJson(claudeMetrics, null, ["claude"], undefined, {
+    const result = formatCombinedJson({ claude: claudeMetrics }, ["claude"], undefined, {
       claude: {
         source: "cache" as never,
         stale: true,
@@ -165,7 +193,7 @@ describe("formatCombinedJson", () => {
   });
 
   test("handles null metrics gracefully", () => {
-    const result = formatCombinedJson(null, null, []);
+    const result = formatCombinedJson({}, []);
     const parsed = JSON.parse(result);
     expect(parsed.available_services).toEqual([]);
     for (const svc of parsed.services) {
@@ -177,7 +205,7 @@ describe("formatCombinedJson", () => {
   });
 
   test("includes timestamp", () => {
-    const result = formatCombinedJson(null, null, []);
+    const result = formatCombinedJson({}, []);
     const parsed = JSON.parse(result);
     expect(parsed.timestamp).toBeDefined();
     expect(typeof parsed.timestamp).toBe("string");

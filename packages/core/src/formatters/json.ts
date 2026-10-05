@@ -4,7 +4,8 @@
  */
 
 import { SESSION_WINDOW_HOURS, WEEKLY_WINDOW_HOURS } from "../constants.js";
-import type { MetricsDict, ServiceName, ServiceResourceInfo } from "../types.js";
+import { listedServices, SERVICE_NAMES } from "../services.js";
+import type { MetricsDict, ServiceMetricsMap, ServiceName, ServiceResourceInfo } from "../types.js";
 import { calculateTimeProgress, formatTimeRemaining, parseTimeToDatetime } from "../utils/time.js";
 
 const WINDOW_HOURS: Record<string, number> = {
@@ -61,152 +62,92 @@ function buildServiceEnvelope(
   };
 }
 
+type MetricShape = { used_pct: number; remaining_pct: number; resets: string };
+
+function metricEntries(metrics: MetricsDict | null | undefined): Array<[string, MetricShape]> {
+  if (!metrics) return [];
+  return Object.entries(metrics).flatMap(([name, data]) =>
+    name === "subscription_type" || typeof data !== "object" || data === null ? [] : [[name, data as MetricShape]],
+  );
+}
+
+function buildServicesOutput(
+  metricsByService: ServiceMetricsMap,
+  availableServices: string[],
+  toMetric: (name: string, metric: MetricShape) => Record<string, unknown>,
+  sources?: Record<string, string>,
+  serviceInfo?: ServiceInfoMap,
+  predictions?: Record<string, Record<string, unknown>>,
+): string {
+  const collected = Object.keys(metricsByService).filter((s) => metricsByService[s as ServiceName]);
+  const services = listedServices(availableServices, collected).map((service) => {
+    const metrics = metricsByService[service] ?? null;
+    const envelope = buildServiceEnvelope(service, availableServices, metrics, sources, serviceInfo);
+    envelope.metrics = metricEntries(metrics).map(([name, metric]) => toMetric(name, metric));
+    if (predictions?.[service]) envelope.prediction = predictions[service];
+    return envelope;
+  });
+
+  return JSON.stringify(
+    { timestamp: new Date().toISOString(), available_services: availableServices, services },
+    null,
+    2,
+  );
+}
+
 /** Format combined metrics with only capacity_remaining per metric */
 export function formatCombinedCapacityJson(
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
+  metricsByService: ServiceMetricsMap,
   availableServices: string[],
   sources?: Record<string, string>,
   serviceInfo?: ServiceInfoMap,
   predictions?: Record<string, Record<string, unknown>>,
 ): string {
-  const output: Record<string, unknown> = {
-    timestamp: new Date().toISOString(),
-    available_services: availableServices,
-    services: [] as Array<Record<string, unknown>>,
-  };
-
-  const servicesList = output.services as Array<Record<string, unknown>>;
-
-  const claudeService = buildServiceEnvelope("claude", availableServices, claudeMetrics, sources, serviceInfo);
-  if (claudeMetrics) {
-    for (const [name, data] of Object.entries(claudeMetrics)) {
-      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-      const metric = data as { used_pct: number; resets: string };
-      (claudeService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
-    }
-  }
-  if (predictions?.claude) {
-    (claudeService as Record<string, unknown>).prediction = predictions.claude;
-  }
-  servicesList.push(claudeService);
-
-  const codexService = buildServiceEnvelope("codex", availableServices, codexMetrics, sources, serviceInfo);
-  if (codexMetrics) {
-    for (const [name, data] of Object.entries(codexMetrics)) {
-      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-      const metric = data as { used_pct: number; resets: string };
-      (codexService.metrics as Array<Record<string, unknown>>).push(capacityOnlyMetric(name, metric));
-    }
-  }
-  if (predictions?.codex) {
-    (codexService as Record<string, unknown>).prediction = predictions.codex;
-  }
-  servicesList.push(codexService);
-
-  return JSON.stringify(output, null, 2);
+  return buildServicesOutput(
+    metricsByService,
+    availableServices,
+    capacityOnlyMetric,
+    sources,
+    serviceInfo,
+    predictions,
+  );
 }
 
 /** Format single service metrics as JSON string */
 export function formatJson(service: string, metrics: MetricsDict): string {
-  const output: Record<string, unknown> = {
-    service,
-    timestamp: new Date().toISOString(),
-    subscription_type: (metrics.subscription_type as string) ?? null,
-    metrics: [] as Array<Record<string, unknown>>,
-  };
-
-  for (const [name, data] of Object.entries(metrics)) {
-    if (name === "subscription_type" || typeof data !== "object" || data === null) {
-      continue;
-    }
-    const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    (output.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
-  }
-
-  return JSON.stringify(output, null, 2);
+  return JSON.stringify(
+    {
+      service,
+      timestamp: new Date().toISOString(),
+      subscription_type: (metrics.subscription_type as string) ?? null,
+      metrics: metricEntries(metrics).map(([name, metric]) => enrichMetric(name, metric)),
+    },
+    null,
+    2,
+  );
 }
 
-/** Format combined Claude and Codex metrics as JSON string */
-export function formatAllJson(claudeMetrics: MetricsDict, codexMetrics: MetricsDict): string {
-  const output: Record<string, unknown> = {
-    timestamp: new Date().toISOString(),
-    services: {
-      claude: {
-        subscription_type: (claudeMetrics.subscription_type as string) ?? null,
-        metrics: [] as Array<Record<string, unknown>>,
-      },
-      codex: {
-        subscription_type: (codexMetrics.subscription_type as string) ?? null,
-        metrics: [] as Array<Record<string, unknown>>,
-      },
-    },
-  };
-
-  const services = output.services as Record<
-    string,
-    { subscription_type: string | null; metrics: Array<Record<string, unknown>> }
-  >;
-
-  for (const [name, data] of Object.entries(claudeMetrics)) {
-    if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-    const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    services.claude.metrics.push(enrichMetric(name, metric));
+/** Format metrics for every collected service, keyed by service name */
+export function formatAllJson(metricsByService: ServiceMetricsMap): string {
+  const services: Record<string, unknown> = {};
+  for (const service of SERVICE_NAMES) {
+    const metrics = metricsByService[service];
+    if (!metrics) continue;
+    services[service] = {
+      subscription_type: (metrics.subscription_type as string) ?? null,
+      metrics: metricEntries(metrics).map(([name, metric]) => enrichMetric(name, metric)),
+    };
   }
-
-  for (const [name, data] of Object.entries(codexMetrics)) {
-    if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-    const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-    services.codex.metrics.push(enrichMetric(name, metric));
-  }
-
-  return JSON.stringify(output, null, 2);
+  return JSON.stringify({ timestamp: new Date().toISOString(), services }, null, 2);
 }
 
 /** Format combined metrics with service availability metadata */
 export function formatCombinedJson(
-  claudeMetrics: MetricsDict | null,
-  codexMetrics: MetricsDict | null,
+  metricsByService: ServiceMetricsMap,
   availableServices: string[],
   sources?: Record<string, string>,
   serviceInfo?: ServiceInfoMap,
   predictions?: Record<string, Record<string, unknown>>,
 ): string {
-  const output: Record<string, unknown> = {
-    timestamp: new Date().toISOString(),
-    available_services: availableServices,
-    services: [] as Array<Record<string, unknown>>,
-  };
-
-  const servicesList = output.services as Array<Record<string, unknown>>;
-
-  // Claude service
-  const claudeService = buildServiceEnvelope("claude", availableServices, claudeMetrics, sources, serviceInfo);
-  if (claudeMetrics) {
-    for (const [name, data] of Object.entries(claudeMetrics)) {
-      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-      const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-      (claudeService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
-    }
-  }
-  if (predictions?.claude) {
-    (claudeService as Record<string, unknown>).prediction = predictions.claude;
-  }
-  servicesList.push(claudeService);
-
-  // Codex service
-  const codexService = buildServiceEnvelope("codex", availableServices, codexMetrics, sources, serviceInfo);
-  if (codexMetrics) {
-    for (const [name, data] of Object.entries(codexMetrics)) {
-      if (name === "subscription_type" || typeof data !== "object" || data === null) continue;
-      const metric = data as { used_pct: number; remaining_pct: number; resets: string };
-      (codexService.metrics as Array<Record<string, unknown>>).push(enrichMetric(name, metric));
-    }
-  }
-  if (predictions?.codex) {
-    (codexService as Record<string, unknown>).prediction = predictions.codex;
-  }
-  servicesList.push(codexService);
-
-  return JSON.stringify(output, null, 2);
+  return buildServicesOutput(metricsByService, availableServices, enrichMetric, sources, serviceInfo, predictions);
 }

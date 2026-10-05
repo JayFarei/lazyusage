@@ -1,4 +1,10 @@
-import type { CapacityPrediction, MetricsDict, ServiceName } from "lazyusage-core";
+import {
+  type CapacityPrediction,
+  type MetricsDict,
+  SERVICES,
+  SESSION_WINDOW_HOURS,
+  type ServiceName,
+} from "lazyusage-core";
 import { Show } from "solid-js";
 import { ROUNDED_BORDER_STYLE } from "../lib/borderStyle.js";
 import { useTheme } from "../theme.js";
@@ -12,25 +18,25 @@ interface FullscreenGraphViewProps {
   createGraphStore?: () => GraphStore;
 }
 
+/** The selected weekly metric when one is selected, else the service's primary weekly metric. */
 function getWeeklyMetricKey(service: ServiceName, selectedMetricKey: string): string {
-  if (service === "codex") {
-    return "weekly";
-  }
-
-  return selectedMetricKey === "week_sonnet" ? "week_sonnet" : "week_all";
+  const weekly = SERVICES[service].predictableMetrics;
+  return weekly.includes(selectedMetricKey) ? selectedMetricKey : (weekly[0] ?? selectedMetricKey);
 }
 
-function getSessionMetricKey(service: ServiceName): string {
-  return service === "codex" ? "5h" : "session";
+/** The service's 5h session metric, or null for services with only a weekly pool (Grok). */
+function getSessionMetricKey(service: ServiceName): string | null {
+  return SERVICES[service].textMetrics.find((m) => m.windowHours === SESSION_WINDOW_HOURS)?.key ?? null;
 }
 
 export function FullscreenGraphView(props: FullscreenGraphViewProps) {
   const theme = useTheme();
   const weeklyMetricKey = () => getWeeklyMetricKey(props.service, props.selectedMetricKey);
   const sessionMetricKey = () => getSessionMetricKey(props.service);
-  // Codex plans that only report a weekly limit have no session window to graph
+  // Grok, and Codex plans that only report a weekly limit, have no session window to graph
   const hasSessionMetric = () => {
-    const val = props.metrics?.[sessionMetricKey()];
+    const key = sessionMetricKey();
+    const val = key ? props.metrics?.[key] : undefined;
     return val !== null && val !== undefined && typeof val === "object" && "used_pct" in val;
   };
 
@@ -64,7 +70,7 @@ export function FullscreenGraphView(props: FullscreenGraphViewProps) {
         <box flexDirection="column" flexGrow={1}>
           <GraphPanel
             service={props.service}
-            metricKey={sessionMetricKey()}
+            metricKey={sessionMetricKey() ?? ""}
             metrics={props.metrics}
             prediction={props.prediction}
             createStore={props.createGraphStore}

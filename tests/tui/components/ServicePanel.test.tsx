@@ -2,7 +2,7 @@
  * Visual snapshot tests for ServicePanel component.
  */
 import { describe, expect, test } from "bun:test";
-import { ServicePanel } from "../../../packages/cli/src/tui/components/ServicePanel.js";
+import { fitMetricRows, ServicePanel } from "../../../packages/cli/src/tui/components/ServicePanel.js";
 import { mockClaudeMetrics, mockCodexMetrics, renderComponent, withFrozenTime } from "../helpers.js";
 
 describe("ServicePanel - Claude metrics", () => {
@@ -254,5 +254,56 @@ describe("ServicePanel - Codex weekly-only metrics", () => {
     expect(frame).not.toContain("Session (5h)");
     expect(frame).toContain("28%");
     expect(frame).toContain("Pro Lite");
+  });
+});
+
+describe("fitMetricRows", () => {
+  test("keeps every optional row when there is room", () => {
+    expect([...fitMetricRows(8, true)]).toEqual([
+      "periodBar",
+      "reset",
+      "prediction",
+      "markers",
+      "resetSpacer",
+      "trailingSpacer",
+    ]);
+  });
+
+  test("drops spacers and markers before data rows when height is short", () => {
+    expect([...fitMetricRows(5, true)]).toEqual(["periodBar", "reset", "prediction"]);
+    expect([...fitMetricRows(4, false)]).toEqual(["periodBar", "reset"]);
+    expect([...fitMetricRows(2, true)]).toEqual([]);
+  });
+});
+
+describe("ServicePanel - short panels (three service rows)", () => {
+  test("grok panel stays inside its border at 80x24 with three rows", async () => {
+    const { captureCharFrame } = await renderComponent(
+      // One of three service rows at 80x24: (24 - 2) / 3 = 7 rows including borders
+      () => (
+        <box height={7} width="100%">
+          <ServicePanel
+            service="grok"
+            title="Grok Build"
+            metrics={{
+              subscription_type: "X Premium",
+              weekly: { used_pct: 42, remaining_pct: 58, resets: "Oct 12 at 4:00am" },
+            }}
+            error={null}
+            isActive={true}
+            selectedIndex={0}
+            panelNumber={5}
+            panelCount={3}
+          />
+        </box>
+      ),
+      { width: 80, height: 24 },
+    );
+    const lines = captureCharFrame().split("\n");
+    const bottom = lines.findIndex((line) => line.includes("\u2570"));
+    // Title intact and the bottom border is a clean line (nothing drawn over it)
+    expect(lines[0]).toContain("[5] Grok Build - X Premium");
+    expect(lines[bottom]).toMatch(/^\u2570\u2500+\u256f\s*$/);
+    expect(captureCharFrame()).toContain("\u25c6 42%");
   });
 });

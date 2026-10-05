@@ -52,6 +52,7 @@ export {
   type DaemonConfigOverrides,
   type DaemonLogLevel,
   DEFAULT_DAEMON_CONFIG_PATH,
+  DEFAULT_DAEMON_SERVICES,
   loadDaemonConfig,
 } from "./daemon/config.js";
 export {
@@ -74,8 +75,12 @@ export {
   formatClaudeText,
   formatCodexCapacityText,
   formatCodexText,
+  formatGrokCapacityText,
+  formatGrokText,
   formatPredictionCapacitySuffix,
   formatPredictionText,
+  formatServiceCapacityText,
+  formatServiceText,
   formatWithAvailability,
 } from "./formatters/text.js";
 // Parsers
@@ -88,6 +93,7 @@ export { predict } from "./prediction/project.js";
 // Providers
 export { ClaudeAPIProvider } from "./providers/api-claude.js";
 export { CodexAPIProvider, parseCodexUsageResponse } from "./providers/api-codex.js";
+export { GrokAPIProvider, parseGrokBillingResponse } from "./providers/api-grok.js";
 export type { ChainDiagnosticEvent, ChainDiagnosticListener, SourcePlan } from "./providers/chain.js";
 export {
   FallbackChain,
@@ -96,9 +102,15 @@ export {
   setChainDiagnosticListener,
 } from "./providers/chain.js";
 // Credentials
-export { ClaudeCredentialStore, CodexCredentialStore, RefreshFailureGate } from "./providers/credentials.js";
+export {
+  ClaudeCredentialStore,
+  CodexCredentialStore,
+  GrokCredentialStore,
+  grokHome,
+  RefreshFailureGate,
+} from "./providers/credentials.js";
 // Providers
-export { createClaudeChain, createCodexChain } from "./providers/factory.js";
+export { createChain, createClaudeChain, createCodexChain, createGrokChain } from "./providers/factory.js";
 // Status page polling
 export {
   pollAllStatusPages,
@@ -107,6 +119,14 @@ export {
   statusToWarningMessage,
 } from "./providers/status-page.js";
 export { ClaudeWebProvider } from "./providers/web-claude.js";
+// Services
+export {
+  isServiceName,
+  SERVICE_NAMES,
+  SERVICES,
+  type ServiceDescriptor,
+  type ServiceMetricSpec,
+} from "./services.js";
 // Storage
 export { UsageStore } from "./storage/database.js";
 export { DedupTracker } from "./storage/dedup.js";
@@ -128,6 +148,8 @@ export type {
   DailyDelta,
   EphemeralCollector,
   FetchResult,
+  GrokCredentials,
+  GrokMetrics,
   HistoryEntry,
   MetricData,
   MetricsDict,
@@ -136,6 +158,7 @@ export type {
   PredictionBarSegments,
   Regime,
   ServiceMetrics,
+  ServiceMetricsMap,
   ServiceName,
   ServiceResourceInfo,
   SnapshotRow,

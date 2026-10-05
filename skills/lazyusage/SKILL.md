@@ -1,7 +1,7 @@
 ---
 name: lazyusage
 description: >
-  Resource-aware usage monitoring for Claude CLI and Codex CLI.
+  Resource-aware usage monitoring for Claude CLI, Codex CLI and Grok Build CLI.
   Use when an agent needs to check quota before expensive work, throttle near
   limits, react to stale or fallback data, fail over between services, or share
   a local usage server with other agents.

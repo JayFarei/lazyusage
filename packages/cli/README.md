@@ -1,6 +1,6 @@
 # lazyusage
 
-CLI package for monitoring Claude CLI and Codex CLI usage.
+CLI package for monitoring Claude CLI, Codex CLI and Grok Build CLI usage.
 
 ## Install
 

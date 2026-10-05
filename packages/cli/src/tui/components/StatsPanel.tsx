@@ -3,7 +3,7 @@
  * Displays one bordered box with tab header, switches content based on shared contentTab.
  */
 
-import type { CapacityPrediction, MetricsDict } from "lazyusage-core";
+import { type CapacityPrediction, type MetricsDict, SERVICES, type ServiceName } from "lazyusage-core";
 import type { ProjectUsage } from "lazyusage-core/parsers/types";
 import { Show } from "solid-js";
 import type { ContentTab } from "../hooks/useViewMode.js";
@@ -17,7 +17,7 @@ type StatsTab = ContentTab | "graph";
 
 export interface StatsPanelProps {
   contentTab: StatsTab;
-  service: "claude" | "codex";
+  service: ServiceName;
   daily: ProjectUsage[] | null;
   weekly: ProjectUsage[] | null;
   monthly: ProjectUsage[] | null;
@@ -70,7 +70,8 @@ export function StatsPanel(props: StatsPanelProps) {
 
   const hasAnyData = () => !!(props.daily || props.weekly || props.monthly);
 
-  const isCodexNoData = () => props.service === "codex" && !props.loading && !hasAnyData();
+  // Claude always has a ledger once loaded; other CLIs may have no local session data at all.
+  const isNoData = () => props.service !== "claude" && !props.loading && !hasAnyData();
   const showGraphTab = () => props.contentTab === "graph" && props.graphAvailable && !!props.graphMetricKey;
 
   return (
@@ -98,11 +99,16 @@ export function StatsPanel(props: StatsPanelProps) {
           <text content={`  Error: ${props.error}`} fg={theme.red} height={1} paddingTop={1} />
         </Show>
 
-        <Show when={isCodexNoData() && !props.error}>
-          <text content="  Codex token stats not available" fg={theme.subtext} height={1} paddingTop={1} />
+        <Show when={isNoData() && !props.error}>
+          <text
+            content={`  ${SERVICES[props.service].label} token stats not available`}
+            fg={theme.subtext}
+            height={1}
+            paddingTop={1}
+          />
         </Show>
 
-        <Show when={!isCodexNoData() || hasAnyData()}>
+        <Show when={!isNoData() || hasAnyData()}>
           <Show when={props.loading && !hasAnyData()}>
             <text content="  Loading ledger data..." fg={theme.subtext} height={1} paddingTop={1} />
           </Show>
