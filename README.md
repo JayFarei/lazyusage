@@ -51,19 +51,19 @@ Requirements: Bun `>= 1.3`, plus any of the Claude CLI (`claude`), Codex CLI (`c
 Each service is fetched through a fallback chain: the first source that answers wins, and every snapshot is stored locally so history and predictions survive restarts.
 
 ```text
-  ┌────────────────┐      ┌────────────────┐
-  │   Claude API   │      │   Codex API    │           data sources
-  │  (OAuth creds) │      │  (auth.json)   │
-  └───────┬────────┘      └───────┬────────┘
-          │                       │
-          ▼                       ▼
-  ┌─────────────────────────────────────────┐
-  │            fallback chain               │   per service, in order:
-  │                                         │
-  │  API ─► token refresh ─► PTY (tmux)     │   fresh API data, refreshed
-  │              ─► cache ─► fallback zeros │   creds, driving the real CLI,
-  │                                         │   last good data, safe zeros
-  └────────────────────┬────────────────────┘
+  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+  │ Claude API  │  │  Codex API  │  │  Grok API   │   data sources
+  │(OAuth creds)│  │ (auth.json) │  │ (auth.json) │
+  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+         │                │                │
+         ▼                ▼                ▼
+  ┌───────────────────────────────────────────────┐
+  │                fallback chain                 │   per service, in order:
+  │                                               │
+  │  API ─► token refresh ─► PTY (tmux)           │   fresh API data, refreshed
+  │              ─► cache ─► fallback zeros       │   creds, driving the real CLI,
+  │                                               │   last good data, safe zeros
+  └────────────────────┬──────────────────────────┘
                        │ snapshots
                        ▼
               ┌─────────────────┐
@@ -77,6 +77,8 @@ Each service is fetched through a fallback chain: the first source that answers 
   │ (popup)│    │  (agents)   │   │  server   │   │  + planning  │
   └────────┘    └─────────────┘   └───────────┘   └──────────────┘
 ```
+
+Grok has no PTY step: it reads the token the grok CLI keeps in `~/.grok/auth.json` (never writes it) and falls back to the last cached value when that token has expired.
 
 Every snapshot carries its provenance (`source`, `stale`, `error`), so consumers can tell fresh data from a cached or fallback answer.
 
@@ -162,7 +164,10 @@ Grok: Weekly: +3% [Subscription: X Premium]
 $ lazyusage --text
 Claude: Session: 50% allowance used, 45% time elapsed, -5% capacity remaining (resets 1:20pm) | ...
 Codex: Weekly: 28% allowance used, 31% time elapsed, 3% capacity remaining (resets Sep 19 at 10:32am) [Subscription: Pro Lite]
+Grok: Weekly: 10% allowance used, 13% time elapsed, 3% capacity remaining (resets Oct 12 at 4:00am) [Subscription: X Premium]
 ```
+
+Claude and Codex are always listed (`[not available]` when the CLI is missing). Grok is listed only when `grok` is installed, so existing scripts that parse two lines keep working.
 
 Codex plans currently report a single weekly limit, so only `weekly` is shown. A `Session` / `5h` entry appears only on plans that still expose a 5-hour window.
 
@@ -331,6 +336,9 @@ bunx lazyusage --help
 ```bash
 bun add -g lazyusage
 lazyusage --help
+
+# Upgrade
+bun add -g lazyusage@latest
 ```
 
 ### From source
