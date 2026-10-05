@@ -15,5 +15,6 @@ bun add lazyusage-core
 - parser types for local session ledgers
 - SQLite-backed snapshot storage
 - shared types for service/resource metadata
+- the service registry (`SERVICES`, `SERVICE_NAMES`): Claude, Codex and Grok
 
 For the end-user CLI, install `lazyusage`.
