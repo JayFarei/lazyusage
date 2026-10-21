@@ -111,6 +111,7 @@ export {
 } from "./providers/credentials.js";
 // Providers
 export { createChain, createClaudeChain, createCodexChain, createGrokChain } from "./providers/factory.js";
+export { classifyGrokBotUsage, GrokBotClient } from "./providers/grok-bot.js";
 // Status page polling
 export {
   pollAllStatusPages,

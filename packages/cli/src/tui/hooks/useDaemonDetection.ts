@@ -29,6 +29,28 @@ function createInactiveServices(): DaemonBackedServices {
   return Object.fromEntries(SERVICE_NAMES.map((service) => [service, false])) as DaemonBackedServices;
 }
 
+function metricNames(metrics: MetricsDict | null | undefined): Set<string> {
+  const names = new Set<string>();
+  if (!metrics) return names;
+  for (const [name, value] of Object.entries(metrics)) {
+    if (name === "subscription_type" || value === null || typeof value !== "object" || !("used_pct" in value)) continue;
+    names.add(name);
+  }
+  return names;
+}
+
+/** A live reading is worth keeping when it reports an allowance the daemon snapshot does not. */
+export function liveAddsMetric(
+  snapshot: MetricsDict | null | undefined,
+  live: MetricsDict | null | undefined,
+): boolean {
+  const known = metricNames(snapshot);
+  for (const name of metricNames(live)) {
+    if (!known.has(name)) return true;
+  }
+  return false;
+}
+
 export function useDaemonDetection(options: DaemonDetectionOptions = {}): DaemonDetectionHook {
   const [daemonHealthy, setDaemonHealthy] = createSignal(false);
   const [daemonBackedServices, setDaemonBackedServices] = createSignal<DaemonBackedServices>(createInactiveServices());

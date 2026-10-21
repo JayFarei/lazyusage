@@ -14,6 +14,7 @@ const WINDOW_HOURS: Record<string, number> = {
   week_sonnet: WEEKLY_WINDOW_HOURS,
   "5h": SESSION_WINDOW_HOURS,
   weekly: WEEKLY_WINDOW_HOURS,
+  bot: WEEKLY_WINDOW_HOURS,
 };
 
 function enrichMetric(
@@ -62,7 +63,11 @@ function buildServiceEnvelope(
   };
 }
 
-type MetricShape = { used_pct: number; remaining_pct: number; resets: string };
+type MetricShape = {
+  used_pct: number;
+  remaining_pct: number;
+  resets: string;
+};
 
 function metricEntries(metrics: MetricsDict | null | undefined): Array<[string, MetricShape]> {
   if (!metrics) return [];

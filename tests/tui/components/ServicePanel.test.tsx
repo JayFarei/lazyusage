@@ -257,6 +257,37 @@ describe("ServicePanel - Codex weekly-only metrics", () => {
   });
 });
 
+describe("ServicePanel - Grok Bot", () => {
+  test("renders Weekly (Bot) as its own bar, the same way Weekly (Fable) renders", async () => {
+    const { captureCharFrame } = await renderComponent(
+      () => (
+        <ServicePanel
+          service="grok"
+          title="Grok Build"
+          metrics={{
+            subscription_type: "SuperGrok",
+            weekly: { used_pct: 21, remaining_pct: 79, resets: "Oct 27 at 9:43pm" },
+            bot: { used_pct: 17, remaining_pct: 83, resets: "Oct 27 at 9:43pm" },
+          }}
+          error={null}
+          isActive={true}
+          selectedIndex={0}
+          panelNumber={5}
+          panelCount={1}
+        />
+      ),
+      { width: 80, height: 24 },
+    );
+    const frame = captureCharFrame();
+    const weeklyAt = frame.indexOf("Weekly");
+    const botAt = frame.indexOf("Weekly (Bot)");
+    expect(weeklyAt).toBeGreaterThanOrEqual(0);
+    expect(botAt).toBeGreaterThan(weeklyAt);
+    expect(frame).toContain("21%");
+    expect(frame).toContain("17%");
+  });
+});
+
 describe("fitMetricRows", () => {
   test("keeps every optional row when there is room", () => {
     expect([...fitMetricRows(8, true)]).toEqual([

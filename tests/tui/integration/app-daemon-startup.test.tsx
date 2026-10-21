@@ -310,9 +310,24 @@ describe("App daemon startup", () => {
     });
 
     const detect = mock(() => {});
-    const createClaudeChain = mock(() => {
-      throw new Error("Claude chain should not be created when daemon-backed");
-    });
+    const claudeStop = mock(async () => {});
+    const createClaudeChain = mock(() => ({
+      start: mock(async () => ({
+        metrics: claudeDaemonMetrics,
+        source: DataSource.API,
+        timestamp: Date.now(),
+        error: null,
+        stale: false,
+      })),
+      refresh: mock(async () => ({
+        metrics: claudeDaemonMetrics,
+        source: DataSource.API,
+        timestamp: Date.now(),
+        error: null,
+        stale: false,
+      })),
+      stop: claudeStop,
+    }));
     const codexStart = mock(async () => ({
       metrics: codexLiveMetrics,
       source: DataSource.API,
@@ -396,7 +411,8 @@ describe("App daemon startup", () => {
     const frame = captureCharFrame();
 
     expect(detect).toHaveBeenCalledTimes(1);
-    expect(createClaudeChain).not.toHaveBeenCalled();
+    expect(createClaudeChain).toHaveBeenCalledTimes(1);
+    expect(claudeStop).toHaveBeenCalledTimes(1);
     expect(createCodexChain).toHaveBeenCalledTimes(1);
     expect(codexStart).toHaveBeenCalledTimes(1);
     expect(startTimer).toHaveBeenCalledTimes(1);
@@ -499,7 +515,8 @@ describe("App daemon startup", () => {
     await Bun.sleep(10);
     await renderOnce();
 
-    expect(createClaudeChain).not.toHaveBeenCalled();
+    expect(createClaudeChain).toHaveBeenCalledTimes(1);
+    expect(temporaryChainStop).toHaveBeenCalledTimes(1);
     expect(captureCharFrame()).toContain("Source: Claude: daemon");
     expect(captureCharFrame()).toContain("◆ 23%");
 
@@ -507,9 +524,9 @@ describe("App daemon startup", () => {
     await Bun.sleep(10);
     await renderOnce();
 
-    expect(createClaudeChain).toHaveBeenCalledTimes(1);
-    expect(temporaryChainStart).toHaveBeenCalledTimes(1);
-    expect(temporaryChainStop).toHaveBeenCalledTimes(1);
+    expect(createClaudeChain).toHaveBeenCalledTimes(2);
+    expect(temporaryChainStart).toHaveBeenCalledTimes(2);
+    expect(temporaryChainStop).toHaveBeenCalledTimes(2);
     expect(captureCharFrame()).toContain("Source: Claude: API");
     expect(captureCharFrame()).toContain("◆ 88%");
 
@@ -591,6 +608,86 @@ describe("App grok row", () => {
     expect(frame).not.toContain("Codex CLI");
     expect(frame).toContain("Grok token stats not available");
 
+    renderer.destroy();
+  });
+
+  test("shows Weekly (Bot) when the running daemon snapshot has only the weekly pool", async () => {
+    const daemonSnapshot = {
+      subscription_type: "SuperGrok",
+      weekly: { used_pct: 22, remaining_pct: 78, resets: "Oct 27 at 9:43pm" },
+    };
+    const live = {
+      ...daemonSnapshot,
+      bot: { used_pct: 18, remaining_pct: 82, resets: "Oct 27 at 9:43pm" },
+    };
+    const grokStop = mock(async () => {});
+    const { captureCharFrame, renderOnce, renderer } = await renderComponent(
+      () => (
+        <App
+          service="grok"
+          deps={{
+            createDaemonDetection: () => ({
+              daemonHealthy: () => true,
+              daemonBackedServices: () => ({ claude: false, codex: false, grok: true }),
+              daemonMetrics: () => ({ grok: daemonSnapshot }),
+              detect: mock(() => {}),
+            }),
+            createUsageStore: () => ({
+              cleanupOldSnapshots: mock(() => {}),
+              storeSnapshot: mock(() => {}),
+              close: mock(() => {}),
+            }),
+            createDedupTracker: () => ({ shouldStoreMetrics: () => true }),
+            createChain: routeChains({
+              grok: () => ({
+                start: mock(async () => ({
+                  metrics: live,
+                  source: DataSource.API,
+                  timestamp: Date.now(),
+                  error: null,
+                  stale: false,
+                })),
+                refresh: mock(async () => ({
+                  metrics: live,
+                  source: DataSource.API,
+                  timestamp: Date.now(),
+                  error: null,
+                  stale: false,
+                })),
+                stop: grokStop,
+              }),
+            }),
+            createLedgerData: () => ({
+              ledgerFor: () => null,
+              loading: () => false,
+              error: () => null,
+              refresh: mock(async () => {}),
+              killAll: mock(() => {}),
+            }),
+            createAutoRefresh: () => ({
+              enabled: () => true,
+              interval: () => 10,
+              togglePause: mock(() => {}),
+              speedUp: mock(() => {}),
+              slowDown: mock(() => {}),
+              startTimer: mock(() => {}),
+            }),
+            createPrediction: () => ({ predictionFor: () => null }),
+            setIntervalFn: (() => 0) as typeof setInterval,
+            clearIntervalFn: (() => {}) as typeof clearInterval,
+          }}
+        />
+      ),
+      { width: 100, height: 30 },
+    );
+
+    await Bun.sleep(20);
+    await renderOnce();
+
+    const frame = captureCharFrame();
+    expect(frame).toContain("Weekly (Bot)");
+    expect(frame).toContain("18%");
+    expect(grokStop).not.toHaveBeenCalled();
     renderer.destroy();
   });
 });

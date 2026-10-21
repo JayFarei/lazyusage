@@ -28,7 +28,7 @@ import { METRIC_KEYS, ServicePanel } from "./components/ServicePanel.js";
 import { StatsPanel } from "./components/StatsPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { useAutoRefresh } from "./hooks/useAutoRefresh.js";
-import { type DaemonDetectionHook, useDaemonDetection } from "./hooks/useDaemonDetection.js";
+import { type DaemonDetectionHook, liveAddsMetric, useDaemonDetection } from "./hooks/useDaemonDetection.js";
 import { createKeybindingHandler, PANEL_KEYS } from "./hooks/useKeybindings.js";
 import { useLedgerData } from "./hooks/useLedgerData.js";
 import { useMetrics } from "./hooks/useMetrics.js";
@@ -318,31 +318,38 @@ export function App(props: AppProps = {}) {
       updateMetrics(service, metrics, null, "daemon");
     }
 
-    for (const service of visibleServices) {
-      if (!daemonBackedServices[service]) {
-        chains.set(service, deps.createChain(service, true));
-      }
-    }
-
     const firstService = visibleServices[0];
     if (firstService && firstService !== activePanel()) {
       setActivePanel(firstService);
     }
 
-    // Start all chains concurrently instead of sequentially
+    // A fresh daemon snapshot paints frame 1. Probe once anyway: an older daemon
+    // does not know about allowances this build collects (Grok Bot, for example).
+    // Keep the local chain only when that probe adds a metric. Otherwise stay
+    // on the daemon so an open TUI does not poll beside it.
     await Promise.all(
-      [...chains].map(async ([service, chain]) => {
+      visibleServices.map(async (service) => {
+        const backed = daemonBackedServices[service] === true;
+        let chain: AppChain;
+        try {
+          chain = deps.createChain(service, true);
+        } catch (err) {
+          if (!backed) updateMetrics(service, null, String(err), DataSource.FALLBACK);
+          return;
+        }
+
         try {
           const result = await chain.start();
-          const metrics = result.metrics as MetricsDict | null;
-          updateMetrics(service, metrics, result.error, result.source);
-          checkWarning(service, result);
-
-          if (store && metrics && dedup.shouldStoreMetrics(service, metrics)) {
-            store.storeSnapshot(service, metrics, result.source);
+          const live = result.metrics as MetricsDict | null;
+          if (backed && !liveAddsMetric(daemonMetrics[service], live)) {
+            await chain.stop().catch(() => {});
+            return;
           }
+          chains.set(service, chain);
+          await applyFetchResult(service, result);
         } catch (err) {
-          updateMetrics(service, null, String(err), DataSource.FALLBACK);
+          await chain.stop().catch(() => {});
+          if (!backed) updateMetrics(service, null, String(err), DataSource.FALLBACK);
         }
       }),
     );

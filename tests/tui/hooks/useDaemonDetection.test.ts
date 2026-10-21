@@ -1,7 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { createRoot } from "solid-js";
-import { useDaemonDetection } from "../../../packages/cli/src/tui/hooks/useDaemonDetection.js";
+import { liveAddsMetric, useDaemonDetection } from "../../../packages/cli/src/tui/hooks/useDaemonDetection.js";
 import { mockClaudeMetrics, mockCodexMetrics } from "../helpers.js";
+
+describe("liveAddsMetric", () => {
+  test("is true only when the live reading has an allowance the snapshot lacks", () => {
+    const weekly = { used_pct: 22, remaining_pct: 78, resets: "Oct 27 at 9:43pm" };
+    const bot = { used_pct: 18, remaining_pct: 82, resets: "Oct 27 at 9:43pm" };
+    expect(
+      liveAddsMetric({ subscription_type: "SuperGrok", weekly }, { subscription_type: "SuperGrok", weekly, bot }),
+    ).toBe(true);
+    expect(liveAddsMetric({ weekly, bot }, { weekly })).toBe(false);
+    expect(liveAddsMetric({ weekly }, null)).toBe(false);
+  });
+});
 
 describe("useDaemonDetection", () => {
   test("loads daemon-backed snapshots only for services with fresh heartbeats", () => {

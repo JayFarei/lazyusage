@@ -30,6 +30,7 @@ export const LABEL_MAP: Record<string, string> = {
   week_sonnet: "Weekly (Fable)",
   "5h": "Session (5h)",
   weekly: "Weekly",
+  bot: "Weekly (Bot)",
 };
 
 export const WINDOW_HOURS: Record<string, number> = {
@@ -38,6 +39,7 @@ export const WINDOW_HOURS: Record<string, number> = {
   week_sonnet: 168,
   "5h": 5,
   weekly: 168,
+  bot: 168,
 };
 
 export const METRIC_KEYS: Record<ServiceName, string[]> = Object.fromEntries(
@@ -198,7 +200,8 @@ export function ServicePanel(props: ServicePanelProps) {
 
             const marker = () => (isSelected() ? "\u25b8 " : "  ");
 
-            const isWeekly = entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly";
+            const isWeekly =
+              entry.key === "week_all" || entry.key === "week_sonnet" || entry.key === "weekly" || entry.key === "bot";
             const prediction = () => {
               const pred = props.prediction?.[entry.key];
               // Skip when the window just reset (< 5% used, > 5 days left): history doesn't reflect it yet

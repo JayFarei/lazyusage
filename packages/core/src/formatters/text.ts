@@ -7,7 +7,11 @@ import { listedServices, SERVICES, type ServiceName } from "../services.js";
 import type { MetricsDict, ServiceMetricsMap } from "../types.js";
 import { calculateTimeProgress } from "../utils/time.js";
 
-type MetricEntry = { used_pct: number; remaining_pct: number; resets: string };
+type MetricEntry = {
+  used_pct: number;
+  remaining_pct: number;
+  resets: string;
+};
 
 function isMetricEntry(v: unknown): v is MetricEntry {
   return v !== null && typeof v === "object" && "used_pct" in v;

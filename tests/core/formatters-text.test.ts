@@ -175,6 +175,33 @@ describe("formatGrokText", () => {
     expect(formatGrokCapacityText(metrics)).toMatch(/^Weekly: [+-]?\d+% \[Subscription: X Premium\]$/);
   });
 
+  test("lists Bot after Weekly the same way Fable follows Claude's weekly pool", () => {
+    const withShare: MetricsDict = {
+      ...metrics,
+      weekly: { used_pct: 21, remaining_pct: 79, resets: "Oct 27 at 9:43pm" },
+      bot: { used_pct: 17, remaining_pct: 83, resets: "Oct 27 at 9:43pm" },
+    };
+    const text = formatGrokText(withShare);
+    const weeklyAt = text.indexOf("Weekly:");
+    const botAt = text.indexOf("| Bot:");
+    expect(weeklyAt).toBeGreaterThanOrEqual(0);
+    expect(botAt).toBeGreaterThan(weeklyAt);
+    expect(text).toContain("Bot: 17% allowance used");
+    expect(formatGrokCapacityText(withShare)).toMatch(
+      /^Weekly: [+-]?\d+% \| Bot: [+-]?\d+% \[Subscription: X Premium\]$/,
+    );
+  });
+
+  test("includes a separate Bot allowance after the weekly pool", () => {
+    const withBot: MetricsDict = {
+      ...metrics,
+      bot: { used_pct: 40, remaining_pct: 60, resets: "Oct 28 at 8:00am" },
+    };
+    expect(formatGrokText(withBot)).toContain("Weekly: 10% allowance used");
+    expect(formatGrokText(withBot)).toContain("| Bot: 40% allowance used");
+    expect(formatGrokCapacityText(withBot)).toMatch(/Weekly: [+-]?\d+% \| Bot: [+-]?\d+% \[Subscription: X Premium\]$/);
+  });
+
   test("labels grok in the multi-service listing", () => {
     expect(formatWithAvailability({ grok: metrics }, ["grok"])).toContain("Grok: Weekly: 10% allowance used");
   });

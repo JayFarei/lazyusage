@@ -82,9 +82,12 @@ export const SERVICES: Record<ServiceName, ServiceDescriptor> = {
     title: "Grok Build",
     binary: "grok",
     loginCommand: "grok login",
-    textMetrics: [{ key: "weekly", textLabel: "Weekly", windowHours: WEEKLY_WINDOW_HOURS }],
-    panelMetrics: ["weekly"],
-    predictableMetrics: ["weekly"],
+    textMetrics: [
+      { key: "weekly", textLabel: "Weekly", windowHours: WEEKLY_WINDOW_HOURS },
+      { key: "bot", textLabel: "Bot", windowHours: WEEKLY_WINDOW_HOURS, optional: true },
+    ],
+    panelMetrics: ["weekly", "bot"],
+    predictableMetrics: ["weekly", "bot"],
     alwaysListed: false,
   },
 };

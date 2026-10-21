@@ -92,6 +92,7 @@ const METRIC_LABELS: Record<string, string> = {
   week_sonnet: "weekly fable",
   "5h": "session",
   weekly: "weekly",
+  bot: "weekly bot",
 };
 
 function isMetricData(v: unknown): v is MetricData {

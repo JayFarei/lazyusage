@@ -38,6 +38,7 @@ const WINDOW_HOURS_BY_METRIC: Record<string, number> = {
   week_all: WEEKLY_WINDOW_HOURS,
   week_sonnet: WEEKLY_WINDOW_HOURS,
   weekly: WEEKLY_WINDOW_HOURS,
+  bot: WEEKLY_WINDOW_HOURS,
 };
 
 function roundGraphCeiling(value: number): number {
