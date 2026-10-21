@@ -57,10 +57,11 @@ export interface CodexMetrics {
   weekly: MetricData;
 }
 
-/** Grok Build metrics: one shared weekly pool (no 5h window) */
+/** Grok Build metrics. `bot` is set only when Grok Bot has its own weekly allowance. */
 export interface GrokMetrics {
   subscription_type: string | null;
   weekly: MetricData;
+  bot?: MetricData;
 }
 
 /** Union of service metrics */

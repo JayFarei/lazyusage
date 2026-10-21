@@ -9,6 +9,7 @@ import { CodexAPIProvider } from "./api-codex.js";
 import { GrokAPIProvider } from "./api-grok.js";
 import { FallbackChain, PersistentFallbackChain } from "./chain.js";
 import { ClaudeCredentialStore, CodexCredentialStore, GrokCredentialStore } from "./credentials.js";
+import { GrokBotClient } from "./grok-bot.js";
 import { ClaudePersistentPTYProvider, ClaudePTYProvider, CodexPersistentPTYProvider, CodexPTYProvider } from "./pty.js";
 import { CodexSessionProvider } from "./session-codex.js";
 import { ClaudeWebProvider } from "./web-claude.js";
@@ -45,7 +46,7 @@ export function createCodexChain(persistent: boolean = false): FallbackChain | P
 /** Create Grok provider fallback chain (billing API only; Grok has no PTY or local allowance source) */
 export function createGrokChain(persistent: boolean = false): FallbackChain | PersistentFallbackChain {
   const credStore = new GrokCredentialStore();
-  const providers = [new GrokAPIProvider(credStore)];
+  const providers = [new GrokAPIProvider(credStore, new GrokBotClient())];
   return persistent ? new PersistentFallbackChain("grok", providers, credStore) : new FallbackChain("grok", providers);
 }
 

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-21
+
+### Added
+- Grok Bot window beside Weekly, the same way Fable sits beside Claude's weekly pool. On a shared X Subscription the figure is Grok Bot's share of that pool. When the Grok Bot desktop app reports a separate allowance, that figure is used instead. The desktop session is read from the app's local login and is never written back. The window is in the TUI as `Weekly (Bot)`, and in `--text`, `--capacity`, `--json`, and the HTTP API as metric `bot`.
+- A TUI opened while an older collector is running probes once and keeps its own chain when the live reading adds an allowance the daemon snapshot does not have, so Bot is visible before that collector is upgraded.
+
 ## [0.3.0] - 2026-10-05
 
 ### Added

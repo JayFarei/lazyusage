@@ -173,6 +173,8 @@ Codex plans currently report a single weekly limit, so only `weekly` is shown. A
 
 Grok reports one shared weekly pool (`weekly`), read from the same endpoint as the grok CLI's `/usage` screen using the browser login in `~/.grok/auth.json` (`$GROK_HOME`). That endpoint is undocumented, so lazyusage polls it at most once a minute. The grok CLI refreshes its own token while it runs; if it has not run for a few hours, lazyusage serves the last cached value until it does. API-key-only setups (`XAI_API_KEY`) have no allowance to report, only the token ledger.
 
+A `Bot` window is shown beside Weekly, the same way Fable is shown beside Claude's weekly pool. On a shared X Subscription it is Grok Bot's share of that pool. When the desktop app reports a separate Bot allowance, that figure is used instead. The Bot session is read from the app's local login and is never written back.
+
 ### JSON contract
 
 Snapshot responses include resource-awareness metadata so agents can distinguish fresh data from fallback or cached data.

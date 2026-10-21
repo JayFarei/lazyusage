@@ -129,6 +129,25 @@ describe("parseGrokBillingResponse", () => {
     expect(parseGrokBillingResponse(billing({ creditUsagePercent: 130 }))?.weekly).toMatchObject({ used_pct: 100 });
   });
 
+  test("adds a Bot bar from the GrokBot share, the same way Fable is its own weekly bar", () => {
+    const metrics = parseGrokBillingResponse(
+      billing({
+        creditUsagePercent: 21,
+        productUsage: [
+          { product: "GrokBuild", usagePercent: 4 },
+          { product: "GrokBot", usagePercent: 17.2 },
+        ],
+      }),
+    );
+    const weekly = metrics?.weekly as { resets: string; used_pct: number };
+    expect(weekly.used_pct).toBe(21);
+    expect(metrics?.bot).toEqual({ used_pct: 17, remaining_pct: 83, resets: weekly.resets });
+  });
+
+  test("leaves the Bot bar off when billing does not report GrokBot", () => {
+    expect(parseGrokBillingResponse(billing())?.bot).toBeUndefined();
+  });
+
   test("rejects periods other than the weekly pool and malformed bodies", () => {
     const monthly = billing({ currentPeriod: { type: "USAGE_PERIOD_TYPE_MONTHLY", end: "2026-11-01T00:00:00Z" } });
     expect(parseGrokBillingResponse(monthly)).toBeNull();
@@ -156,6 +175,59 @@ describe("GrokAPIProvider", () => {
     expect(result.metrics?.subscription_type).toBe("X Premium");
     expect(seenUrl).toBe(GrokAPIProvider.API_URL);
     expect(seenAuth).toBe("Bearer grok-access-token");
+  });
+
+  test("adds the Bot bar when that allowance is separate, and keeps weekly when it is not", async () => {
+    writeAuth(inOneHour());
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(billing({ creditUsagePercent: 11 })), { status: 200 })) as unknown as typeof fetch;
+
+    const separate = await new GrokAPIProvider(new GrokCredentialStore(home), {
+      metric: async () => ({ used_pct: 40, remaining_pct: 60, resets: "Oct 28 at 8:00am" }),
+    }).fetch();
+    expect(separate.metrics?.weekly).toMatchObject({ used_pct: 11 });
+    expect(separate.metrics?.bot).toEqual({ used_pct: 40, remaining_pct: 60, resets: "Oct 28 at 8:00am" });
+
+    (GrokAPIProvider as unknown as GrokApiStatics)._lastSuccess = null;
+    const shared = await new GrokAPIProvider(new GrokCredentialStore(home), { metric: async () => null }).fetch();
+    expect(shared.metrics?.weekly).toMatchObject({ used_pct: 11 });
+    expect(shared.metrics?.bot).toBeUndefined();
+  });
+
+  test("keeps the billing Bot share when the desktop session has no separate allowance", async () => {
+    writeAuth(inOneHour());
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify(
+          billing({
+            creditUsagePercent: 21,
+            productUsage: [
+              { product: "GrokBot", usagePercent: 17 },
+              { product: "GrokBuild", usagePercent: 4 },
+            ],
+          }),
+        ),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+
+    const result = await new GrokAPIProvider(new GrokCredentialStore(home), { metric: async () => null }).fetch();
+    expect(result.error).toBeNull();
+    expect(result.metrics?.weekly).toMatchObject({ used_pct: 21 });
+    expect(result.metrics?.bot).toMatchObject({ used_pct: 17, remaining_pct: 83 });
+  });
+
+  test("a Bot failure leaves the weekly pool in place", async () => {
+    writeAuth(inOneHour());
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(billing()), { status: 200 })) as unknown as typeof fetch;
+    const result = await new GrokAPIProvider(new GrokCredentialStore(home), {
+      metric: async () => {
+        throw new Error("keychain denied");
+      },
+    }).fetch();
+    expect(result.error).toBeNull();
+    expect(result.metrics?.weekly).toMatchObject({ used_pct: 10 });
+    expect(result.metrics?.bot).toBeUndefined();
   });
 
   test("reuses the last result within the minimum polling interval", async () => {
