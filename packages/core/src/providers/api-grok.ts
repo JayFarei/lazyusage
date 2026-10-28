@@ -60,6 +60,11 @@ export class GrokAPIProvider implements UsageProvider {
     return Date.now() < GrokAPIProvider._rateLimitedUntil;
   }
 
+  /** Epoch ms when the current rate-limit backoff ends (0 when not rate-limited). */
+  static rateLimitedUntil(): number {
+    return GrokAPIProvider.isRateLimited() ? GrokAPIProvider._rateLimitedUntil : 0;
+  }
+
   constructor(credentialsStore?: GrokCredentialStore, bot: GrokBotMetricSource | null = null) {
     this._credentialsStore = credentialsStore ?? new GrokCredentialStore();
     this._bot = bot;
