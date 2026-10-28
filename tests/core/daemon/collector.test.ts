@@ -166,6 +166,41 @@ describe("createDaemonCollector", () => {
     expect(warnings).toEqual(["[claude] collection failed: claude CLI unavailable"]);
   });
 
+  test("does not report a re-served or cached reading as a fresh collection", async () => {
+    const reused: FetchResult = { ...makeSuccessResult(CODEX_METRICS, DataSource.API), stale: true };
+    const cached = makeSuccessResult(CLAUDE_METRICS, DataSource.CACHE);
+    const codexChain = new MockChain(reused);
+    const claudeChain = new MockChain(cached);
+    const warnings: string[] = [];
+    store.recordDaemonHeartbeat("codex", { collectedAt: "2026-04-09T11:00:00.000Z", source: DataSource.API });
+
+    const collector = createDaemonCollector({
+      services: { claude: claudeChain, codex: codexChain },
+      store,
+      logger: { warn: (message) => warnings.push(message) },
+      now: () => new Date("2026-04-09T12:10:00.000Z"),
+    });
+
+    await collector.collectOnce();
+
+    expect(store.getLatestSnapshot("codex")).toBeNull();
+    expect(store.getDaemonStatus("codex")).toMatchObject({
+      lastCollectedAt: "2026-04-09T11:00:00.000Z",
+      lastError: "no live reading (serving last api value)",
+      consecutiveFailures: 1,
+    });
+    expect(store.getLatestSnapshot("claude")).toBeNull();
+    expect(store.getDaemonStatus("claude")).toMatchObject({
+      lastCollectedAt: null,
+      lastError: "no live reading (serving last cache value)",
+      consecutiveFailures: 1,
+    });
+    expect(warnings).toEqual([
+      "[claude] collection failed: no live reading (serving last cache value)",
+      "[codex] collection failed: no live reading (serving last api value)",
+    ]);
+  });
+
   test("starts an immediate recurring collection loop and stops it cleanly", async () => {
     const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
     const scheduledIntervals: number[] = [];

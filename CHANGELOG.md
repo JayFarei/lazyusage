@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-10-28
+
+### Fixed
+- The daemon no longer records a re-served or cached reading as a fresh collection. When every source failed, the chain re-served its last reading (flagged stale, original `api` label kept), and the daemon logged it as a successful API collection, so `lazyusage daemon status` read "healthy via API" while the value was days old. Such cycles now count as failures with `no live reading (serving last <source> value)`, keep the last real collection time, and store no snapshot.
+
 ## [0.5.0] - 2026-10-28
 
 ### Fixed
