@@ -459,15 +459,20 @@ export function grokHome(): string {
 /**
  * Manages Grok Build credentials from `$GROK_HOME/auth.json`.
  *
- * The grok CLI refreshes its OIDC access token (~6h lifetime) in the background
- * and rewrites auth.json, so "refresh" here is a disk re-read, as for Codex.
+ * The grok CLI refreshes its OIDC access token (~6h lifetime) and rewrites
+ * auth.json, but only while it runs. When the token on disk has expired we run
+ * a short grok command so grok refreshes it itself, then re-read the file.
  * We never write auth.json: grok guards it with its own lock file and rotates
  * the refresh token, so a concurrent write could sign the user out.
  */
 export class GrokCredentialStore {
   private static readonly DISK_READ_TTL_MS = 60_000;
+  /** A signed-out grok fails every refresh, so retry at most this often. */
+  private static readonly CLI_REFRESH_INTERVAL_MS = 5 * 60_000;
+  private static readonly CLI_REFRESH_TIMEOUT_MS = 20_000;
 
   private readonly _home: string;
+  private _lastCliRefreshAt = 0;
   private _credentials: GrokCredentials | null = null;
   private _subscription: string | null = null;
   private _lastDiskReadAt = 0;
@@ -501,7 +506,37 @@ export class GrokCredentialStore {
   async tryRefreshToken(): Promise<boolean> {
     this._credentials = null;
     const creds = this._readFromDisk();
-    return creds !== null && this._isUsable(creds);
+    if (creds !== null && this._isUsable(creds)) return true;
+    if (Date.now() - this._lastCliRefreshAt < GrokCredentialStore.CLI_REFRESH_INTERVAL_MS) return false;
+    this._lastCliRefreshAt = Date.now();
+    if (!(await this._runGrokRefresh())) return false;
+    this._credentials = null;
+    const refreshed = this._readFromDisk();
+    return refreshed !== null && this._isUsable(refreshed);
+  }
+
+  /** `grok models` signs in with the stored refresh token (no model call), which rewrites auth.json. */
+  private async _runGrokRefresh(): Promise<boolean> {
+    const installed = join(this._home, "bin", "grok");
+    const bin = existsSync(installed) ? installed : Bun.which("grok");
+    if (!bin) return false;
+    try {
+      const proc = Bun.spawn([bin, "models"], {
+        env: { ...process.env, GROK_HOME: this._home },
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      const timer = setTimeout(() => proc.kill(), GrokCredentialStore.CLI_REFRESH_TIMEOUT_MS);
+      try {
+        await proc.exited;
+      } finally {
+        clearTimeout(timer);
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   isAvailable(): boolean {

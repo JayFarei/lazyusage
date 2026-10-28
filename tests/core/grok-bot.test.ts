@@ -34,10 +34,14 @@ function seal(plain: string, password = PASSWORD): string {
   return Buffer.from(merged).toString("base64");
 }
 
+// Relative to now: a reset on the current day formats without its date.
+const RESET = new Date(Math.ceil(Date.now() / 3_600_000) * 3_600_000 + 3 * 86_400_000);
+const PERIOD_START = new Date(RESET.getTime() - 14 * 86_400_000);
+
 function separateBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    currentPeriodStart: "2026-10-14T15:00:00.000Z",
-    nextResetTimestampUtc: "2026-10-28T15:00:00.000Z",
+    currentPeriodStart: PERIOD_START.toISOString(),
+    nextResetTimestampUtc: RESET.toISOString(),
     usagePercent: 19.15,
     hasNonZeroIncludedLimit: true,
     hasAvailableUsage: true,
@@ -48,7 +52,7 @@ function separateBody(overrides: Record<string, unknown> = {}): Record<string, u
 
 describe("classifyGrokBotUsage", () => {
   test("maps a separate weekly allowance to a bot metric", () => {
-    const reset = new Date("2026-10-28T15:00:00.000Z");
+    const reset = RESET;
     const hour = reset.getHours();
     const displayHour = hour % 12 || 12;
     const period = hour >= 12 ? "pm" : "am";
@@ -58,7 +62,7 @@ describe("classifyGrokBotUsage", () => {
       metric: {
         used_pct: 19,
         remaining_pct: 81,
-        resets: `Oct ${reset.getDate()} at ${displayHour}:00${period}`,
+        resets: `${reset.toLocaleString("en-US", { month: "short" })} ${reset.getDate()} at ${displayHour}:00${period}`,
       },
     });
   });

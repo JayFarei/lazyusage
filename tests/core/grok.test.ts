@@ -85,6 +85,19 @@ describe("GrokCredentialStore", () => {
     expect(store.getCredentials()?.accessToken).toBe("new");
   });
 
+  test("tryRefreshToken runs grok to refresh an expired token, then re-reads auth.json", async () => {
+    writeAuth(new Date(Date.now() - 1000).toISOString(), "old");
+    const fresh = JSON.stringify({ "https://auth.x.ai::client-id": { key: "new", expires_at: inOneHour() } });
+    mkdirSync(join(home, "bin"));
+    writeFileSync(join(home, "bin", "grok"), `#!/bin/sh\nprintf '%s' '${fresh}' > "$GROK_HOME/auth.json"\n`, {
+      mode: 0o755,
+    });
+    const store = new GrokCredentialStore(home);
+    expect(store.isAvailable()).toBe(false);
+    expect(await store.tryRefreshToken()).toBe(true);
+    expect(store.getCredentials()?.accessToken).toBe("new");
+  });
+
   test("missing auth.json means not available and not refreshable", () => {
     const store = new GrokCredentialStore(home);
     expect(store.getCredentials()).toBeNull();
@@ -129,23 +142,18 @@ describe("parseGrokBillingResponse", () => {
     expect(parseGrokBillingResponse(billing({ creditUsagePercent: 130 }))?.weekly).toMatchObject({ used_pct: 100 });
   });
 
-  test("adds a Bot bar from the GrokBot share, the same way Fable is its own weekly bar", () => {
+  test("does not turn the per-product split of the pool into a Bot bar", () => {
     const metrics = parseGrokBillingResponse(
       billing({
-        creditUsagePercent: 21,
+        creditUsagePercent: 16,
         productUsage: [
-          { product: "GrokBuild", usagePercent: 4 },
-          { product: "GrokBot", usagePercent: 17.2 },
+          { product: "GrokBot", usagePercent: 11 },
+          { product: "GrokImagine", usagePercent: 5 },
         ],
       }),
     );
-    const weekly = metrics?.weekly as { resets: string; used_pct: number };
-    expect(weekly.used_pct).toBe(21);
-    expect(metrics?.bot).toEqual({ used_pct: 17, remaining_pct: 83, resets: weekly.resets });
-  });
-
-  test("leaves the Bot bar off when billing does not report GrokBot", () => {
-    expect(parseGrokBillingResponse(billing())?.bot).toBeUndefined();
+    expect(metrics?.weekly).toMatchObject({ used_pct: 16, remaining_pct: 84 });
+    expect(metrics?.bot).toBeUndefined();
   });
 
   test("rejects periods other than the weekly pool and malformed bodies", () => {
@@ -192,28 +200,6 @@ describe("GrokAPIProvider", () => {
     const shared = await new GrokAPIProvider(new GrokCredentialStore(home), { metric: async () => null }).fetch();
     expect(shared.metrics?.weekly).toMatchObject({ used_pct: 11 });
     expect(shared.metrics?.bot).toBeUndefined();
-  });
-
-  test("keeps the billing Bot share when the desktop session has no separate allowance", async () => {
-    writeAuth(inOneHour());
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify(
-          billing({
-            creditUsagePercent: 21,
-            productUsage: [
-              { product: "GrokBot", usagePercent: 17 },
-              { product: "GrokBuild", usagePercent: 4 },
-            ],
-          }),
-        ),
-        { status: 200 },
-      )) as unknown as typeof fetch;
-
-    const result = await new GrokAPIProvider(new GrokCredentialStore(home), { metric: async () => null }).fetch();
-    expect(result.error).toBeNull();
-    expect(result.metrics?.weekly).toMatchObject({ used_pct: 21 });
-    expect(result.metrics?.bot).toMatchObject({ used_pct: 17, remaining_pct: 83 });
   });
 
   test("a Bot failure leaves the weekly pool in place", async () => {
