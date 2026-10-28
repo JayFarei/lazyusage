@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-10-28
+
+### Fixed
+- Grok usage no longer goes stale and then drops to 0%. The grok CLI only refreshes its login token while it runs, so once it sat idle the stored token expired and lazyusage kept serving an old reading until its reset time passed. When the token has expired, lazyusage now runs `grok models` (no model call) so grok refreshes it, at most every 5 minutes.
+
+### Removed
+- The `Weekly (Bot)` bar (metric `bot`) on a shared X Subscription. GrokBot's figure was its share of the one weekly pool, not a second allowance, so it read as a separate quota. `weekly` now matches grok.com's "Premium N% used". A `Bot` window still appears when the desktop app reports a separate Bot allowance.
+
 ## [0.4.0] - 2026-10-21
 
 ### Added
