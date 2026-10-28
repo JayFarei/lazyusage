@@ -1,10 +1,11 @@
 {
   "marker_version": "2",
   "project_id": "b1ecc6eae15547b897ddba48a7e5909c",
+  "excluded": true,
   "review_policy": "review",
-  "push_policy": "manual",
   "remotes": {},
   "active_remote": null,
+  "default_visibility": "private",
   "agents": [
     "claude-code",
     "codex-cli",

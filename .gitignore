@@ -26,8 +26,7 @@ __pycache__/
 
 # Scratch / temp files
 *.html
-.opentraces/staging/
-.opentraces/config.json
+.opentraces/
 .soak-chain-2026-04-09T12-20-58.jsonl
 .tmux-session
 
