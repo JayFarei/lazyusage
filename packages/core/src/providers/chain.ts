@@ -394,10 +394,15 @@ export class PersistentFallbackChain {
    * the PTY while rate-limited only extends the block.
    */
   private _isApiRateLimited(): boolean {
-    if (this.service === "claude") return ClaudeAPIProvider.isRateLimited();
-    if (this.service === "codex") return CodexAPIProvider.isRateLimited();
-    if (this.service === "grok") return GrokAPIProvider.isRateLimited();
-    return false;
+    return this.rateLimitedUntil() > 0;
+  }
+
+  /** Epoch ms when this service's API rate-limit backoff ends (0 when not rate-limited). */
+  rateLimitedUntil(): number {
+    if (this.service === "claude") return ClaudeAPIProvider.rateLimitedUntil();
+    if (this.service === "codex") return CodexAPIProvider.rateLimitedUntil();
+    if (this.service === "grok") return GrokAPIProvider.rateLimitedUntil();
+    return 0;
   }
 
   private _createFallbackResult(): FetchResult {

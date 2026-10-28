@@ -6,6 +6,8 @@ import type { DaemonLogger } from "./logger.js";
 export interface DaemonCollectorChain {
   refresh(): Promise<FetchResult>;
   stop?(): Promise<void>;
+  /** Epoch ms when the API rate-limit backoff ends (0 when not rate-limited). */
+  rateLimitedUntil?(): number;
 }
 
 export interface DaemonCollectorStandby {
@@ -172,7 +174,12 @@ export function createDaemonCollector(options: DaemonCollectorOptions): DaemonCo
           }
 
           if (!isLiveResult(result)) {
-            const error = `no live reading (serving last ${result.source} value)`;
+            const retryAt = chain.rateLimitedUntil?.() ?? 0;
+            const retryMs = retryAt - now().getTime();
+            const error =
+              retryMs > 0
+                ? `rate-limited, retrying in ${Math.ceil(retryMs / 60_000)}m`
+                : `no live reading (serving last ${result.source} value)`;
             options.store.recordDaemonHeartbeat(service, { error });
             options.logger.warn(`[${service}] collection failed: ${error}`);
             continue;

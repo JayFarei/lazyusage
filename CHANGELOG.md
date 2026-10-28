@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-10-28
+
+### Changed
+- While a provider's usage API is rate-limited, `lazyusage daemon status` now shows `rate-limited, retrying in Nm` instead of `no live reading (serving last api value)`, so a backoff after a 429 is distinguishable from a broken source.
+
 ## [0.5.1] - 2026-10-28
 
 ### Fixed

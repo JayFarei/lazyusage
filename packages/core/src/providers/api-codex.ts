@@ -50,6 +50,11 @@ export class CodexAPIProvider implements UsageProvider {
     return Date.now() < CodexAPIProvider._rateLimitedUntil;
   }
 
+  /** Epoch ms when the current rate-limit backoff ends (0 when not rate-limited). */
+  static rateLimitedUntil(): number {
+    return CodexAPIProvider.isRateLimited() ? CodexAPIProvider._rateLimitedUntil : 0;
+  }
+
   isAvailable(): boolean {
     return this._credentialsStore.isAvailable();
   }

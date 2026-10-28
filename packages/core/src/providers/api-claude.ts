@@ -104,6 +104,11 @@ export class ClaudeAPIProvider implements UsageProvider {
     return Date.now() < ClaudeAPIProvider._rateLimitedUntil;
   }
 
+  /** Epoch ms when the current rate-limit backoff ends (0 when not rate-limited). */
+  static rateLimitedUntil(): number {
+    return ClaudeAPIProvider.isRateLimited() ? ClaudeAPIProvider._rateLimitedUntil : 0;
+  }
+
   private async _fetchWithRetry(accessToken: string): Promise<Response> {
     // Skip if we know we're still rate-limited
     if (Date.now() < ClaudeAPIProvider._rateLimitedUntil) {

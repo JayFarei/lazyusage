@@ -201,6 +201,31 @@ describe("createDaemonCollector", () => {
     ]);
   });
 
+  test("reports the rate-limit backoff instead of a generic stale reading", async () => {
+    const reused: FetchResult = { ...makeSuccessResult(CLAUDE_METRICS, DataSource.API), stale: true };
+    const now = new Date("2026-04-09T12:10:00.000Z");
+    const claudeChain = Object.assign(new MockChain(reused), {
+      rateLimitedUntil: () => now.getTime() + 5.5 * 60_000,
+    });
+    const warnings: string[] = [];
+
+    const collector = createDaemonCollector({
+      services: { claude: claudeChain },
+      store,
+      logger: { warn: (message) => warnings.push(message) },
+      now: () => now,
+    });
+
+    await collector.collectOnce();
+
+    expect(store.getLatestSnapshot("claude")).toBeNull();
+    expect(store.getDaemonStatus("claude")).toMatchObject({
+      lastError: "rate-limited, retrying in 6m",
+      consecutiveFailures: 1,
+    });
+    expect(warnings).toEqual(["[claude] collection failed: rate-limited, retrying in 6m"]);
+  });
+
   test("starts an immediate recurring collection loop and stops it cleanly", async () => {
     const claudeChain = new MockChain(makeSuccessResult(CLAUDE_METRICS, DataSource.API));
     const scheduledIntervals: number[] = [];
