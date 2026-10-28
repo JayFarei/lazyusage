@@ -1,6 +1,6 @@
 import type { UsageStore } from "../storage/database.js";
 import { DedupTracker } from "../storage/dedup.js";
-import type { FetchResult, MetricsDict, ServiceName } from "../types.js";
+import { DataSource, type FetchResult, type MetricsDict, type ServiceName } from "../types.js";
 import type { DaemonLogger } from "./logger.js";
 
 export interface DaemonCollectorChain {
@@ -36,6 +36,15 @@ export interface DaemonCollectorOptions {
 
 function isSuccessfulResult(result: FetchResult): result is FetchResult & { metrics: MetricsDict } {
   return result.metrics !== null && result.error === null;
+}
+
+/**
+ * When every source fails, chains re-serve their last reading (flagged stale, original
+ * source label kept) or the cache. Neither is a collection: recording it as one keeps
+ * the heartbeat "healthy via API" while the value is days old.
+ */
+function isLiveResult(result: FetchResult): boolean {
+  return !result.stale && result.source !== DataSource.CACHE;
 }
 
 function formatError(error: unknown): string {
@@ -157,6 +166,13 @@ export function createDaemonCollector(options: DaemonCollectorOptions): DaemonCo
           const result = await chain.refresh();
           if (!isSuccessfulResult(result)) {
             const error = result.error ?? "collection failed";
+            options.store.recordDaemonHeartbeat(service, { error });
+            options.logger.warn(`[${service}] collection failed: ${error}`);
+            continue;
+          }
+
+          if (!isLiveResult(result)) {
+            const error = `no live reading (serving last ${result.source} value)`;
             options.store.recordDaemonHeartbeat(service, { error });
             options.logger.warn(`[${service}] collection failed: ${error}`);
             continue;
