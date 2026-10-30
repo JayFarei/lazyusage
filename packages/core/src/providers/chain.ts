@@ -223,8 +223,10 @@ export class PersistentFallbackChain {
     let refreshAttempted = false;
 
     for (const provider of this.immediateProviders) {
+      const available = provider.isAvailable();
+      let needsTokenRefresh = !available;
       // Try the provider if available
-      if (provider.isAvailable()) {
+      if (available) {
         emitDiag(this.service, phase, "try-immediate", { provider: provider.name, source: provider.sourceType });
         const result = await provider.fetch();
         if (result.metrics !== null && result.error === null) {
@@ -233,13 +235,14 @@ export class PersistentFallbackChain {
           this._lastResult = result;
           return result;
         }
+        needsTokenRefresh = /API request failed: (401|403)\b/.test(result.error ?? "");
         emitDiag(this.service, phase, "immediate-fail", { provider: provider.name, error: result.error ?? undefined });
       } else {
         emitDiag(this.service, phase, "immediate-skip", { provider: provider.name, detail: "not available" });
       }
 
-      // Attempt token refresh once after first provider fails or is unavailable
-      if (!refreshAttempted && this.credStore?.canRefresh()) {
+      // The credential store belongs to the primary API, not independent fallback providers.
+      if (provider === this.apiProvider && needsTokenRefresh && !refreshAttempted && this.credStore?.canRefresh()) {
         refreshAttempted = true;
         emitDiag(this.service, phase, "token-refresh-attempt");
         const refreshed = await this.credStore.tryRefreshToken();

@@ -1,6 +1,6 @@
 {
   "name": "lazyusage",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Terminal and JSON usage monitoring for Claude CLI, Codex CLI and Grok Build CLI.",
   "type": "module",
   "main": "./dist/cli.js",

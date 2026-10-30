@@ -27,7 +27,7 @@ export interface DaemonCollectorOptions {
   services: Partial<Record<ServiceName, DaemonCollectorChain>>;
   standbys?: Partial<Record<ServiceName, DaemonCollectorStandby>>;
   store: Pick<UsageStore, "storeSnapshot" | "recordDaemonHeartbeat">;
-  logger: Pick<DaemonLogger, "warn">;
+  logger: Pick<DaemonLogger, "warn"> & Partial<Pick<DaemonLogger, "info">>;
   dedup?: Pick<DedupTracker, "shouldStoreMetrics">;
   now?: () => Date;
   intervalSeconds?: number;
@@ -189,6 +189,7 @@ export function createDaemonCollector(options: DaemonCollectorOptions): DaemonCo
             options.store.storeSnapshot(service, result.metrics, result.source);
           }
 
+          options.logger.info?.(`[${service}] collected live usage via ${result.source}`);
           options.store.recordDaemonHeartbeat(service, {
             collectedAt: now().toISOString(),
             source: result.source,

@@ -3,13 +3,12 @@
  * Port of ClaudeAPIProvider from src/providers/api.py
  */
 
+import { version as PACKAGE_VERSION } from "../../package.json";
 import { API_TIMEOUT_MS, CLAUDE_API_MIN_INTERVAL_MS, RATE_LIMIT_DEFAULT_SECONDS } from "../constants.js";
 import type { FetchResult, MetricsDict, UsageProvider } from "../types.js";
 import { DataSource } from "../types.js";
 import { formatResetFromIso } from "../utils/time.js";
 import { ClaudeCredentialStore } from "./credentials.js";
-
-const PACKAGE_VERSION = "0.1.0"; // from lazyusage-core package.json
 
 export class ClaudeAPIProvider implements UsageProvider {
   static readonly API_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -48,9 +47,9 @@ export class ClaudeAPIProvider implements UsageProvider {
       return {
         metrics: this._lastSuccess.metrics,
         source: this.sourceType,
-        timestamp,
+        timestamp: this._lastSuccess.at / 1000,
         error: null,
-        stale: false,
+        stale: true,
       };
     }
 
@@ -134,16 +133,18 @@ export class ClaudeAPIProvider implements UsageProvider {
     if (response.status === 429) {
       ClaudeAPIProvider._consecutive429s++;
       const rawHeader = response.headers.get("retry-after");
-      const parsed = parseInt(rawHeader ?? "", 10);
+      const seconds = Number(rawHeader);
+      const parsed =
+        rawHeader && Number.isFinite(seconds) ? seconds : (Date.parse(rawHeader ?? "") - Date.now()) / 1000;
       // Exponential backoff when header is missing/zero (API sends Retry-After: 0).
       // Base = 240s, doubles per consecutive 429, capped at 20 min.
-      const backoff =
-        parsed > 0
-          ? parsed
-          : Math.min(
-              RATE_LIMIT_DEFAULT_SECONDS * 2 ** (ClaudeAPIProvider._consecutive429s - 1),
-              ClaudeAPIProvider.MAX_BACKOFF_SECONDS,
-            );
+      const backoff = Math.max(
+        Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
+        Math.min(
+          RATE_LIMIT_DEFAULT_SECONDS * 2 ** (ClaudeAPIProvider._consecutive429s - 1),
+          ClaudeAPIProvider.MAX_BACKOFF_SECONDS,
+        ),
+      );
       ClaudeAPIProvider._rateLimitedUntil = Date.now() + backoff * 1000;
     } else if (response.ok) {
       ClaudeAPIProvider._consecutive429s = 0;

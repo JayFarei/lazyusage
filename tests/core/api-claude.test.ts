@@ -17,7 +17,7 @@ import { DataSource } from "../../packages/core/src/types.js";
 
 const originalFetch = globalThis.fetch;
 let tempCredsPath: string;
-type ClaudeApiProviderTestStatics = { _rateLimitedUntil: number };
+type ClaudeApiProviderTestStatics = { _rateLimitedUntil: number; _consecutive429s: number };
 
 function makeTempCredsPath(): string {
   return join(tmpdir(), `test-creds-claude-api-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
@@ -93,6 +93,7 @@ function makeLimitsResponse(): Record<string, unknown> {
 beforeEach(() => {
   // Reset static rate limit state
   setClaudeApiRateLimit(0);
+  (ClaudeAPIProvider as unknown as ClaudeApiProviderTestStatics)._consecutive429s = 0;
   tempCredsPath = makeTempCredsPath();
   process.env.CLAUDE_CREDENTIALS_FILE = tempCredsPath;
 });
@@ -211,7 +212,8 @@ describe("ClaudeAPIProvider - request spacing", () => {
     expect(calls).toBe(1);
     expect(second.error).toBeNull();
     expect(second.source).toBe(DataSource.API);
-    expect(second.stale).toBe(false);
+    expect(second.stale).toBe(true);
+    expect(second.timestamp).toBeGreaterThanOrEqual(first.timestamp);
     expect(second.metrics).toEqual(first.metrics);
 
     // Age the cached result past the interval: the next fetch goes live again
@@ -334,4 +336,41 @@ describe("ClaudeAPIProvider - no credentials", () => {
     expect(result.error).toContain("No credentials available");
     expect(result.metrics).toBeNull();
   });
+});
+
+test("honors HTTP-date Retry-After and never retries during the window", async () => {
+  writeCredsFile(tempCredsPath);
+  const provider = new ClaudeAPIProvider(new ClaudeCredentialStore());
+  const deadline = new Date(Date.now() + 3600_000).toUTCString();
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return new Response("limited", { status: 429, headers: { "Retry-After": deadline } });
+  }) as unknown as typeof fetch;
+  await provider.fetch();
+  expect(ClaudeAPIProvider.rateLimitedUntil()).toBeGreaterThanOrEqual(Date.parse(deadline));
+  await provider.fetch();
+  expect(calls).toBe(1);
+});
+
+test("zero and short Retry-After still back off exponentially, then recover", async () => {
+  writeCredsFile(tempCredsPath);
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return calls <= 2
+      ? new Response("limited", { status: 429, headers: { "Retry-After": calls === 1 ? "0" : "1" } })
+      : new Response(JSON.stringify(makeLimitsResponse()));
+  }) as unknown as typeof fetch;
+  const provider = new ClaudeAPIProvider(new ClaudeCredentialStore());
+  await provider.fetch();
+  expect(ClaudeAPIProvider.rateLimitedUntil() - Date.now()).toBeGreaterThan(239_000);
+  await provider.fetch();
+  expect(calls).toBe(1);
+  setClaudeApiRateLimit(0);
+  await provider.fetch();
+  expect(ClaudeAPIProvider.rateLimitedUntil() - Date.now()).toBeGreaterThan(479_000);
+  setClaudeApiRateLimit(0);
+  expect((await provider.fetch()).error).toBeNull();
+  expect((ClaudeAPIProvider as unknown as ClaudeApiProviderTestStatics)._consecutive429s).toBe(0);
 });

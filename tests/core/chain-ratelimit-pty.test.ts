@@ -102,3 +102,41 @@ describe("PersistentFallbackChain - PTY skipped while API is rate-limited", () =
     await chain.stop();
   });
 });
+
+test("claude: a 429 must not rotate OAuth tokens on every cooldown cycle", async () => {
+  setRateLimit(ClaudeAPIProvider, Date.now() + 60_000);
+  let refreshes = 0;
+  const unavailableWeb = new FailingProvider();
+  unavailableWeb.isAvailable = () => false;
+  const chain = new PersistentFallbackChain("claude", [new FailingProvider(), unavailableWeb], {
+    canRefresh: () => true,
+    tryRefreshToken: async () => {
+      refreshes++;
+      return true;
+    },
+  });
+  await chain.start();
+  await chain.refresh();
+  expect(refreshes).toBe(0);
+});
+
+test("claude: authentication failures still refresh and recover", async () => {
+  let refreshed = false;
+  const api = new FailingProvider();
+  api.fetch = async () => ({
+    metrics: refreshed ? { subscription_type: "max" } : null,
+    source: DataSource.API,
+    timestamp: Date.now() / 1000,
+    error: refreshed ? null : "API request failed: 401 Unauthorized",
+    stale: false,
+  });
+  const chain = new PersistentFallbackChain("claude", [api], {
+    canRefresh: () => true,
+    tryRefreshToken: async () => {
+      refreshed = true;
+      return true;
+    },
+  });
+  expect((await chain.start()).error).toBeNull();
+  expect(refreshed).toBe(true);
+});
